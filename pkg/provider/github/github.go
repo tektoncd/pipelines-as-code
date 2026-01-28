@@ -65,6 +65,7 @@ type Provider struct {
 	commitInfo         *github.Commit
 	pacUserLogin       string // user/bot login used by PAC
 	clock              clockwork.Clock
+	graphQLClient      *graphQLClient
 }
 
 type skippedRun struct {
@@ -351,8 +352,17 @@ func (v *Provider) GetTektonDir(ctx context.Context, runevent *info.Event, path,
 	// default set provenance from the SHA
 	revision := runevent.SHA
 	if provenance == "default_branch" {
-		revision = runevent.DefaultBranch
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", runevent.DefaultBranch)
+		branch, _, err := wrapAPI(v, "get_default_branch", func() (*github.Branch, *github.Response, error) {
+			return v.Client().Repositories.GetBranch(ctx, runevent.Organization, runevent.Repository, runevent.DefaultBranch, 1)
+		})
+		if err != nil {
+			return "", err
+		}
+		revision = branch.GetCommit().GetSHA()
+		if revision == "" {
+			return "", fmt.Errorf("default_branch %s did not resolve to a commit SHA", runevent.DefaultBranch)
+		}
 	} else {
 		prInfo := ""
 		if runevent.TriggerTarget == triggertype.PullRequest {
@@ -392,7 +402,7 @@ func (v *Provider) GetTektonDir(ctx context.Context, runevent *info.Event, path,
 	if err != nil {
 		return "", err
 	}
-	return v.concatAllYamlFiles(ctx, tektonDirObjects.Entries, runevent)
+	return v.concatAllYamlFiles(ctx, tektonDirObjects.Entries, runevent, path, revision)
 }
 
 // GetCommitInfo get info (url and title) on a commit in runevent, this needs to
@@ -486,26 +496,55 @@ func (v *Provider) GetFileInsideRepo(ctx context.Context, runevent *info.Event, 
 }
 
 // concatAllYamlFiles concat all yaml files from a directory as one big multi document yaml string.
-func (v *Provider) concatAllYamlFiles(ctx context.Context, objects []*github.TreeEntry, runevent *info.Event) (string, error) {
-	var allTemplates string
-
+func (v *Provider) concatAllYamlFiles(ctx context.Context, objects []*github.TreeEntry, runevent *info.Event, tektonDirPath, ref string) (string, error) {
+	var yamlFiles []string
 	for _, value := range objects {
 		if strings.HasSuffix(value.GetPath(), ".yaml") ||
 			strings.HasSuffix(value.GetPath(), ".yml") {
-			data, err := v.getObject(ctx, value.GetSHA(), runevent)
-			if err != nil {
-				return "", err
-			}
-			if err := provider.ValidateYaml(data, value.GetPath()); err != nil {
-				return "", err
-			}
-			if allTemplates != "" && !strings.HasPrefix(string(data), "---") {
-				allTemplates += "---"
-			}
-			allTemplates += "\n" + string(data) + "\n"
+			fullPath := tektonDirPath + "/" + value.GetPath()
+			yamlFiles = append(yamlFiles, fullPath)
 		}
 	}
-	return allTemplates, nil
+
+	if len(yamlFiles) == 0 {
+		return "", nil
+	}
+
+	if v.graphQLClient == nil {
+		var err error
+		v.graphQLClient, err = newGraphQLClient(v)
+		if err != nil {
+			return "", fmt.Errorf("failed to create GraphQL client: %w", err)
+		}
+	}
+
+	graphQLResults, err := v.graphQLClient.fetchFiles(ctx, runevent.Organization, runevent.Repository, ref, yamlFiles)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch .tekton files via GraphQL: %w", err)
+	}
+
+	var buf strings.Builder
+	for _, path := range yamlFiles {
+		content, ok := graphQLResults[path]
+		if !ok {
+			return "", fmt.Errorf("file %s not found in GraphQL response", path)
+		}
+
+		// it used to be like that (stripped prefix) before we moved to GraphQL so
+		// let's keep it that way.
+		relativePath := strings.TrimPrefix(path, tektonDirPath+"/")
+		if err := provider.ValidateYaml(content, relativePath); err != nil {
+			return "", err
+		}
+		if buf.Len() > 0 && !strings.HasPrefix(string(content), "---") {
+			buf.WriteString("---")
+		}
+		buf.WriteString("\n")
+		buf.Write(content)
+		buf.WriteString("\n")
+	}
+
+	return buf.String(), nil
 }
 
 // getPullRequest get a pull request details.
