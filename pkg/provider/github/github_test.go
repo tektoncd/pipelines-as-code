@@ -547,7 +547,6 @@ func TestCheckSenderOrgMembership(t *testing.T) {
 }
 
 func TestGetStringPullRequestComment(t *testing.T) {
-	regexp := `(^|\n)/retest(\r\n|$)`
 	tests := []struct {
 		name, apiReturn string
 		wantErr         bool
@@ -557,7 +556,7 @@ func TestGetStringPullRequestComment(t *testing.T) {
 		{
 			name:      "Get String from comments",
 			runevent:  info.Event{URL: "http://1"},
-			apiReturn: `[{"body": "/retest"}]`,
+			apiReturn: `[{"body": "/ok-to-test"}]`,
 			wantRet:   true,
 		},
 		{
@@ -572,14 +571,20 @@ func TestGetStringPullRequestComment(t *testing.T) {
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 			ctx, _ := rtesting.SetupFakeContext(t)
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{},
+				},
+			}
 			gprovider := Provider{
 				ghClient: fakeclient,
+				repo:     repo,
 			}
 			mux.HandleFunc(fmt.Sprintf("/repos/issues/%s/comments", filepath.Base(tt.runevent.URL)), func(rw http.ResponseWriter, _ *http.Request) {
 				fmt.Fprint(rw, tt.apiReturn)
 			})
 
-			ret, err := gprovider.GetStringPullRequestComment(ctx, &tt.runevent, regexp)
+			ret, err := gprovider.GetStringPullRequestComment(ctx, &tt.runevent)
 			if tt.wantErr && err == nil {
 				t.Error("We didn't get an error when we wanted one")
 			}

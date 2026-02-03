@@ -150,6 +150,11 @@ type Settings struct {
 	// +kubebuilder:validation:Enum=source;default_branch
 	PipelineRunProvenance string `json:"pipelinerun_provenance,omitempty"`
 
+	// GitOpsCommandPrefix configures the prefix for the GitOps command.
+	// This is used to identify the GitOps command in the PipelineRun.
+	// +optional
+	GitOpsCommandPrefix string `json:"gitops_command_prefix,omitempty"`
+
 	// Policy defines authorization policies for the repository, controlling who can
 	// trigger PipelineRuns under different conditions.
 	// +optional

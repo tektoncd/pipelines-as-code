@@ -8,6 +8,7 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	"gopkg.in/yaml.v2"
@@ -109,15 +110,21 @@ func getNameFromComment(typeOfComment, comment string) string {
 	return strings.TrimSpace(getFirstLine[0])
 }
 
-func GetPipelineRunAndBranchOrTagNameFromTestComment(comment string) (string, string, string, error) {
-	if strings.Contains(comment, testComment) {
-		return getPipelineRunAndBranchOrTagNameFromComment(testComment, comment)
+func GetPipelineRunAndBranchOrTagNameFromTestComment(comment, prefix string) (string, string, string, error) {
+	commentType := opscomments.CommentEventType(comment, prefix)
+	if commentType == opscomments.TestSingleCommentEventType || commentType == opscomments.TestAllCommentEventType {
+		typeOfComment := prefix + "test"
+		return getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment)
 	}
-	return getPipelineRunAndBranchOrTagNameFromComment(retestComment, comment)
+	// if type of comment is not test single, it is retest single because we've checked the type before
+	// calling this function.
+	typeOfComment := prefix + "retest"
+	return getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment)
 }
 
-func GetPipelineRunAndBranchOrTagNameFromCancelComment(comment string) (string, string, string, error) {
-	return getPipelineRunAndBranchOrTagNameFromComment(cancelComment, comment)
+func GetPipelineRunAndBranchOrTagNameFromCancelComment(comment, prefix string) (string, string, string, error) {
+	typeOfComment := prefix + "cancel"
+	return getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment)
 }
 
 // getPipelineRunAndBranchOrTagNameFromComment function will take GitOps comment and split the comment
@@ -253,4 +260,11 @@ func IsCommentStrategyUpdate(repo *v1alpha1.Repository) bool {
 	}
 
 	return commentStrategy == UpdateCommentStrategy
+}
+
+func GetGitOpsCommentPrefix(repo *v1alpha1.Repository) string {
+	if repo.Spec.Settings != nil && repo.Spec.Settings.GitOpsCommandPrefix != "" {
+		return fmt.Sprintf(`/%s `, regexp.QuoteMeta(repo.Spec.Settings.GitOpsCommandPrefix))
+	}
+	return "/"
 }

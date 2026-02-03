@@ -243,7 +243,7 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 		t.Errorf("Repository %s not found in %s", opts.Organization, opts.Repo)
 	}
 
-	if g.Options.Settings.Github != nil {
+	if g.Options.Settings != nil && g.Options.Settings.Github != nil {
 		opts.Settings = g.Options.Settings
 	}
 	err = tgithub.CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)

@@ -168,7 +168,7 @@ func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
 		}
 	}
 
-	if g.Options.Settings.Github != nil {
+	if g.Options.Settings != nil {
 		opts.Settings = g.Options.Settings
 	}
 	err = CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)

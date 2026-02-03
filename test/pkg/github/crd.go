@@ -23,7 +23,7 @@ func CreateCRD(ctx context.Context, t *testing.T, repoinfo *github.Repository, r
 		},
 		Spec: v1alpha1.RepositorySpec{
 			URL:      repoinfo.GetHTMLURL(),
-			Settings: &opts.Settings,
+			Settings: opts.Settings,
 		},
 	}
 
