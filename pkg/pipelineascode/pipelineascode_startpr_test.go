@@ -218,15 +218,13 @@ func setupProviderForTest(cs *params.Run, logger *zap.SugaredLogger, fakeclient 
 }
 
 // createTestMatch creates a Match object for testing startPR.
-func createTestMatch(withSecret bool, concurrencyLimit *int) matcher.Match {
+func createTestMatch(concurrencyLimit *int) matcher.Match {
 	namespace := "test-namespace"
 	prName := "test-pr-"
 	annotations := make(map[string]string)
 	labels := make(map[string]string)
 
-	if withSecret {
-		annotations[keys.GitAuthSecret] = "test-git-secret"
-	}
+	annotations[keys.GitAuthSecret] = "test-git-secret"
 
 	pr := &pipelinev1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -263,7 +261,7 @@ func TestStartPR(t *testing.T) {
 	fixture := setupStartPRTestDefault(t)
 	defer fixture.teardown()
 
-	match := createTestMatch(true, nil)
+	match := createTestMatch(nil)
 
 	pr, err := fixture.pac.startPR(fixture.ctx, match)
 
@@ -278,77 +276,6 @@ func TestStartPR(t *testing.T) {
 
 	_, hasLogURL := pr.GetAnnotations()[keys.LogURL]
 	assert.Assert(t, hasLogURL, "LogURL annotation should be set")
-}
-
-func TestStartPR_MissingSecretAnnotation(t *testing.T) {
-	fixture := setupStartPRTestDefault(t)
-	defer fixture.teardown()
-
-	match := createTestMatch(false, nil) // no secret annotation
-
-	pr, err := fixture.pac.startPR(fixture.ctx, match)
-
-	assert.Assert(t, pr == nil)
-	assert.ErrorContains(t, err, "cannot get annotation")
-	assert.ErrorContains(t, err, keys.GitAuthSecret)
-}
-
-func TestStartPR_SecretCreationScenarios(t *testing.T) {
-	tests := []struct {
-		name              string
-		createSecretError error
-		secretAutoCreate  bool
-		expectSuccess     bool
-		expectErrorMsg    []string
-	}{
-		{
-			name:              "secret already exists - should succeed with warning",
-			createSecretError: errors.NewAlreadyExists(schema.GroupResource{Group: "", Resource: "secrets"}, "test-git-secret"),
-			secretAutoCreate:  true,
-			expectSuccess:     true,
-			expectErrorMsg:    nil,
-		},
-		{
-			name:              "secret creation failure - should fail",
-			createSecretError: fmt.Errorf("connection timeout"),
-			secretAutoCreate:  true,
-			expectSuccess:     false,
-			expectErrorMsg:    []string{"creating basic auth secret", "has failed"},
-		},
-		{
-			name:              "secret auto-creation disabled - should succeed without creating secret",
-			createSecretError: nil,
-			secretAutoCreate:  false,
-			expectSuccess:     true,
-			expectErrorMsg:    nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := defaultStartPRTestConfig()
-			config.createSecretError = tt.createSecretError
-			config.secretAutoCreation = tt.secretAutoCreate
-			fixture := setupStartPRTestWithConfig(t, config)
-			defer fixture.teardown()
-
-			match := createTestMatch(true, nil)
-
-			pr, err := fixture.pac.startPR(fixture.ctx, match)
-
-			if tt.expectSuccess {
-				assert.NilError(t, err)
-				assert.Assert(t, pr != nil, "PipelineRun should be created")
-				assert.Equal(t, pr.GetNamespace(), "test-namespace")
-			} else {
-				assert.Assert(t, pr == nil, "PipelineRun should be nil on error")
-				assert.Assert(t, err != nil, "Error should be returned")
-				for _, errMsg := range tt.expectErrorMsg {
-					assert.ErrorContains(t, err, errMsg)
-				}
-			}
-		})
-	}
 }
 
 func TestStartPR_AnnotationAndLabelPropagation(t *testing.T) {
@@ -389,7 +316,7 @@ func TestStartPR_AnnotationAndLabelPropagation(t *testing.T) {
 			fixture := setupStartPRTestDefault(t)
 			defer fixture.teardown()
 
-			match := createTestMatch(true, nil)
+			match := createTestMatch(nil)
 
 			if tt.setupMatch != nil {
 				tt.setupMatch(&match)
@@ -478,7 +405,7 @@ func TestStartPR_ConcurrencyLimitBehavior(t *testing.T) {
 			fixture := setupStartPRTestDefault(t)
 			defer fixture.teardown()
 
-			match := createTestMatch(true, tt.concurrencyLimit)
+			match := createTestMatch(tt.concurrencyLimit)
 
 			pr, err := fixture.pac.startPR(fixture.ctx, match)
 
@@ -502,227 +429,13 @@ func TestStartPR_ConcurrencyLimitBehavior(t *testing.T) {
 	}
 }
 
-func TestStartPR_CreationFailureWithSecretCleanup(t *testing.T) {
-	ctx, _ := rtesting.SetupFakeContext(t)
-	observer, _ := zapobserver.New(zap.InfoLevel)
-	logger := zap.New(observer).Sugar()
-
-	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
-		Namespaces: []*corev1.Namespace{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-namespace",
-				},
-			},
-		},
-	})
-
-	creationFailed := false
-	stdata.Pipeline.PrependReactor("create", "pipelineruns", func(_ k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-		if !creationFailed {
-			creationFailed = true
-
-			return true, nil, fmt.Errorf("namespace quota exceeded")
-		}
-
-		return false, nil, nil
-	})
-
-	cs := &params.Run{
-		Clients: clients.Clients{
-			PipelineAsCode: stdata.PipelineAsCode,
-			Log:            logger,
-			Kube:           stdata.Kube,
-			Tekton:         stdata.Pipeline,
-		},
-		Info: info.Info{
-			Controller: &info.ControllerInfo{
-				Name:      "default",
-				Configmap: "pipelines-as-code",
-				Secret:    "pipelines-as-code-secret",
-			},
-		},
-	}
-	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
-
-	event := &info.Event{
-		SHA:               "test-sha",
-		Organization:      "test-org",
-		Repository:        "test-repo",
-		URL:               "https://test.com/repo",
-		HeadBranch:        "test-branch",
-		BaseBranch:        "main",
-		Sender:            "test-user",
-		EventType:         "pull_request",
-		TriggerTarget:     "pull_request",
-		PullRequestNumber: 123,
-		Provider: &info.Provider{
-			Token: "test-token",
-			User:  "git",
-			URL:   "https://api.github.com",
-		},
-	}
-
-	match := createTestMatch(true, nil)
-
-	kint := &kitesthelper.KinterfaceTest{
-		ConsoleURL: "https://console.test",
-	}
-
-	pacInfo := &info.PacOpts{
-		Settings: settings.Settings{
-			SecretAutoCreation: true,
-		},
-	}
-
-	fakeclient, _, _, teardown := ghtesthelper.SetupGH()
-	defer teardown()
-
-	vcx := setupProviderForTest(cs, logger, fakeclient, pacInfo)
-	p := NewPacs(event, vcx, cs, pacInfo, kint, logger, nil)
-
-	pr, err := p.startPR(ctx, match)
-
-	assert.Assert(t, pr == nil, "PipelineRun should be nil on creation failure")
-	assert.ErrorContains(t, err, "creating pipelinerun")
-	assert.ErrorContains(t, err, "has failed")
-	assert.Assert(t, kint.SecretDeleted, "Secret should have been deleted on PR creation failure")
-}
-
-func TestStartPR_SecretCleanupError(t *testing.T) {
-	ctx, _ := rtesting.SetupFakeContext(t)
-	observer, log := zapobserver.New(zap.InfoLevel)
-	logger := zap.New(observer).Sugar()
-
-	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
-		Namespaces: []*corev1.Namespace{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-namespace",
-				},
-			},
-		},
-	})
-
-	stdata.Pipeline.PrependReactor("create", "pipelineruns", func(_ k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, nil, fmt.Errorf("api server unavailable")
-	})
-
-	cs := &params.Run{
-		Clients: clients.Clients{
-			PipelineAsCode: stdata.PipelineAsCode,
-			Log:            logger,
-			Kube:           stdata.Kube,
-			Tekton:         stdata.Pipeline,
-		},
-		Info: info.Info{
-			Controller: &info.ControllerInfo{
-				Name:      "default",
-				Configmap: "pipelines-as-code",
-				Secret:    "pipelines-as-code-secret",
-			},
-		},
-	}
-	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
-
-	event := &info.Event{
-		SHA:               "test-sha",
-		Organization:      "test-org",
-		Repository:        "test-repo",
-		URL:               "https://test.com/repo",
-		HeadBranch:        "test-branch",
-		BaseBranch:        "main",
-		Sender:            "test-user",
-		EventType:         "pull_request",
-		TriggerTarget:     "pull_request",
-		PullRequestNumber: 123,
-		Provider: &info.Provider{
-			Token: "test-token",
-			User:  "git",
-			URL:   "https://api.github.com",
-		},
-	}
-
-	match := createTestMatch(true, nil)
-
-	// Mock that fails both PR creation AND secret deletion
-	kint := &kitesthelper.KinterfaceTest{
-		ConsoleURL:        "https://console.test",
-		DeleteSecretError: fmt.Errorf("failed to delete secret"),
-	}
-
-	pacInfo := &info.PacOpts{
-		Settings: settings.Settings{
-			SecretAutoCreation: true,
-		},
-	}
-
-	fakeclient, _, _, teardown := ghtesthelper.SetupGH()
-	defer teardown()
-
-	vcx := setupProviderForTest(cs, logger, fakeclient, pacInfo)
-	p := NewPacs(event, vcx, cs, pacInfo, kint, logger, nil)
-
-	pr, err := p.startPR(ctx, match)
-
-	assert.Assert(t, pr == nil, "PipelineRun should be nil")
-	assert.ErrorContains(t, err, "creating pipelinerun")
-	assert.ErrorContains(t, err, "has failed")
-	assert.Assert(t, kint.SecretDeleted, "Secret deletion should have been attempted")
-
-	logEntries := log.FilterMessageSnippet("removing auto created secret").TakeAll()
-	assert.Assert(t, len(logEntries) > 0, "Should have logged secret deletion error")
-}
-
-func TestStartPR_SecretOwnerRefUpdateErrors(t *testing.T) {
-	tests := []struct {
-		name              string
-		updateSecretError error
-		expectErrorMsg    []string
-	}{
-		{
-			name:              "generic update failure - should return PR with error",
-			updateSecretError: fmt.Errorf("failed to update ownerRef"),
-			expectErrorMsg:    []string{"cannot update pipelinerun", "with ownerRef"},
-		},
-		{
-			name:              "conflict error - should return PR with error",
-			updateSecretError: errors.NewConflict(schema.GroupResource{Group: "", Resource: "secrets"}, "test-git-secret", fmt.Errorf("resource version mismatch")),
-			expectErrorMsg:    []string{"cannot update pipelinerun", "with ownerRef"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := defaultStartPRTestConfig()
-			config.updateSecretError = tt.updateSecretError
-			fixture := setupStartPRTestWithConfig(t, config)
-			defer fixture.teardown()
-
-			match := createTestMatch(true, nil)
-
-			pr, err := fixture.pac.startPR(fixture.ctx, match)
-
-			assert.Assert(t, pr != nil, "PipelineRun should still be returned despite ownerRef update failure")
-			assert.Assert(t, err != nil, "Error should be returned")
-
-			for _, errMsg := range tt.expectErrorMsg {
-				assert.ErrorContains(t, err, errMsg)
-			}
-
-			assert.Equal(t, pr.GetNamespace(), "test-namespace")
-			assert.Assert(t, pr.GetName() != "" || pr.GetGenerateName() != "", "PR should have a name")
-		})
-	}
-}
-
 func TestStartPR_StatusCreationFailure(t *testing.T) {
 	config := defaultStartPRTestConfig()
 	config.createStatusErorring = true
 	fixture := setupStartPRTestWithConfig(t, config)
 	defer fixture.teardown()
 
-	match := createTestMatch(true, nil)
+	match := createTestMatch(nil)
 
 	pr, err := fixture.pac.startPR(fixture.ctx, match)
 
@@ -737,7 +450,7 @@ func TestStartPR_GitHubAppLogURLHandling(t *testing.T) {
 	fixture := setupStartPRTestDefault(t)
 	defer fixture.teardown()
 
-	match := createTestMatch(true, nil)
+	match := createTestMatch(nil)
 
 	// Add InstallationID annotation to simulate GitHub App
 	match.PipelineRun.Annotations[keys.InstallationID] = "12345"
@@ -865,7 +578,7 @@ func TestStartPR_PatchBehavior(t *testing.T) {
 				vcx := setupProviderForTest(cs, logger, fakeclient, pacInfo)
 				p := NewPacs(event, vcx, cs, pacInfo, kint, logger, nil)
 
-				match := createTestMatch(true, nil)
+				match := createTestMatch(nil)
 				pr, err := p.startPR(ctx, match)
 
 				assert.Assert(t, pr != nil, "PipelineRun should be returned even when patch fails")
@@ -881,7 +594,7 @@ func TestStartPR_PatchBehavior(t *testing.T) {
 				fixture := setupStartPRTestDefault(t)
 				defer fixture.teardown()
 
-				match := createTestMatch(true, nil)
+				match := createTestMatch(nil)
 				pr, err := fixture.pac.startPR(fixture.ctx, match)
 
 				assert.NilError(t, err)
@@ -965,7 +678,7 @@ func TestStartPR_ConcurrentCreation(t *testing.T) {
 	numConcurrent := 5
 	matches := make([]matcher.Match, numConcurrent)
 	for i := range numConcurrent {
-		matches[i] = createTestMatch(true, nil)
+		matches[i] = createTestMatch(nil)
 		// Use actual names instead of GenerateName for fake client compatibility
 		matches[i].PipelineRun.Name = fmt.Sprintf("test-pr-%d", i)
 		matches[i].PipelineRun.GenerateName = ""
@@ -1001,71 +714,4 @@ func TestStartPR_ConcurrentCreation(t *testing.T) {
 	// All should succeed with proper isolation (each has unique name and secret)
 	assert.Equal(t, successCount, numConcurrent, "All concurrent PipelineRuns should succeed with proper isolation, got %d/%d (failures: %d)", successCount, numConcurrent, failureCount)
 	t.Logf("Successfully created %d/%d concurrent PipelineRuns", successCount, numConcurrent)
-}
-
-func TestStartPR_ConcurrentWithSameSecret(t *testing.T) {
-	cs, event, logger, ctx, fakeclient, teardown := setupStartPRTest(t)
-	defer teardown()
-
-	// Track secret creation attempts with a mock that simulates AlreadyExists after first creation
-	kintWithTracking := &KinterfaceTestWithSecretTracking{
-		KinterfaceTest: kitesthelper.KinterfaceTest{
-			ConsoleURL: "https://console.test",
-		},
-	}
-
-	pacInfo := &info.PacOpts{
-		Settings: settings.Settings{
-			SecretAutoCreation: true,
-		},
-	}
-
-	vcx := setupProviderForTest(cs, logger, fakeclient, pacInfo)
-
-	// Create multiple matches that will try to create the same secret
-	// This simulates the real-world scenario where multiple PRs might trigger simultaneously
-	numConcurrent := 3
-	matches := make([]matcher.Match, numConcurrent)
-	for i := range numConcurrent {
-		matches[i] = createTestMatch(true, nil)
-		// Use the same secret name for all to test race condition handling
-		matches[i].PipelineRun.Annotations[keys.GitAuthSecret] = "shared-git-secret"
-		// Use actual names instead of GenerateName for fake client compatibility
-		matches[i].PipelineRun.Name = fmt.Sprintf("test-pr-shared-%d", i)
-		matches[i].PipelineRun.GenerateName = ""
-	}
-
-	results := runConcurrentStartPR(t, numConcurrent, func(idx int) (*pipelinev1.PipelineRun, error) {
-		p := NewPacs(event, vcx, cs, pacInfo, kintWithTracking, logger, nil)
-		return p.startPR(ctx, matches[idx])
-	})
-
-	successCount := 0
-	failureCount := 0
-	for range numConcurrent {
-		res := <-results
-		// All should succeed because AlreadyExists errors are handled gracefully
-		if res.err == nil && res.pr != nil {
-			successCount++
-			assert.Equal(t, res.pr.GetNamespace(), "test-namespace")
-
-			secretName, ok := res.pr.GetAnnotations()[keys.GitAuthSecret]
-			assert.Assert(t, ok, "GitAuthSecret annotation should be present")
-			assert.Equal(t, secretName, "shared-git-secret")
-
-			_, hasState := res.pr.GetAnnotations()[keys.State]
-			assert.Assert(t, hasState, fmt.Sprintf("State should be set for PR %d", res.idx))
-		} else {
-			failureCount++
-			t.Logf("PipelineRun %d failed: %v", res.idx, res.err)
-		}
-	}
-
-	// With the AlreadyExists handling, all should succeed
-	assert.Equal(t, successCount, numConcurrent, "All concurrent PipelineRuns should succeed with AlreadyExists handling, got %d/%d (failures: %d)", successCount, numConcurrent, failureCount)
-
-	// Verify that secret creation was attempted multiple times (indicating race condition)
-	attempts := kintWithTracking.secretCreationCount.Load()
-	assert.Assert(t, attempts >= 1, "Secret creation should have been attempted at least once, got %d attempts", attempts)
-	t.Logf("Successfully created %d/%d concurrent PipelineRuns with shared secret (%d creation attempts)", successCount, numConcurrent, attempts)
 }

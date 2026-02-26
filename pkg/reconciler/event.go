@@ -82,6 +82,10 @@ func buildEventFromPipelineRun(pr *tektonv1.PipelineRun) *info.Event {
 		event.TriggerTarget = triggertype.PullRequest
 	}
 
+	if cloneURL, ok := prAnno[keys.CloneURL]; ok {
+		event.CloneURL = cloneURL
+	}
+
 	// GitHub
 	if installationID, ok := prAnno[keys.InstallationID]; ok {
 		id, _ := strconv.Atoi(installationID)
@@ -89,6 +93,10 @@ func buildEventFromPipelineRun(pr *tektonv1.PipelineRun) *info.Event {
 	}
 	if gheURL, ok := prAnno[keys.GHEURL]; ok {
 		event.GHEURL = gheURL
+		if event.Provider == nil {
+			event.Provider = &info.Provider{}
+		}
+		event.Provider.URL = gheURL
 	}
 
 	// GitLab
