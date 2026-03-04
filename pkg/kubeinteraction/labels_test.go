@@ -1,6 +1,7 @@
 package kubeinteraction
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -68,7 +69,7 @@ func TestAddLabelsAndAnnotations(t *testing.T) {
 					Controller: tt.args.controllerInfo,
 				},
 			}
-			err := AddLabelsAndAnnotations(tt.args.event, tt.args.pipelineRun, tt.args.repo, &info.ProviderConfig{}, paramsRun)
+			err := AddLabelsAndAnnotations(context.Background(), tt.args.event, tt.args.pipelineRun, tt.args.repo, &info.ProviderConfig{}, paramsRun)
 			assert.NilError(t, err)
 			assert.Equal(t, tt.args.pipelineRun.Labels[keys.URLOrg], tt.args.event.Organization, "'%s' != %s",
 				tt.args.pipelineRun.Labels[keys.URLOrg], tt.args.event.Organization)

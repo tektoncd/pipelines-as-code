@@ -23,6 +23,11 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/eventing/pkg/adapter/v2"
@@ -192,6 +197,26 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		}
 		gitProvider.SetPacInfo(&pacInfo)
 
+		// Extract inbound trace context from request headers for distributed tracing
+		tracedCtx := otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(request.Header))
+
+		// Start a span for webhook handling
+		tracer := otel.Tracer(tracing.TracerName)
+		tracedCtx, span := tracer.Start(tracedCtx, "PipelinesAsCode:HandleWebhook",
+			trace.WithSpanKind(trace.SpanKindServer),
+		)
+
+		span.SetAttributes(
+			attribute.String("pac.event_type", l.event.EventType),
+			attribute.String("pac.provider", gitProvider.GetConfig().Name),
+		)
+		if l.event.URL != "" {
+			span.SetAttributes(attribute.String("vcs.repository.url.full", l.event.URL))
+		}
+		if l.event.SHA != "" {
+			span.SetAttributes(attribute.String("vcs.ref.head.revision", l.event.SHA))
+		}
+
 		s := sinker{
 			run:        l.run,
 			vcx:        gitProvider,
@@ -207,8 +232,10 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		localRequest := request.Clone(request.Context())
 
 		go func() {
-			err := s.processEvent(ctx, localRequest)
+			defer span.End()
+			err := s.processEvent(tracedCtx, localRequest)
 			if err != nil {
+				span.RecordError(err)
 				logger.Errorf("an error occurred: %v", err)
 			}
 		}()

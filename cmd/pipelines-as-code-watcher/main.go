@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/reconciler"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
+	"go.uber.org/zap"
 	"k8s.io/client-go/rest"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -62,6 +64,22 @@ func main() {
 	cfg.QPS = 5 * cfg.QPS
 	cfg.Burst = 5 * cfg.Burst
 	ctx := signals.NewContext()
+
+	// Initialize tracing
+	zapLogger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatal("failed to create logger for tracing: ", err)
+	}
+	tracerProvider, err := tracing.New(ctx, zapLogger.Sugar())
+	if err != nil {
+		log.Fatal("failed to init tracing: ", err)
+	}
+	defer func() {
+		if err := tracerProvider.Shutdown(ctx); err != nil {
+			zapLogger.Sugar().Warnf("failed to shutdown tracer provider: %v", err)
+		}
+	}()
+
 	if val, ok := os.LookupEnv("PAC_DISABLE_HA"); ok {
 		if strings.ToLower(val) == "true" {
 			ctx = sharedmain.WithHADisabled(ctx)

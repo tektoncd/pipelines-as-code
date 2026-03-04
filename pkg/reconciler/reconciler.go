@@ -261,6 +261,8 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		logger.Error("failed to emit metrics: ", err)
 	}
 
+	emitTimingSpans(pr)
+
 	// remove pipelineRun from Queue and start the next one
 	for {
 		next := r.qm.RemoveAndTakeItemFromQueue(repo, pr)

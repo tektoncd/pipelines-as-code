@@ -1,6 +1,8 @@
 package kubeinteraction
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -12,6 +14,9 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/versiondata"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"knative.dev/pkg/logging"
 )
 
 const (
@@ -21,11 +26,15 @@ const (
 	StateFailed    = "failed"
 )
 
-func AddLabelsAndAnnotations(event *info.Event, pipelineRun *tektonv1.PipelineRun, repo *apipac.Repository, providerConfig *info.ProviderConfig, paramsRun *params.Run) error {
+func AddLabelsAndAnnotations(ctx context.Context, event *info.Event, pipelineRun *tektonv1.PipelineRun, repo *apipac.Repository, providerConfig *info.ProviderConfig, paramsRun *params.Run) error {
 	if event == nil {
 		return fmt.Errorf("event should not be nil")
 	}
 	paramsinfo := paramsRun.Info
+
+	// Inject span context for distributed tracing
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
 	// Add labels on the soon-to-be created pipelinerun so UI/CLI can easily
 	// query them.
 	labels := map[string]string{
@@ -57,6 +66,16 @@ func AddLabelsAndAnnotations(event *info.Event, pipelineRun *tektonv1.PipelineRu
 		keys.GitProvider:   providerConfig.Name,
 		keys.ControllerInfo: fmt.Sprintf(`{"name":"%s","configmap":"%s","secret":"%s", "gRepo": "%s"}`,
 			paramsinfo.Controller.Name, paramsinfo.Controller.Configmap, paramsinfo.Controller.Secret, paramsinfo.Controller.GlobalRepository),
+	}
+
+	// Add span context for distributed tracing if available
+	if len(carrier) > 0 {
+		if jsonBytes, err := json.Marshal(map[string]string(carrier)); err == nil {
+			if existing := pipelineRun.GetAnnotations()[keys.SpanContextAnnotation]; existing != "" {
+				logging.FromContext(ctx).Warnf("overwriting pre-existing %s annotation on PipelineRun template; honoring initiating event trace context", keys.SpanContextAnnotation)
+			}
+			annotations[keys.SpanContextAnnotation] = string(jsonBytes)
+		}
 	}
 
 	if event.PullRequestNumber != 0 {
