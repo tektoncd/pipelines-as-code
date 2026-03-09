@@ -112,13 +112,14 @@ func getNameFromComment(typeOfComment, comment string) string {
 
 func GetPipelineRunAndBranchOrTagNameFromTestComment(comment, prefix string) (string, string, string, error) {
 	commentType := opscomments.CommentEventType(comment, prefix)
+	typeOfComment := ""
 	if commentType == opscomments.TestSingleCommentEventType || commentType == opscomments.TestAllCommentEventType {
-		typeOfComment := prefix + "test"
-		return getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment)
+		typeOfComment = prefix + "test"
+	} else {
+		// if type of comment is not test single, it is retest single because we've checked the type before
+		// calling this function.
+		typeOfComment = prefix + "retest"
 	}
-	// if type of comment is not test single, it is retest single because we've checked the type before
-	// calling this function.
-	typeOfComment := prefix + "retest"
 	return getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment)
 }
 

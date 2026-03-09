@@ -87,6 +87,8 @@ Example:
 /pac test
 ```
 
+You can also configure GitOps command prefix in [Global Repository CR]({{< relref "/docs/operations/global-repository-settings" >}}) so that it will be applied to all Repository CRs those are not defining their own prefix.
+
 ## Cancelling a PipelineRun
 
 **What it does:** The `/cancel` command stops running PipelineRuns by commenting on the pull request.

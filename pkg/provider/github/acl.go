@@ -81,8 +81,10 @@ func (v *Provider) IsAllowed(ctx context.Context, event *info.Event) (bool, erro
 		Logger:       v.Logger,
 	}
 
+	prefix := provider.GetGitOpsCommentPrefix(v.repo)
+
 	// Try to detect a policy rule allowing this
-	tType, _ := v.detectTriggerTypeFromPayload("", event.Event)
+	tType, _ := v.detectTriggerTypeFromPayload("", event.Event, prefix)
 	policyAllowed, policyReason := aclPolicy.IsAllowed(ctx, tType)
 
 	switch policyAllowed {

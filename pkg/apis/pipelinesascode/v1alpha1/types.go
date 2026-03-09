@@ -228,6 +228,10 @@ func (s *Settings) Merge(newSettings *Settings) {
 	if newSettings.AIAnalysis != nil && s.AIAnalysis == nil {
 		s.AIAnalysis = newSettings.AIAnalysis
 	}
+
+	if newSettings.GitOpsCommandPrefix != "" && s.GitOpsCommandPrefix == "" {
+		s.GitOpsCommandPrefix = newSettings.GitOpsCommandPrefix
+	}
 }
 
 type Policy struct {
