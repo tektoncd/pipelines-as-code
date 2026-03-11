@@ -140,6 +140,33 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 		},
 	}
 
+	// Malformed repository URLs for testing validation
+	malformedRepoURL := "https://org.com/owner/repo/subgroup"
+	repoDataMalformed := &v1alpha1.Repository{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "malformedrepo",
+			Namespace: testNamespace.Name,
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL: malformedRepoURL,
+		},
+	}
+
+	repoDataMalformedPattern := &v1alpha1.Repository{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "publicrepo-malformed-pattern",
+			Namespace: testNamespace.Name,
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL: repoFromWhichEventComes,
+			Settings: &v1alpha1.Settings{
+				GithubAppTokenScopeRepos: []string{"owner/repo/extra"},
+			},
+		},
+	}
+
 	tests := []struct {
 		name                     string
 		tData                    testclient.Data
@@ -308,6 +335,66 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			},
 			repoListsByGlobalConf: "owner1/[invalid",
 			wantError:             "invalid repo glob specified",
+			wantToken:             "",
+		},
+		{
+			name: "malformed repository URL with extra path segments returns error",
+			tData: testclient.Data{
+				Namespaces: []*corev1.Namespace{testNamespace},
+				Secret:     []*corev1.Secret{validSecret},
+				Repositories: []*v1alpha1.Repository{
+					repoData, repoDataMalformed,
+				},
+			},
+			repository: &v1alpha1.Repository{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "publicrepo",
+					Namespace: testNamespace.Name,
+				},
+				Spec: v1alpha1.RepositorySpec{
+					URL: repoFromWhichEventComes,
+					Settings: &v1alpha1.Settings{
+						GithubAppTokenScopeRepos: []string{"owner/repo/subgroup"},
+					},
+				},
+			},
+			repoListsByGlobalConf: "",
+			wantError:             "github repository URL must follow https://github.com/org/repo format without subgroups",
+			wantToken:             "",
+		},
+		{
+			name: "malformed pattern with extra path segments returns error",
+			tData: testclient.Data{
+				Namespaces: []*corev1.Namespace{testNamespace},
+				Secret:     []*corev1.Secret{validSecret},
+				Repositories: []*v1alpha1.Repository{
+					repoDataMalformedPattern, repoData1,
+				},
+			},
+			repository:            repoDataMalformedPattern,
+			repoListsByGlobalConf: "",
+			wantError:             "failed to scope GitHub token as repo with pattern owner/repo/extra does not exist in namespace",
+			wantToken:             "",
+		},
+		{
+			name: "malformed pattern in global config with extra path segments returns error",
+			tData: testclient.Data{
+				Namespaces: []*corev1.Namespace{testNamespace},
+				Secret:     []*corev1.Secret{validSecret},
+			},
+			repository: &v1alpha1.Repository{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "publicrepo",
+					Namespace: testNamespace.Name,
+				},
+				Spec: v1alpha1.RepositorySpec{
+					URL: repoFromWhichEventComes,
+				},
+			},
+			repoListsByGlobalConf: "owner/repo/extra",
+			wantError:             "github repository URL must follow",
 			wantToken:             "",
 		},
 	}
