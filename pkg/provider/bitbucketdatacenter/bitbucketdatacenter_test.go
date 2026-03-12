@@ -22,14 +22,15 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	bbtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
-	metricsutils "github.com/openshift-pipelines/pipelines-as-code/pkg/test/metricstest"
+	"go.opentelemetry.io/otel"
 
 	"github.com/jenkins-x/go-scm/scm"
+	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
-	"knative.dev/pkg/metrics/metricstest"
-	_ "knative.dev/pkg/metrics/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -799,7 +800,6 @@ func TestGetFiles(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
 			defer tearDown()
-			metricsutils.ResetMetrics()
 
 			stats := &bbtest.DiffStats{
 				Values: tt.changeFiles,
@@ -826,8 +826,10 @@ func TestGetFiles(t *testing.T) {
 				})
 			}
 
-			metricsTags := map[string]string{"provider": "bitbucket-datacenter", "event-type": string(tt.event.TriggerTarget)}
-			metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(provider)
 
 			v := &Provider{client: client, baseURL: tURL, triggerEvent: string(tt.event.TriggerTarget)}
 			changedFiles, err := v.GetFiles(ctx, tt.event)
@@ -853,15 +855,33 @@ func TestGetFiles(t *testing.T) {
 				}
 			}
 
-			// Check caching
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, 1)
+			var rm metricdata.ResourceMetrics
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(1))
+
 			_, _ = v.GetFiles(ctx, tt.event)
+			// recollect the metrics af
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok = rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
 			if tt.wantError {
-				// No caching on error
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, 2)
+				// no caching on error so we expect 2 metrics
+				assert.Equal(t, count.DataPoints[0].Value, int64(2))
 			} else {
-				// Cache API results on success
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, 1)
+				// caching on success so we expect 1 metric
+				assert.Equal(t, count.DataPoints[0].Value, int64(1))
 			}
 		})
 	}

@@ -257,7 +257,7 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		return repo, fmt.Errorf("cannot update state: %w", err)
 	}
 
-	if err := r.emitMetrics(pr); err != nil {
+	if err := r.emitMetrics(ctx, pr); err != nil {
 		logger.Error("failed to emit metrics: ", err)
 	}
 
