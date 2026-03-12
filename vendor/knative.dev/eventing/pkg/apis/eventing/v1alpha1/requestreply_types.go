@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -32,7 +33,7 @@ import (
 // +genreconciler
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RequestRepluy represents synchronous interface to sending and receiving events from a Broker.
+// RequestReply represents synchronous interface to sending and receiving events from a Broker.
 type RequestReply struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -75,8 +76,6 @@ type RequestReplySpec struct {
 	Timeout *string `json:"timeout,omitempty"`
 
 	Delivery *eventingduckv1.DeliverySpec `json:"delivery,omitempty"`
-
-	Secrets []string `json:"secrets"`
 }
 
 // RequestReplyStatus represents the current state of a RequestReply.
@@ -94,6 +93,12 @@ type RequestReplyStatus struct {
 	// AppliedEventPoliciesStatus contains the list of EventPolicies which apply to this Broker.
 	// +optional
 	eventingduckv1.AppliedEventPoliciesStatus `json:",inline"`
+
+	// DesiredReplicas is the number of replicas (StatefulSet pod + trigger) that is desired
+	DesiredReplicas *int32 `json:"desiredReplicas,omitempty"`
+
+	// ReadyReplicas is the number of ready replicas (StatefulSet pod + trigger) for this RequestReply resource
+	ReadyReplicas *int32 `json:"readyReplicas,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -119,4 +124,11 @@ func (rr *RequestReply) GetUntypedSpec() interface{} {
 // GetStatus retrieves the status of the EventPolicy. Implements the KRShaped interface.
 func (rr *RequestReply) GetStatus() *duckv1.Status {
 	return &rr.Status.Status
+}
+
+func (rr *RequestReply) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      rr.Name,
+		Namespace: rr.Namespace,
+	}
 }

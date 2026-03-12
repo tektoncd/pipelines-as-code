@@ -1,18 +1,40 @@
 package providermetrics
 
 import (
+	"context"
 	"testing"
 
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"knative.dev/pkg/metrics/metricstest"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	metricsutils "github.com/openshift-pipelines/pipelines-as-code/pkg/test/metricstest"
+	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
 
-	_ "knative.dev/pkg/metrics/testing"
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"gotest.tools/v3/assert"
 )
+
+func attributesToMap[N int64 | float64](point metricdata.DataPoint[N]) map[string]string {
+	attrs := make(map[string]string, point.Attributes.Len())
+	for _, kv := range point.Attributes.ToSlice() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	return attrs
+}
+
+func assertAttributesContain[N int64 | float64](t *testing.T, point metricdata.DataPoint[N], want map[string]string) {
+	t.Helper()
+
+	attrs := attributesToMap(point)
+	for key, value := range want {
+		got, ok := attrs[key]
+		assert.Assert(t, ok)
+		assert.Equal(t, got, value)
+	}
+}
 
 func TestRecordAPIUsage(t *testing.T) {
 	type testCaseData struct {
@@ -47,14 +69,27 @@ func TestRecordAPIUsage(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.desc, func(t *testing.T) {
-			defer metricsutils.ResetMetrics()
-
+			ctx := context.Background()
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			metricProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(metricProvider)
 			observer, _ := zapobserver.New(zap.InfoLevel)
 			fakelogger := zap.New(observer).Sugar()
 
 			RecordAPIUsage(fakelogger, testCase.provider, testCase.eventType, testCase.repo)
 
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", testCase.wantTags, 1)
+			var rm metricdata.ResourceMetrics
+			err := reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(1))
+			assertAttributesContain(t, count.DataPoints[0], testCase.wantTags)
 		})
 	}
 }

@@ -19,19 +19,20 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	thelp "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab/test"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
-	metricsutils "github.com/openshift-pipelines/pipelines-as-code/pkg/test/metricstest"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
-	"knative.dev/pkg/metrics/metricstest"
-	_ "knative.dev/pkg/metrics/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -1478,7 +1479,6 @@ func TestGetFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			metricsutils.ResetMetrics()
 			fakeclient, mux, teardown := thelp.Setup(t)
 			defer teardown()
 
@@ -1531,8 +1531,10 @@ func TestGetFiles(t *testing.T) {
 					})
 			}
 
-			metricsTags := map[string]string{"provider": "api.gitlab.com", "event-type": string(tt.event.TriggerTarget)}
-			metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			metricProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(metricProvider)
 
 			providerInfo := &Provider{gitlabClient: fakeclient, sourceProjectID: int64(tt.sourceProjectID), targetProjectID: int64(tt.targetProjectID), triggerEvent: string(tt.event.TriggerTarget), apiURL: "api.gitlab.com"}
 			changedFiles, err := providerInfo.GetFiles(ctx, tt.event)
@@ -1555,15 +1557,32 @@ func TestGetFiles(t *testing.T) {
 				}
 			}
 
-			// Check caching
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.apiCallCount)
+			var rm metricdata.ResourceMetrics
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(tt.apiCallCount))
+
 			_, _ = providerInfo.GetFiles(ctx, tt.event)
+
+			// recollect the metrics after the second call
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
 			if tt.wantError {
 				// No caching on error
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.apiCallCount*2)
+				count, ok = rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+				assert.Assert(t, ok)
+				assert.Equal(t, count.DataPoints[0].Value, int64(tt.apiCallCount*2))
 			} else {
 				// Cache API results on success
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.apiCallCount)
+				count, ok = rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+				assert.Assert(t, ok)
+				assert.Equal(t, count.DataPoints[0].Value, int64(tt.apiCallCount))
 			}
 		})
 	}
@@ -1595,7 +1614,6 @@ func TestGetFilesPaging(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			metricsutils.ResetMetrics()
 			fakeclient, mux, teardown := thelp.Setup(t)
 			defer teardown()
 
@@ -1631,8 +1649,10 @@ func TestGetFilesPaging(t *testing.T) {
 				})
 			}
 
-			metricsTags := map[string]string{"provider": "api.gitlab.com", "event-type": string(tt.event.TriggerTarget)}
-			metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			metricProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(metricProvider)
 
 			providerInfo := &Provider{gitlabClient: fakeclient, sourceProjectID: 0, targetProjectID: 0, triggerEvent: string(tt.event.TriggerTarget), apiURL: "api.gitlab.com"}
 			changedFiles, err := providerInfo.GetFiles(ctx, tt.event)
@@ -1641,9 +1661,26 @@ func TestGetFilesPaging(t *testing.T) {
 			assert.Equal(t, len(changedFiles.Modified), changeCount)
 
 			// Check caching
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, int64(apiCallCount))
+			var rm metricdata.ResourceMetrics
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(apiCallCount))
+
 			_, _ = providerInfo.GetFiles(ctx, tt.event)
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, int64(apiCallCount))
+
+			// recollect the metrics after the second call
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			count, ok = rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(apiCallCount))
 		})
 	}
 }

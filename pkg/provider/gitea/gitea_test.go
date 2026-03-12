@@ -22,16 +22,17 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	tgitea "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/test"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
-	metricsutils "github.com/openshift-pipelines/pipelines-as-code/pkg/test/metricstest"
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
-	"knative.dev/pkg/metrics/metricstest"
-	_ "knative.dev/pkg/metrics/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -352,9 +353,13 @@ func TestProviderGetFiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			metricsutils.ResetMetrics()
 			fakeclient, mux, teardown := tgitea.Setup(t)
 			defer teardown()
+
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(provider)
 
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/pulls/%d/files", tt.args.runevent.Organization, tt.args.runevent.Repository, tt.args.runevent.PullRequestNumber), func(rw http.ResponseWriter, _ *http.Request) {
 				fmt.Fprint(rw, tt.changedFiles)
@@ -373,9 +378,6 @@ func TestProviderGetFiles(t *testing.T) {
 				giteaInstanceURL: giteaInstanceURL,
 				triggerEvent:     string(tt.args.runevent.TriggerTarget),
 			}
-
-			metricsTags := map[string]string{"provider": giteaInstanceURL, "event-type": string(tt.args.runevent.TriggerTarget)}
-			metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
 
 			got, err := gprovider.GetFiles(ctx, tt.args.runevent)
 
@@ -415,9 +417,16 @@ func TestProviderGetFiles(t *testing.T) {
 
 			// Verify metrics from first call
 			if tt.wantAPIRequestCount > 0 {
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.wantAPIRequestCount)
-			} else {
-				metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
+				var rm metricdata.ResourceMetrics
+				err = reader.Collect(ctx, &rm)
+				assert.NilError(t, err, "error collecting metrics")
+
+				assert.Equal(t, len(rm.ScopeMetrics), 1)
+				assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+				assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+				count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+				assert.Assert(t, ok)
+				assert.Equal(t, count.DataPoints[0].Value, int64(tt.wantAPIRequestCount))
 			}
 
 			// Verify caching: second call should return cached result without additional API calls
@@ -426,9 +435,12 @@ func TestProviderGetFiles(t *testing.T) {
 			assert.DeepEqual(t, got, got2)
 
 			if tt.wantAPIRequestCount > 0 {
-				metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.wantAPIRequestCount)
-			} else {
-				metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
+				var rm metricdata.ResourceMetrics
+				err = reader.Collect(ctx, &rm)
+				assert.NilError(t, err, "error collecting metrics")
+				count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+				assert.Assert(t, ok)
+				assert.Equal(t, count.DataPoints[0].Value, int64(tt.wantAPIRequestCount))
 			}
 		})
 	}
