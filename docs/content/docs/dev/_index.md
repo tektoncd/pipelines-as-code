@@ -190,7 +190,7 @@ PAC targets both **arm64** and **amd64** architectures. When contributing:
 ### Staying Updated
 
 - **Releases**: Follow [GitHub releases](https://github.com/tektoncd/pipelines-as-code/releases)
-- **Dev docs**: Check [nightly docs](https://nightly.pipelines-as-code.pages.dev/) for latest changes
+- **Dev docs**: Check [nightly docs](https://docs.pipelinesascode.com/nightly) for latest changes
 
 ## Next Steps
 

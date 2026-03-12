@@ -372,7 +372,7 @@ Once you have the `tkn-pac` CLI installed, you can set up your first repository 
 
 For more detailed information, please refer to the [official documentation](https://pipelinesascode.com).
 
-The documentation for the development branch is available [here](https://nightly.pipelines-as-code.pages.dev/).
+The documentation for the development branch is available [here](https://docs.pipelinesascode.com/nightly).
 
 ## Contributing
 

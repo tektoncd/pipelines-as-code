@@ -44,16 +44,12 @@
       function handleVersion(elm) {
         var path = window.location.pathname;
         if (elm.value === "nightly") {
-          window.location =
-            "https://nightly.pipelines-as-code.pages.dev" + path;
+          window.location = "https://docs.pipelinesascode.com/nightly" + path;
         } else if (elm.value === "stable") {
-          window.location = "https://pipelinesascode.com" + path;
+          window.location = "https://docs.pipelinesascode.com/stable" + path;
         } else {
           window.location =
-            "https://release-" +
-            elm.value.replace(/\./g, "-") +
-            ".pipelines-as-code.pages.dev" +
-            path;
+            "https://docs.pipelinesascode.com/" + elm.value + path;
         }
       }
     </script>
