@@ -10,42 +10,22 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"k8s.io/apimachinery/pkg/labels"
 	"knative.dev/pkg/logging"
-	"knative.dev/pkg/metrics"
-)
-
-var prCount = stats.Float64("pipelines_as_code_pipelinerun_count",
-	"number of pipelineruns by pipelines as code",
-	stats.UnitDimensionless)
-
-var prDurationCount = stats.Float64("pipelines_as_code_pipelinerun_duration_seconds_sum",
-	"number of seconds all pipelineruns completed in by pipelines as code",
-	stats.UnitDimensionless)
-
-var runningPRCount = stats.Float64("pipelines_as_code_running_pipelineruns_count",
-	"number of running pipelineruns by pipelines as code",
-	stats.UnitDimensionless)
-
-var gitProviderAPIRequestCount = stats.Int64(
-	"pipelines_as_code_git_provider_api_request_count",
-	"number of API requests from pipelines as code to git providers",
-	stats.UnitDimensionless,
 )
 
 // Recorder holds keys for metrics.
 type Recorder struct {
-	initialized     bool
-	provider        tag.Key
-	eventType       tag.Key
-	namespace       tag.Key
-	repository      tag.Key
-	status          tag.Key
-	reason          tag.Key
-	ReportingPeriod time.Duration
+	initialized                bool
+	meter                      metric.Meter
+	prCount                    metric.Int64Counter
+	prDurationCount            metric.Float64Counter
+	runningPRCount             metric.Int64Counter
+	gitProviderAPIRequestCount metric.Int64Counter
+	ReportingPeriod            time.Duration
 }
 
 var (
@@ -65,84 +45,27 @@ func NewRecorder() (*Recorder, error) {
 			ReportingPeriod: 30 * time.Second,
 		}
 
-		provider, errRegistering := tag.NewKey("provider")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
+		R.meter = otel.Meter("pipelines-as-code")
+		R.prCount, ErrRegistering = R.meter.Int64Counter("pipelines_as_code_pipelinerun_count", metric.WithDescription("number of pipelineruns by pipelines as code"))
+		if ErrRegistering != nil {
 			return
 		}
-		R.provider = provider
 
-		eventType, errRegistering := tag.NewKey("event-type")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
+		R.prDurationCount, ErrRegistering = R.meter.Float64Counter("pipelines_as_code_pipelinerun_duration_seconds_sum", metric.WithDescription("number of seconds all pipelineruns completed in by pipelines as code"))
+		if ErrRegistering != nil {
 			return
 		}
-		R.eventType = eventType
 
-		namespace, errRegistering := tag.NewKey("namespace")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
+		R.runningPRCount, ErrRegistering = R.meter.Int64Counter("pipelines_as_code_running_pipelineruns_count", metric.WithDescription("number of running pipelineruns by pipelines as code"))
+		if ErrRegistering != nil {
 			return
 		}
-		R.namespace = namespace
 
-		repository, errRegistering := tag.NewKey("repository")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
+		R.gitProviderAPIRequestCount, ErrRegistering = R.meter.Int64Counter("pipelines_as_code_git_provider_api_request_count", metric.WithDescription("number of API requests from pipelines as code to git providers"))
+		if ErrRegistering != nil {
 			return
 		}
-		R.repository = repository
 
-		status, errRegistering := tag.NewKey("status")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
-			return
-		}
-		R.status = status
-
-		reason, errRegistering := tag.NewKey("reason")
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
-			return
-		}
-		R.reason = reason
-
-		var (
-			prCountView = &view.View{
-				Description: prCount.Description(),
-				Measure:     prCount,
-				Aggregation: view.Count(),
-				TagKeys:     []tag.Key{R.provider, R.eventType, R.namespace, R.repository},
-			}
-
-			prDurationView = &view.View{
-				Description: prDurationCount.Description(),
-				Measure:     prDurationCount,
-				Aggregation: view.Sum(),
-				TagKeys:     []tag.Key{R.namespace, R.repository, R.status, R.reason},
-			}
-
-			runningPRView = &view.View{
-				Description: runningPRCount.Description(),
-				Measure:     runningPRCount,
-				Aggregation: view.LastValue(),
-				TagKeys:     []tag.Key{R.namespace, R.repository},
-			}
-			gitProviderAPIRequestView = &view.View{
-				Description: gitProviderAPIRequestCount.Description(),
-				Measure:     gitProviderAPIRequestCount,
-				Aggregation: view.Count(),
-				TagKeys:     []tag.Key{R.provider, R.eventType, R.namespace, R.repository},
-			}
-		)
-
-		view.Unregister(prCountView, prDurationView, runningPRView, gitProviderAPIRequestView)
-		errRegistering = view.Register(prCountView, prDurationView, runningPRView, gitProviderAPIRequestView)
-		if errRegistering != nil {
-			ErrRegistering = errRegistering
-			R.initialized = false
-			return
-		}
 	})
 
 	return R, ErrRegistering
@@ -157,75 +80,63 @@ func (r Recorder) assertInitialized() error {
 }
 
 // Count logs number of times a pipelinerun is ran for a provider.
-func (r *Recorder) Count(provider, event, namespace, repository string) error {
+func (r *Recorder) Count(ctx context.Context, provider, event, namespace, repository string) error {
 	if err := r.assertInitialized(); err != nil {
 		return err
 	}
 
-	ctx, err := tag.New(
-		context.Background(),
-		tag.Insert(r.provider, provider),
-		tag.Insert(r.eventType, event),
-		tag.Insert(r.namespace, namespace),
-		tag.Insert(r.repository, repository),
-	)
-	if err != nil {
-		return err
+	attribs := []attribute.KeyValue{
+		attribute.String("provider", provider),
+		attribute.String("event", event),
+		attribute.String("namespace", namespace),
+		attribute.String("repository", repository),
 	}
 
-	metrics.Record(ctx, prCount.M(1))
+	r.prCount.Add(ctx, 1, metric.WithAttributes(attribs...))
 	return nil
 }
 
 // CountPRDuration collects duration taken by a pipelinerun in seconds accumulate them in prDurationCount.
-func (r *Recorder) CountPRDuration(namespace, repository, status, reason string, duration time.Duration) error {
+func (r *Recorder) CountPRDuration(ctx context.Context, namespace, repository, status, reason string, duration time.Duration) error {
 	if err := r.assertInitialized(); err != nil {
 		return err
 	}
 
-	ctx, err := tag.New(
-		context.Background(),
-		tag.Insert(r.namespace, namespace),
-		tag.Insert(r.repository, repository),
-		tag.Insert(r.status, status),
-		tag.Insert(r.reason, reason),
-	)
-	if err != nil {
-		return err
+	attribs := []attribute.KeyValue{
+		attribute.String("namespace", namespace),
+		attribute.String("repository", repository),
+		attribute.String("status", status),
+		attribute.String("reason", reason),
 	}
 
-	metrics.Record(ctx, prDurationCount.M(duration.Seconds()))
+	r.prDurationCount.Add(ctx, duration.Seconds(), metric.WithAttributes(attribs...))
 	return nil
 }
 
 // RunningPipelineRuns emits the number of running PipelineRuns for a repository and namespace.
-func (r *Recorder) RunningPipelineRuns(namespace, repository string, runningPRs float64) error {
+func (r *Recorder) RunningPipelineRuns(ctx context.Context, namespace, repository string, runningPRs int) error {
 	if err := r.assertInitialized(); err != nil {
 		return err
 	}
 
-	ctx, err := tag.New(
-		context.Background(),
-		tag.Insert(r.namespace, namespace),
-		tag.Insert(r.repository, repository),
-	)
-	if err != nil {
-		return err
+	attribs := []attribute.KeyValue{
+		attribute.String("namespace", namespace),
+		attribute.String("repository", repository),
 	}
 
-	metrics.Record(ctx, runningPRCount.M(runningPRs))
+	r.runningPRCount.Add(ctx, int64(runningPRs), metric.WithAttributes(attribs...))
 	return nil
 }
 
-func (r *Recorder) EmitRunningPRsMetrics(prl []*tektonv1.PipelineRun) error {
-	if len(prl) == 0 {
+func (r *Recorder) EmitRunningPRsMetrics(ctx context.Context, plrs []*tektonv1.PipelineRun) error {
+	if len(plrs) == 0 {
 		return nil
 	}
 
 	// bifurcate PipelineRuns based on their namespace and repository
 	runningPRs := map[string]int{}
 	completedPRsKeys := map[string]struct{}{}
-	for _, pr := range prl {
+	for _, pr := range plrs {
 		// Check if PipelineRun has Repository annotation it means PR is created by PAC.
 		if repository, ok := pr.GetAnnotations()[keys.Repository]; ok {
 			key := fmt.Sprintf("%s/%s", pr.GetNamespace(), repository)
@@ -241,7 +152,7 @@ func (r *Recorder) EmitRunningPRsMetrics(prl []*tektonv1.PipelineRun) error {
 
 	for k, v := range runningPRs {
 		nsKeys := strings.Split(k, "/")
-		if err := r.RunningPipelineRuns(nsKeys[0], nsKeys[1], float64(v)); err != nil {
+		if err := r.RunningPipelineRuns(ctx, nsKeys[0], nsKeys[1], v); err != nil {
 			return err
 		}
 	}
@@ -252,7 +163,7 @@ func (r *Recorder) EmitRunningPRsMetrics(prl []*tektonv1.PipelineRun) error {
 		// otherwise it was reported in previous loop.
 		if _, ok := runningPRs[key]; !ok {
 			nsKeys := strings.Split(key, "/")
-			if err := r.RunningPipelineRuns(nsKeys[0], nsKeys[1], 0); err != nil {
+			if err := r.RunningPipelineRuns(ctx, nsKeys[0], nsKeys[1], 0); err != nil {
 				return err
 			}
 		}
@@ -277,13 +188,13 @@ func (r *Recorder) ReportRunningPipelineRuns(ctx context.Context, lister listers
 			return
 
 		case <-delay.C:
-			prl, err := lister.List(labels.Everything())
+			plrs, err := lister.List(labels.Everything())
 			if err != nil {
 				logger.Warnf("Failed to list PipelineRuns : %v", err)
 				continue
 			}
 			// Every 30s surface a metric for the number of running pipelines.
-			if err := r.EmitRunningPRsMetrics(prl); err != nil {
+			if err := r.EmitRunningPRsMetrics(ctx, plrs); err != nil {
 				logger.Warnf("Failed to log the metrics : %v", err)
 			}
 		}
@@ -295,18 +206,14 @@ func (r *Recorder) ReportGitProviderAPIUsage(provider, event, namespace, reposit
 		return err
 	}
 
-	ctx, err := tag.New(
-		context.Background(),
-		tag.Insert(r.provider, provider),
-		tag.Insert(r.eventType, event),
-		tag.Insert(r.namespace, namespace),
-		tag.Insert(r.repository, repository),
-	)
-	if err != nil {
-		return err
+	attribs := []attribute.KeyValue{
+		attribute.String("provider", provider),
+		attribute.String("event", event),
+		attribute.String("namespace", namespace),
+		attribute.String("repository", repository),
 	}
 
-	metrics.Record(ctx, gitProviderAPIRequestCount.M(1))
+	r.gitProviderAPIRequestCount.Add(context.Background(), 1, metric.WithAttributes(attribs...))
 	return nil
 }
 

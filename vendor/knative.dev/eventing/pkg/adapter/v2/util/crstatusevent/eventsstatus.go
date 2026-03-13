@@ -30,6 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"knative.dev/eventing/pkg/observability"
+	o11yconfigmap "knative.dev/eventing/pkg/observability/configmap"
 )
 
 type crStatusEvent struct {
@@ -48,13 +50,10 @@ func GetDefaultClient() *CRStatusEventClient {
 	return &CRStatusEventClient{}
 }
 
-func NewCRStatusEventClient(metricMap map[string]string) *CRStatusEventClient {
-	if metricMap == nil {
-		return nil
-	}
-
+func NewCRStatusEventClient(cfg *observability.Config) *CRStatusEventClient {
 	ret := &CRStatusEventClient{}
-	if metricMap["sink-event-error-reporting.enable"] == "true" {
+	// default to returning a client, but with reporting disabled
+	if cfg != nil && cfg.EnableSinkEventErrorReporting {
 		ret.isEnabledVar = true
 	}
 	return ret
@@ -66,15 +65,20 @@ func NewCRStatusEventClient(metricMap map[string]string) *CRStatusEventClient {
 // updates the client's Event Recorder configuration.
 func UpdateFromConfigMap(client *CRStatusEventClient) func(configMap *corev1.ConfigMap) {
 	return func(cm *corev1.ConfigMap) {
-		if cm != nil && cm.Data != nil && cm.Data["sink-event-error-reporting.enable"] != "" {
-			client.m.Lock()
-			defer client.m.Unlock()
-			client.isEnabledVar, _ = strconv.ParseBool(cm.Data["sink-event-error-reporting.enable"])
+		cfg, err := o11yconfigmap.Parse(cm)
+		if err != nil {
+			return
 		}
+
+		client.m.Lock()
+		defer client.m.Unlock()
+		client.isEnabledVar = cfg.EnableSinkEventErrorReporting
 	}
 }
 
-var contextkey struct{}
+type contextkeytype struct{}
+
+var contextkey contextkeytype
 
 func ContextWithCRStatus(ctx context.Context, kubeEventSink *record.EventSink, component string, source runtime.Object, logf func(format string, args ...interface{})) context.Context {
 
@@ -144,7 +148,7 @@ func (a *crStatusEvent) createEvent(ctx context.Context, result protocol.Result)
 		reason = strconv.Itoa(res.StatusCode)
 		if res.Format != "" && res.Format != "%w" { // returns '"%w" but this does not format
 			msg += " " + fmt.Sprintf(res.Format, res.Args...)
-		} else if res.Args != nil && len(res.Args) > 0 {
+		} else if len(res.Args) > 0 {
 			if m, ok := res.Args[0].(*protocol.Receipt); ok {
 				if m.Err != nil {
 					msg += " " + m.Err.Error() // add any error message if it's there.
