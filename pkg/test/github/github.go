@@ -34,6 +34,11 @@ func SetupGH() (client *github.Client, mux *http.ServeMux, serverURL string, tea
 	// when there's a non-empty base URL path. So, use that. See issue #752.
 	apiHandler := http.NewServeMux()
 	apiHandler.Handle(githubBaseURLPath+"/", http.StripPrefix(githubBaseURLPath, mux))
+	// GraphQL endpoint is at /api/graphql (not under /api/v3)
+	apiHandler.HandleFunc("/api/graphql", func(w http.ResponseWriter, r *http.Request) {
+		// Forward to mux for GraphQL handling
+		mux.ServeHTTP(w, r)
+	})
 	apiHandler.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(os.Stderr, "FAIL: Client.BaseURL path prefix is not preserved in the request URL:")
 		fmt.Fprintln(os.Stderr)
@@ -57,6 +62,12 @@ func SetupGH() (client *github.Client, mux *http.ServeMux, serverURL string, tea
 	return client, mux, server.URL, server.Close
 }
 
+// graphQLFileMapType is used to store files for GraphQL handler lookup.
+type graphQLFileMapType map[string]struct {
+	sha, name string
+	isdir     bool
+}
+
 // SetupGitTree Take a dir and fake a full GitTree GitHub api calls reply recursively over a muxer.
 func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Event, recursive bool) {
 	type file struct {
@@ -64,6 +75,7 @@ func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Even
 		isdir     bool
 	}
 	files := []file{}
+
 	if recursive {
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			sha := fmt.Sprintf("%x", sha256.Sum256([]byte(path)))
@@ -142,4 +154,121 @@ func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Even
 		assert.NilError(t, err)
 		fmt.Fprint(rw, string(b))
 	})
+
+	// Setup GraphQL endpoint handler for batch file fetching (only once per mux)
+	// Only register GraphQL handler once (at the root level, when recursive=false)
+	if !recursive {
+		// Walk the entire directory tree to collect all files for the GraphQL handler
+		allFiles := make(graphQLFileMapType)
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && path != dir {
+				relPath := strings.TrimPrefix(path, dir+"/")
+				allFiles[relPath] = struct {
+					sha, name string
+					isdir     bool
+				}{
+					sha:   fmt.Sprintf("%x", sha256.Sum256([]byte(path))),
+					name:  path,
+					isdir: false,
+				}
+			}
+			return nil
+		})
+		assert.NilError(t, err)
+
+		// Register handler once with all collected files (only if we have files)
+		if len(allFiles) > 0 {
+			mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+					return
+				}
+
+				var graphQLReq struct {
+					Query     string         `json:"query"`
+					Variables map[string]any `json:"variables"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&graphQLReq); err != nil {
+					http.Error(w, fmt.Sprintf("Invalid GraphQL request: %v", err), http.StatusBadRequest)
+					return
+				}
+
+				// Build response with file contents
+				repositoryData := make(map[string]any)
+
+				// Parse query to extract aliases and paths
+				queryLines := strings.SplitSeq(graphQLReq.Query, "\n")
+				for line := range queryLines {
+					line = strings.TrimSpace(line)
+					if strings.Contains(line, ": object(expression:") && strings.Contains(line, "file") {
+						// Extract alias (e.g., "file0")
+						aliasEnd := strings.Index(line, ":")
+						if aliasEnd <= 0 {
+							continue
+						}
+						alias := strings.TrimSpace(line[:aliasEnd])
+
+						// Extract expression value between quotes: "ref:path"
+						exprStart := strings.Index(line, `expression: "`)
+						if exprStart < 0 {
+							continue
+						}
+						exprStart += len(`expression: "`)
+						exprEnd := strings.Index(line[exprStart:], `"`)
+						if exprEnd < 0 {
+							continue
+						}
+						expr := line[exprStart : exprStart+exprEnd]
+						// Unescape the expression (handle \" and \\)
+						expr = strings.ReplaceAll(expr, `\"`, `"`)
+						expr = strings.ReplaceAll(expr, `\\`, `\`)
+						// Split "ref:path" and take path
+						parts := strings.SplitN(expr, ":", 2)
+						if len(parts) != 2 {
+							continue
+						}
+						path := parts[1]
+
+						// Look up file by path in the file map
+						var foundFile struct {
+							sha, name string
+							isdir     bool
+						}
+						var found bool
+						if f, ok := allFiles[path]; ok {
+							foundFile = f
+							found = true
+						} else {
+							// Try to find by matching the end of the path or other variations
+							for k, f := range allFiles {
+								if strings.HasSuffix(k, "/"+path) || k == path {
+									foundFile = f
+									found = true
+									break
+								}
+							}
+						}
+
+						if found {
+							content, err := os.ReadFile(foundFile.name)
+							if err == nil {
+								repositoryData[alias] = map[string]any{
+									"text": string(content),
+								}
+							}
+						}
+					}
+				}
+
+				responseData := map[string]any{
+					"data": map[string]any{
+						"repository": repositoryData,
+					},
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(responseData)
+			})
+		}
+	}
 }
