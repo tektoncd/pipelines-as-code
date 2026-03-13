@@ -67,7 +67,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "delete"]
+    verbs: ["get", "create", "update", "delete"]
   - apiGroups: ["pipelinesascode.tekton.dev"]
     resources: ["repositories"]
     verbs: ["get", "list", "update", "watch"]

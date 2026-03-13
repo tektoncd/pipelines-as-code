@@ -28,6 +28,7 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 		GHEURL:            "http://ghe",
 		SourceProjectID:   1234,
 		TargetProjectID:   2345,
+		CloneURL:          "https://url/clone",
 	}
 	tests := []struct {
 		name        string
@@ -50,6 +51,7 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 					Annotations: map[string]string{
 						keys.ShaTitle: "sha-title",
 						keys.ShaURL:   "sha-url",
+						keys.CloneURL: "https://url/clone",
 
 						// github
 						keys.InstallationID: "12345678",
@@ -80,6 +82,7 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 			assert.Equal(t, event.SourceProjectID, tt.event.SourceProjectID)
 			assert.Equal(t, event.TargetProjectID, tt.event.TargetProjectID)
 			assert.Equal(t, event.PullRequestNumber, tt.event.PullRequestNumber)
+			assert.Equal(t, event.CloneURL, tt.event.CloneURL)
 		})
 	}
 }
