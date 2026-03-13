@@ -21,9 +21,6 @@ import (
 )
 
 func TestGithubGHEPullRequestOkToTest(t *testing.T) {
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 	ctx := context.TODO()
 	g := &tgithub.PRTest{
 		Label:     "Github OkToTest comment",

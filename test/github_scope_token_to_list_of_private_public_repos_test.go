@@ -29,9 +29,6 @@ import (
 
 func TestGithubPullRequestScopeTokenToListOfRepos(t *testing.T) {
 	t.Skip("Skipping test changing the global config map for now")
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 
 	var remoteTaskURL, remoteTaskName string
 	if os.Getenv("TEST_GITHUB_PRIVATE_TASK_URL") != "" {
@@ -55,9 +52,6 @@ func TestGithubPullRequestScopeTokenToListOfRepos(t *testing.T) {
 
 func TestGithubPullRequestScopeTokenToListOfReposByGlobalConfiguration(t *testing.T) {
 	t.Skip("Skipping test changing the global config map for now")
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 
 	var remoteTaskURL, remoteTaskName string
 	if os.Getenv("TEST_GITHUB_PRIVATE_TASK_URL") != "" {

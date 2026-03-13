@@ -83,6 +83,7 @@ jobs:
       TEST_GITHUB_SECOND_WEBHOOK_ORG: pac-e2e-webhook-tests
       TEST_GITHUB_SECOND_WEBHOOK_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_TOKEN }}
       TEST_GITHUB_SECOND_WEBHOOK_SECRET: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_SECRET }}
+      TEST_GITHUB_SECOND_APPLICATION_ID: ${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}
 
       # GitLab
       TEST_GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
@@ -506,26 +507,6 @@ jobs:
           TEST_BITBUCKET_SERVER_TOKEN: ${{ secrets.BITBUCKET_SERVER_TOKEN }}
           TEST_BITBUCKET_SERVER_API_URL: ${{ secrets.BITBUCKET_SERVER_API_URL }}
           TEST_BITBUCKET_SERVER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_SERVER_WEBHOOK_SECRET }}
-        run: |
-          ./hack/gh-workflow-ci.sh run_e2e_tests
-
-      - name: Run E2E Tests on nightly
-        # This step still runs specifically for schedule or workflow_dispatch
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-        env:
-          NIGHTLY_E2E_TEST: "true"
-          TEST_PROVIDER: ${{ matrix.provider }}
-          TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
-          TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-          TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
-          TEST_GITHUB_TOKEN: ${{ secrets.GH_APPS_TOKEN }}
-          TEST_GITHUB_SECOND_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_TOKEN }}
-          TEST_GITHUB_SECOND_WEBHOOK_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_TOKEN }}
-          TEST_GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-          TEST_BITBUCKET_SERVER_TOKEN: ${{ secrets.BITBUCKET_SERVER_TOKEN }}
-          TEST_BITBUCKET_SERVER_API_URL: ${{ secrets.BITBUCKET_SERVER_API_URL }}
-          TEST_BITBUCKET_SERVER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_SERVER_WEBHOOK_SECRET }}
-          TEST_GITHUB_SECOND_APPLICATION_ID: ${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}
         run: |
           ./hack/gh-workflow-ci.sh run_e2e_tests
 
