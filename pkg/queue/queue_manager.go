@@ -198,15 +198,19 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		return err
 	}
 
-	// pipelineRuns from the namespace where repository is present
-	// those are required for creating queues
-	for _, repo := range repos.Items {
+	// Group repositories by namespace to avoid duplicate List() calls per namespace.
+	namespaceRepos := make(map[string][]*v1alpha1.Repository)
+	for i := range repos.Items {
+		repo := &repos.Items[i]
 		if repo.Spec.ConcurrencyLimit == nil || *repo.Spec.ConcurrencyLimit == 0 {
 			continue
 		}
+		namespaceRepos[repo.Namespace] = append(namespaceRepos[repo.Namespace], repo)
+	}
 
-		// add all pipelineRuns in started state to pending queue
-		prs, err := tekton.TektonV1().PipelineRuns(repo.Namespace).
+	for namespace, reposInNS := range namespaceRepos {
+		// Fetch started PipelineRuns ONCE per namespace
+		startedPRs, err := tekton.TektonV1().PipelineRuns(namespace).
 			List(ctx, v1.ListOptions{
 				LabelSelector: fmt.Sprintf("%s=%s", keys.State, kubeinteraction.StateStarted),
 			})
@@ -214,25 +218,8 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 			return err
 		}
 
-		// sort the pipelinerun by creation time before adding to queue
-		sortedPRs := sortPipelineRunsByCreationTimestamp(prs.Items)
-
-		for _, pr := range sortedPRs {
-			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
-			if !exist {
-				// if the pipelineRun doesn't have order label then wait
-				return nil
-			}
-			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), "", kubeinteraction.StateStarted)
-
-			_, err = qm.AddListToRunningQueue(&repo, orderedList)
-			if err != nil {
-				qm.logger.Error("failed to init queue for repo: ", repo.GetName())
-			}
-		}
-
-		// now fetch all queued pipelineRun
-		prs, err = tekton.TektonV1().PipelineRuns(repo.Namespace).
+		// Fetch queued PipelineRuns ONCE per namespace
+		queuedPRs, err := tekton.TektonV1().PipelineRuns(namespace).
 			List(ctx, v1.ListOptions{
 				LabelSelector: fmt.Sprintf("%s=%s", keys.State, kubeinteraction.StateQueued),
 			})
@@ -240,19 +227,10 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 			return err
 		}
 
-		// sort the pipelinerun by creation time before adding to queue
-		sortedPRs = sortPipelineRunsByCreationTimestamp(prs.Items)
-
-		for _, pr := range sortedPRs {
-			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
-			if !exist {
-				// if the pipelineRun doesn't have order label then wait
-				return nil
-			}
-			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
-			if err := qm.AddToPendingQueue(&repo, orderedList); err != nil {
-				qm.logger.Error("failed to init queue for repo: ", repo.GetName())
-			}
+		// Process each repository in the namespace
+		for _, repo := range reposInNS {
+			qm.sortAndQueuePipelines(ctx, tekton, repo, startedPRs.Items, "running")
+			qm.sortAndQueuePipelines(ctx, tekton, repo, queuedPRs.Items, "pending")
 		}
 	}
 
@@ -287,6 +265,47 @@ func (qm *Manager) RunningPipelineRuns(repo *v1alpha1.Repository) []string {
 		return sema.getCurrentRunning()
 	}
 	return []string{}
+}
+
+func (qm *Manager) sortAndQueuePipelines(
+	ctx context.Context,
+	tekton versioned2.Interface,
+	repo *v1alpha1.Repository,
+	prList []tektonv1.PipelineRun,
+	queueState string,
+) {
+	// Process PRs for this repository
+	// Note: We iterate all PRs in namespace, but execution-order annotation
+	// determines which PRs actually belong to this repo
+	sortedPRs := sortPipelineRunsByCreationTimestamp(prList)
+
+	for _, pr := range sortedPRs {
+		// Check if the pipelineRun belongs to the repository
+		if pr.GetLabels()[keys.Repository] != repo.GetName() {
+			continue
+		}
+
+		order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
+		if !exist {
+			// if the pipelineRun doesn't have order label then skip it
+			continue
+		}
+
+		switch queueState {
+		case "running":
+			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), "", kubeinteraction.StateStarted)
+			// AddListToRunningQueue will only add PRs that match this repo
+			_, err := qm.AddListToRunningQueue(repo, orderedList)
+			if err != nil {
+				qm.logger.Error("failed to init queue for repo: ", repo.GetName())
+			}
+		case "pending":
+			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+			if err := qm.AddToPendingQueue(repo, orderedList); err != nil {
+				qm.logger.Error("failed to init queue for repo: ", repo.GetName())
+			}
+		}
+	}
 }
 
 func sortPipelineRunsByCreationTimestamp(prs []tektonv1.PipelineRun) []*tektonv1.PipelineRun {

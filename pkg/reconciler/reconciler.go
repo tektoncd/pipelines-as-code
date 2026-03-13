@@ -60,10 +60,32 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 
 	logger.Debugf("reconciling pipelineRun %s/%s", pr.GetNamespace(), pr.GetName())
 
-	// make sure we have the latest pipelinerun to reconcile, since there is something updating at the same time
-	lpr, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(pr.GetNamespace()).Get(ctx, pr.GetName(), metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("cannot get pipelineRun: %w", err)
+	// Early exit for completed/failed state to avoid unnecessary API calls and reconcile churn
+	state, exist := pr.GetAnnotations()[keys.State]
+	if exist && (state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed) {
+		return nil
+	}
+
+	// Use lister (informer cache) instead of fresh Get() when possible.
+	// Only do a fresh Get() if we need to update the object to avoid resource version conflicts.
+	// This reduces API server load and reconcile frequency.
+	var lpr *tektonv1.PipelineRun
+	var err error
+	if r.pipelineRunLister != nil {
+		lpr, err = r.pipelineRunLister.PipelineRuns(pr.GetNamespace()).Get(pr.GetName())
+		if err != nil {
+			// If not in cache, fall back to direct Get
+			lpr, err = r.run.Clients.Tekton.TektonV1().PipelineRuns(pr.GetNamespace()).Get(ctx, pr.GetName(), metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("cannot get pipelineRun: %w", err)
+			}
+		}
+	} else {
+		// Lister not available, use direct Get
+		lpr, err = r.run.Clients.Tekton.TektonV1().PipelineRuns(pr.GetNamespace()).Get(ctx, pr.GetName(), metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("cannot get pipelineRun: %w", err)
+		}
 	}
 
 	if lpr.GetResourceVersion() != pr.GetResourceVersion() {
@@ -71,11 +93,8 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		return nil
 	}
 
-	// if pipelineRun is in completed or failed state then return
-	state, exist := pr.GetAnnotations()[keys.State]
-	if exist && (state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed) {
-		return nil
-	}
+	// Update pr to the latest version from lister/cache
+	pr = lpr
 
 	reason := ""
 	if len(pr.Status.GetConditions()) > 0 {
@@ -253,17 +272,17 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		return repo, fmt.Errorf("cannot update run status: %w", err)
 	}
 
-	if _, err := r.updatePipelineRunState(ctx, logger, pr, finalState); err != nil {
+	if _, err := r.updatePipelineRunState(ctx, logger, newPr, finalState); err != nil {
 		return repo, fmt.Errorf("cannot update state: %w", err)
 	}
 
-	if err := r.emitMetrics(pr); err != nil {
+	if err := r.emitMetrics(newPr); err != nil {
 		logger.Error("failed to emit metrics: ", err)
 	}
 
 	// remove pipelineRun from Queue and start the next one
 	for {
-		next := r.qm.RemoveAndTakeItemFromQueue(repo, pr)
+		next := r.qm.RemoveAndTakeItemFromQueue(repo, newPr)
 		if next == "" {
 			break
 		}
@@ -282,7 +301,7 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		break
 	}
 
-	if err := r.cleanupPipelineRuns(ctx, logger, pacInfo, repo, pr); err != nil {
+	if err := r.cleanupPipelineRuns(ctx, logger, pacInfo, repo, newPr); err != nil {
 		return repo, fmt.Errorf("error cleaning pipelineruns: %w", err)
 	}
 
@@ -290,6 +309,15 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 }
 
 func (r *Reconciler) updatePipelineRunToInProgress(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun) error {
+	// Check if already in progress to avoid redundancy
+	// This prevents unnecessary provider status updates and reduces conflict potential
+	currentState := pr.GetAnnotations()[keys.State]
+	scmReporting, scmExists := pr.GetAnnotations()[keys.SCMReportingPLRStarted]
+	if currentState == kubeinteraction.StateStarted && scmExists && scmReporting == "true" {
+		logger.Debugf("pipelineRun %s/%s already marked as in-progress, skipping update", pr.GetNamespace(), pr.GetName())
+		return nil
+	}
+
 	pr, err := r.updatePipelineRunState(ctx, logger, pr, kubeinteraction.StateStarted)
 	if err != nil {
 		return fmt.Errorf("cannot update state: %w", err)
@@ -377,6 +405,23 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 
 func (r *Reconciler) updatePipelineRunState(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, state string) (*tektonv1.PipelineRun, error) {
 	currentState := pr.GetAnnotations()[keys.State]
+
+	// Skip update if state is already correct (idempotency check)
+	// This reduces API server load and prevents unnecessary resource version conflicts
+	if currentState == state {
+		// For "started" state, also check if SCMReportingPLRStarted annotation is already set
+		if state == kubeinteraction.StateStarted {
+			if scmReporting, exists := pr.GetAnnotations()[keys.SCMReportingPLRStarted]; exists && scmReporting == "true" {
+				logger.Debugf("pipelineRun %v/%v already in state %s with SCMReportingPLRStarted=true, skipping update", pr.GetNamespace(), pr.GetName(), state)
+				return pr, nil
+			}
+			// State is correct but annotation missing, continue with update
+		} else {
+			logger.Debugf("pipelineRun %v/%v already in state %s, skipping update", pr.GetNamespace(), pr.GetName(), state)
+			return pr, nil
+		}
+	}
+
 	logger.Infof("updating pipelineRun %v/%v state from %s to %s", pr.GetNamespace(), pr.GetName(), currentState, state)
 	annotations := map[string]string{
 		keys.State: state,

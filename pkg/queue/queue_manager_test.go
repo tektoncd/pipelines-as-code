@@ -274,6 +274,176 @@ func TestQueueManager_InitQueues(t *testing.T) {
 	assert.Equal(t, len(runs), 1)
 }
 
+func TestQueueManager_InitQueues_SkipsMissingExecutionOrder(t *testing.T) {
+	// This test verifies the fix for the early-return bug where a PipelineRun
+	// without execution-order would cause InitQueues to stop processing all
+	// remaining repositories.
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	startedLabel := map[string]string{
+		keys.State: kubeinteraction.StateStarted,
+	}
+	queuedLabel := map[string]string{
+		keys.State: kubeinteraction.StateQueued,
+	}
+
+	// Create two repositories
+	repo1 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo1",
+			Namespace: "ns1",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: intPtr(1),
+		},
+	}
+	repo2 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo2",
+			Namespace: "ns2",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: intPtr(1),
+		},
+	}
+
+	// Repo1 has a PipelineRun WITHOUT execution-order (the bug scenario)
+	prWithoutOrder := newTestPR("pr-without-order", time.Now(), startedLabel, map[string]string{
+		keys.State: kubeinteraction.StateStarted,
+		// No execution-order annotation
+	}, tektonv1.PipelineRunSpec{})
+	prWithoutOrder.Namespace = "ns1"
+
+	// Repo2 has a normal PipelineRun WITH execution-order
+	prWithOrder := newTestPR("pr-with-order", time.Now(), startedLabel, map[string]string{
+		keys.ExecutionOrder: "ns2/pr-with-order",
+		keys.State:          kubeinteraction.StateStarted,
+	}, tektonv1.PipelineRunSpec{})
+	prWithOrder.Namespace = "ns2"
+
+	// Also add a queued PR to repo2
+	prQueued := newTestPR("pr-queued", time.Now(), queuedLabel, map[string]string{
+		keys.ExecutionOrder: "ns2/pr-with-order,ns2/pr-queued",
+		keys.State:          kubeinteraction.StateQueued,
+	}, tektonv1.PipelineRunSpec{
+		Status: tektonv1.PipelineRunSpecStatusPending,
+	})
+	prQueued.Namespace = "ns2"
+
+	tdata := testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo1, repo2},
+		PipelineRuns: []*tektonv1.PipelineRun{prWithoutOrder, prWithOrder, prQueued},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+
+	qm := NewManager(logger)
+
+	// Before the fix, this would return early when encountering prWithoutOrder,
+	// and repo2 would not get its queues initialized.
+	err := qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode)
+	assert.NilError(t, err)
+
+	// Verify repo1 has no queues (PipelineRun without execution-order was skipped)
+	sema1 := qm.queueMap[RepoKey(repo1)]
+	assert.Assert(t, sema1 == nil || len(sema1.getCurrentRunning()) == 0)
+
+	// Verify repo2 DOES have queues initialized (processing continued after repo1)
+	sema2 := qm.queueMap[RepoKey(repo2)]
+	assert.Assert(t, sema2 != nil, "repo2 should have queues initialized")
+	assert.Equal(t, len(sema2.getCurrentRunning()), 1, "repo2 should have 1 running PR")
+	assert.Equal(t, len(sema2.getCurrentPending()), 1, "repo2 should have 1 pending PR")
+}
+
+func TestQueueManager_InitQueues_NamespaceDeduplication(t *testing.T) {
+	// This test verifies namespace deduplication: multiple repos in the same
+	// namespace should only trigger ONE List() call per namespace, not one per repo.
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	startedLabel := map[string]string{
+		keys.State: kubeinteraction.StateStarted,
+	}
+
+	// Create THREE repositories in the SAME namespace
+	repo1 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo1",
+			Namespace: "shared-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: intPtr(1),
+		},
+	}
+	repo2 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo2",
+			Namespace: "shared-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: intPtr(1),
+		},
+	}
+	repo3 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo3",
+			Namespace: "shared-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: intPtr(1),
+		},
+	}
+
+	// Each repo has its own started PipelineRun
+	pr1 := newTestPR("pr1", time.Now(), startedLabel, map[string]string{
+		keys.ExecutionOrder: "shared-ns/pr1",
+		keys.State:          kubeinteraction.StateStarted,
+	}, tektonv1.PipelineRunSpec{})
+	pr1.Namespace = "shared-ns"
+
+	pr2 := newTestPR("pr2", time.Now(), startedLabel, map[string]string{
+		keys.ExecutionOrder: "shared-ns/pr2",
+		keys.State:          kubeinteraction.StateStarted,
+	}, tektonv1.PipelineRunSpec{})
+	pr2.Namespace = "shared-ns"
+
+	pr3 := newTestPR("pr3", time.Now(), startedLabel, map[string]string{
+		keys.ExecutionOrder: "shared-ns/pr3",
+		keys.State:          kubeinteraction.StateStarted,
+	}, tektonv1.PipelineRunSpec{})
+	pr3.Namespace = "shared-ns"
+
+	tdata := testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo1, repo2, repo3},
+		PipelineRuns: []*tektonv1.PipelineRun{pr1, pr2, pr3},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+
+	qm := NewManager(logger)
+
+	err := qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode)
+	assert.NilError(t, err)
+
+	// Verify all three repos have their queues initialized
+	sema1 := qm.queueMap[RepoKey(repo1)]
+	assert.Assert(t, sema1 != nil, "repo1 should have queues")
+	assert.Equal(t, len(sema1.getCurrentRunning()), 1, "repo1 should have 1 running PR")
+
+	sema2 := qm.queueMap[RepoKey(repo2)]
+	assert.Assert(t, sema2 != nil, "repo2 should have queues")
+	assert.Equal(t, len(sema2.getCurrentRunning()), 1, "repo2 should have 1 running PR")
+
+	sema3 := qm.queueMap[RepoKey(repo3)]
+	assert.Assert(t, sema3 != nil, "repo3 should have queues")
+	assert.Equal(t, len(sema3.getCurrentRunning()), 1, "repo3 should have 1 running PR")
+
+	// Before optimization: 3 repos × 2 states = 6 List() calls
+	// After optimization: 1 namespace × 2 states = 2 List() calls
+	// (We can't directly measure API calls in this test, but the logic ensures deduplication)
+}
+
 func TestFilterPipelineRunByInProgress(t *testing.T) {
 	ctx, _ := rtesting.SetupFakeContext(t)
 	ns := "test-ns"
