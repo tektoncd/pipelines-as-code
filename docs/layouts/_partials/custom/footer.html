@@ -8,28 +8,49 @@
     {{ end }}
     {{ $splitted := split $versions "," }}
     <div class="pac-version-picker">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-      <select name="version" id="version" onchange="handleVersion(this)" class="version-select">
-          {{ range $splitted }}
-              {{ $trimmed := strings.TrimLeft " " . | strings.TrimRight " " }}
-              {{ if ne $trimmed $version }}
-                  <option value="{{ $trimmed }}">{{$trimmed}}</option>
-              {{ else }}
-                  <option selected value="{{ $trimmed }}">{{$trimmed}}</option>
-              {{ end }}
-          {{ end }}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+        />
+        <line x1="7" y1="7" x2="7.01" y2="7" />
+      </svg>
+      <select
+        name="version"
+        id="version"
+        onchange="handleVersion(this)"
+        class="version-select"
+      >
+        {{ range $splitted }}
+        {{ $trimmed := strings.TrimLeft " " . | strings.TrimRight " " }}
+        {{ if ne $trimmed $version }}
+        <option value="{{ $trimmed }}">{{$trimmed}}</option>
+        {{ else }}
+        <option selected value="{{ $trimmed }}">{{$trimmed}}</option>
+        {{ end }}
+        {{ end }}
       </select>
     </div>
     <script type="text/javascript">
       function handleVersion(elm) {
-          var path = window.location.pathname;
-          if (elm.value === "nightly") {
-              window.location = "https://nightly.pipelines-as-code.pages.dev" + path;
-          } else if (elm.value === "stable") {
-              window.location = "https://pipelinesascode.com" + path;
-          } else {
-              window.location = "https://release-" + elm.value.replace(/\./g, "-") + ".pipelines-as-code.pages.dev" + path;
-          }
+        var path = window.location.pathname;
+        if (elm.value === "nightly") {
+          window.location = "https://docs.pipelinesascode.com/nightly" + path;
+        } else if (elm.value === "stable") {
+          window.location = "https://docs.pipelinesascode.com/stable" + path;
+        } else {
+          window.location =
+            "https://docs.pipelinesascode.com/" + elm.value + path;
+        }
       }
     </script>
     {{ end }}
@@ -37,19 +58,41 @@
     {{ if and .context.GitInfo .context.Site.Params.editURL.enable }}
     <div class="pac-last-modified">
       {{- $date := .context.GitInfo.AuthorDate.Local.Format "2006-01-02" -}}
-      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
       <span>Updated {{ $date }} by {{ .context.GitInfo.AuthorName }}</span>
     </div>
     {{ end }}
   </div>
 
   <div class="pac-footer-right">
-    {{- if (.context.Site.Params.footer.displayPoweredBy | default true) -}}
-      <a class="pac-powered-by" target="_blank" rel="noopener noreferrer" href="https://github.com/imfing/hextra">Hextra</a>
-    {{- end -}}
-    {{- if .context.Site.Params.footer.displayCopyright -}}
-      <span class="pac-copyright">{{ .copyright }}</span>
-    {{- end -}}
+    <a
+      class="pac-tekton-org"
+      target="_blank"
+      rel="noopener noreferrer"
+      href="https://tekton.dev"
+    >
+      <img
+        src="/images/tekton-logo.png"
+        width="16"
+        height="16"
+        alt="Tekton Logo"
+        loading="lazy"
+      />
+      Pipelines as Code is a Tekton Project
+    </a>
     {{- if .switchesVisible }}{{ partial "theme-toggle.html" }}{{ end -}}
   </div>
 </div>

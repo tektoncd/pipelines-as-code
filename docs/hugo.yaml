@@ -27,9 +27,6 @@ menu:
     - name: GitHub
       url: https://github.com/openshift-pipelines/pipelines-as-code
       weight: 20
-    - name: Tekton Docs
-      url: https://tekton.dev/docs/
-      weight: 30
     - name: Search
       weight: 40
       params:
@@ -47,9 +44,7 @@ params:
   editURL:
     enable: true
     base: https://github.com/openshift-pipelines/pipelines-as-code/edit/main/docs/content
-  footer:
-    displayCopyright: true
-    displayPoweredBy: false
+  footer: {}
   page:
     width: normal
 
