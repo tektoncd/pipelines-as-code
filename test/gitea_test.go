@@ -54,9 +54,10 @@ func TestGiteaPullRequestTaskAnnotations(t *testing.T) {
 		Regexp:      successRegexp,
 		TargetEvent: triggertype.PullRequest.String(),
 		YAMLFiles: map[string]string{
-			".tekton/pipeline.yaml":                        "testdata/pipeline_in_tektondir.yaml",
-			".other-tasks/task-referenced-internally.yaml": "testdata/task_referenced_internally.yaml",
-			".tekton/pr.yaml":                              "testdata/pipelinerun_remote_task_annotations.yaml",
+			".tekton/pipeline.yaml":                         "testdata/pipeline_in_tektondir.yaml",
+			".other-tasks/task-referenced-internally.yaml":  "testdata/task_referenced_internally.yaml",
+			".other-tasks/task2-referenced-internally.yaml": "testdata/task2_referenced_internally.yaml",
+			".tekton/pr.yaml":                               "testdata/pipelinerun_remote_task_annotations.yaml",
 		},
 		CheckForStatus: "success",
 		ExtraArgs: map[string]string{

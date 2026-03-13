@@ -21,3 +21,7 @@ spec:
     - name: task-referenced-internally
       taskRef:
         name: task-referenced-internally
+
+    - name: task2-referenced-internally
+      taskRef:
+        name: task2-referenced-internally

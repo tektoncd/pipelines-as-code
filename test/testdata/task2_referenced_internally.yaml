@@ -1,0 +1,12 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task2-referenced-internally
+spec:
+  steps:
+    - name: task2-remote
+      image: gcr.io/distroless/python3:nonroot
+      script: |
+        #!/usr/bin/python3
+        print("Hello Task Referenced Internally")

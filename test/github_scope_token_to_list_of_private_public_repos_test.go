@@ -96,9 +96,10 @@ func verifyGHTokenScope(t *testing.T, remoteTaskURL, remoteTaskName string, data
 	defer configmap.ChangeGlobalConfig(ctx, t, runcnx, "pipelines-as-code", data)()
 
 	entries, err := payload.GetEntries(map[string]string{
-		".tekton/pr.yaml":                              "testdata/pipelinerun_remote_task_annotations.yaml",
-		".tekton/pipeline.yaml":                        "testdata/pipeline_in_tektondir.yaml",
-		".other-tasks/task-referenced-internally.yaml": "testdata/task_referenced_internally.yaml",
+		".tekton/pr.yaml":                               "testdata/pipelinerun_remote_task_annotations.yaml",
+		".tekton/pipeline.yaml":                         "testdata/pipeline_in_tektondir.yaml",
+		".other-tasks/task-referenced-internally.yaml":  "testdata/task_referenced_internally.yaml",
+		".other-tasks/task2-referenced-internally.yaml": "testdata/task2_referenced_internally.yaml",
 	}, targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{
 		"RemoteTaskURL":  remoteTaskURL,
 		"RemoteTaskName": remoteTaskName,
