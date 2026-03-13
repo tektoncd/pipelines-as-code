@@ -103,6 +103,73 @@ func TestReconciler_Admit(t *testing.T) {
 			allowed: false,
 			result:  "repository already exists with URL: https://pac.test/already/installed",
 		},
+		{
+			name: "reject github.com URL with subgroup, GitHub auto-detected",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://github.com/owner/repo/subgroup",
+			}),
+			allowed: false,
+			result:  "github repository URL must follow https://github.com/org/repo format without subgroups (found 3 path segments, expected 2): https://github.com/owner/repo/subgroup",
+		},
+		{
+			name: "allow github.com URL with correct format, GitHub auto-detected",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://github.com/owner/repo",
+			}),
+			allowed: true,
+		},
+		{
+			name: "reject GitHub repository URL with subgroup",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://ghe.pipelinesascode.com/owner/repo/subgroup",
+			}),
+			allowed: false,
+			result:  "github repository URL must follow https://github.com/org/repo format without subgroups (found 3 path segments, expected 2): https://ghe.pipelinesascode.com/owner/repo/subgroup",
+		},
+		{
+			name: "reject GitHub repository URL with multiple subgroups",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://github.com/owner/repo/subgroup/extra",
+			}),
+			allowed: false,
+			result:  "github repository URL must follow https://github.com/org/repo format without subgroups (found 4 path segments, expected 2): https://github.com/owner/repo/subgroup/extra",
+		},
+		{
+			name: "allow GitLab repository URL with subgroups",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://gitlab.com/owner/group/repo",
+			}),
+			allowed: true,
+		},
+		{
+			name: "allow Bitbucket repository URL with subgroups",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://bitbucket.org/workspace/project/repo",
+			}),
+			allowed: true,
+		},
+		{
+			name: "allow GitHub URL with correct format",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://ghe.company.com/owner/repo",
+				GitProviderType:  "github",
+			}),
+			allowed: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

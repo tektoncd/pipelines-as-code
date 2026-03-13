@@ -2,8 +2,12 @@ package webhook
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/url"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	pac "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
@@ -42,13 +46,8 @@ func (ac *reconciler) Admit(_ context.Context, request *v1.AdmissionRequest) *v1
 			return webhook.MakeErrorStatus("URL must be set")
 		}
 
-		parsed, err := url.Parse(repo.Spec.URL)
-		if err != nil {
-			return webhook.MakeErrorStatus("invalid URL format: %v", err)
-		}
-
-		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			return webhook.MakeErrorStatus("URL scheme must be http or https")
+		if err := validateRepositoryURL(repo.Spec.URL); err != nil {
+			return webhook.MakeErrorStatus("%s", err.Error())
 		}
 	}
 
@@ -93,4 +92,62 @@ func checkIfRepoExist(pac pac.RepositoryLister, repo *v1alpha1.Repository, ns st
 		}
 	}
 	return false, nil
+}
+
+func validateRepositoryURL(repoURL string) error {
+	parsedURL, err := url.Parse(repoURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("URL scheme must be http or https")
+	}
+
+	// Validate github repository URL does not include additional path segments
+	// (like https://github.com/org/repo/extra).
+	// Detect if this is a GitHub instance (github.com or GHE) by checking headers
+	//  and API endpoints.
+	if isGitHubInstance(parsedURL.Host, parsedURL.Scheme) {
+		// Remove leading and trailing "/"
+		repoPath := strings.Trim(parsedURL.Path, "/")
+
+		split := strings.Split(repoPath, "/")
+		if len(split) != 2 {
+			return fmt.Errorf("github repository URL must follow https://github.com/org/repo format without subgroups (found %d path segments, expected 2): %s", len(split), repoURL)
+		}
+	}
+
+	return nil
+}
+
+// isGitHubInstance detects if a host is github.com or a GitHub Enterprise instance.
+// It checks the server header and /api/v3/meta endpoint.
+func isGitHubInstance(host, scheme string) bool {
+	if host == "github.com" {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client := &http.Client{}
+
+	// Try HEAD request to check the server header.
+	url := fmt.Sprintf("%s://%s", scheme, host)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := client.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		server := resp.Header.Get("Server")
+		if strings.Contains(strings.ToLower(server), "github.com") {
+			return true
+		}
+	}
+
+	return false
 }
