@@ -131,7 +131,7 @@ func TestPR(t *testing.T, topts *TestOpts) (context.Context, func()) {
 	hookURL := os.Getenv("TEST_GITEA_SMEEURL")
 	topts.InternalGiteaURL = os.Getenv("TEST_GITEA_INTERNAL_URL")
 	if topts.InternalGiteaURL == "" {
-		topts.InternalGiteaURL = "http://forgejo.forgejo:3000"
+		topts.InternalGiteaURL = "http://forgejo-http.forgejo:3000"
 	}
 	if topts.ExtraArgs == nil {
 		topts.ExtraArgs = map[string]string{}

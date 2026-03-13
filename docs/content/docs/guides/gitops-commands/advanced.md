@@ -158,6 +158,8 @@ If a repository owner comments `/ok-to-test` on a pull request from an external 
 This neutral check-run status functionality is only supported on GitHub.
 {{< /callout >}}
 
+On GitLab and Gitea, when a repository admin issues the `/ok-to-test` command for an unauthorized user, the status that was previously created to indicate that approval is needed is updated to success, confirming that the admin has approved CI to run.
+
 When using the `{{ event_type }}` [dynamic variable]({{< relref "/docs/guides/creating-pipelines#dynamic-variables" >}}) for the following event types:
 
 - `test-all-comment`
