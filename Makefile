@@ -206,6 +206,9 @@ download-htmltest: ## Download htmltest binary
 
 .PHONY: check-links
 check-links: ## Check documentation links (set CHECK_EXTERNAL=false to skip external URLs)
+	@echo "Checking README links..."
+	@grep -oP 'https://[^\s)>]+' README.md | xargs -I{} -P5 sh -c 'code=$$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 5 "{}"); printf "%s  %s\n" "$$code" "{}"; case "$$code" in 2*) exit 0;; *) exit 1;; esac'
+	@echo "Checking documentation links..."
 	./hack/check-links.sh
 
 .PHONY: fix-links
