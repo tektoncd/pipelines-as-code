@@ -115,5 +115,11 @@ func getURLPathData(urlInfo string) ([]string, error) {
 	if err != nil {
 		return []string{}, err
 	}
-	return strings.Split(urlData.Path, "/"), nil
+
+	split := strings.Split(urlData.Path, "/")
+	if len(split) != 3 {
+		return []string{}, fmt.Errorf("github repository URL must follow https://github.com/org/repo format without subgroups (found %d path segments, expected 2): %s", len(split)-1, urlInfo)
+	}
+
+	return split, nil
 }

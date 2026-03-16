@@ -356,21 +356,16 @@ body {
   color: #9ca3af;
 }
 
-:is(html[class~="dark"]) .pac-footer-right {
-  color: #6b7280;
-}
-
-.pac-powered-by {
+.pac-tekton-org {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: inherit;
   text-decoration: none;
-  color: inherit;
 }
 
-.pac-powered-by:hover {
+.pac-tekton-org:hover {
   text-decoration: underline;
-}
-
-.pac-copyright {
-  color: inherit;
 }
 
 /* ── Version picker ─────────────────────────────────────────── */
@@ -724,10 +719,17 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   color: white;
-  background: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+  background: hsl(
+    var(--primary-hue) var(--primary-saturation) var(--primary-lightness)
+  );
   border-radius: 9999px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.08);
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.15),
+    0 3px 6px rgba(0, 0, 0, 0.08);
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   text-decoration: none;
   letter-spacing: 0.04em;
 }
@@ -735,25 +737,33 @@ body {
 .pac-cta-button:hover {
   background: hsl(
     var(--primary-hue) var(--primary-saturation)
-    calc(var(--primary-lightness) - 6%)
+      calc(var(--primary-lightness) - 6%)
   );
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.2),
+    0 4px 10px rgba(0, 0, 0, 0.1);
   transform: translateY(-2px);
   color: white;
   text-decoration: none;
 }
 
 :is(html[class~="dark"]) .pac-cta-button {
-  background: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.25);
+  background: hsl(
+    var(--primary-hue) var(--primary-saturation) var(--primary-lightness)
+  );
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.4),
+    0 3px 6px rgba(0, 0, 0, 0.25);
 }
 
 :is(html[class~="dark"]) .pac-cta-button:hover {
   background: hsl(
     var(--primary-hue) var(--primary-saturation)
-    calc(var(--primary-lightness) + 6%)
+      calc(var(--primary-lightness) + 6%)
   );
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 4px 10px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.5),
+    0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 /* ── SVG dark mode inversion ──────────────────────────────────── */
@@ -1023,7 +1033,9 @@ body {
 }
 
 .pac-mobile-toc-item a:hover {
-  color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+  color: hsl(
+    var(--primary-hue) var(--primary-saturation) var(--primary-lightness)
+  );
 }
 
 :is(html[class~="dark"]) .pac-mobile-toc-item a {
@@ -1031,5 +1043,7 @@ body {
 }
 
 :is(html[class~="dark"]) .pac-mobile-toc-item a:hover {
-  color: hsl(var(--primary-hue) var(--primary-saturation) var(--primary-lightness));
+  color: hsl(
+    var(--primary-hue) var(--primary-saturation) var(--primary-lightness)
+  );
 }

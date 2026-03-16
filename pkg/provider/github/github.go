@@ -661,6 +661,12 @@ func (v *Provider) CreateToken(ctx context.Context, repository []string, event *
 		}
 
 		split := strings.Split(r, "/")
+		// Validate the URLs do not include additional path segments (like https://github.com/org/repo/extra).
+		// This validation is not required for glob as a pattern like "org/*/*" would not be matched.
+		if len(split) > 2 {
+			return "", fmt.Errorf("github repository URL must follow org/repo format without subgroups (found %d path segments, expected 2): %s", len(split), r)
+		}
+
 		infoData, _, err := wrapAPI(v, "get_repository", func() (*github.Repository, *github.Response, error) {
 			return v.Client().Repositories.Get(ctx, split[0], split[1])
 		})

@@ -74,7 +74,7 @@ release:
 
     The documentation for this release is available here :
 
-    https://release-{{ replace .Tag "." "-" }}.pipelines-as-code.pages.dev
+    https://docs.pipelinesascode.com/{{ .Tag }}
 
 homebrew_casks:
   - name: tektoncd-pac
