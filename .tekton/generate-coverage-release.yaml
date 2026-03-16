@@ -8,7 +8,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "2"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch == "main" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-coverage-release.yaml".pathChanged())
+      event == "push" && target_branch == "distributed-tracing" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-coverage-release.yaml".pathChanged())
 spec:
   params:
     - name: repo_url
