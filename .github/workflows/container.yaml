@@ -1,3 +1,4 @@
+# test: verify ghcr publish permissions for tektoncd org
 name: Create and publish a Docker image to ghcr on main and nightly with ko
 
 on:
