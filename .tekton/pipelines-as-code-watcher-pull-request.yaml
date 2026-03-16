@@ -24,7 +24,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rekonflux/pipelines-as-code-watcher:on-pr-{{revision}}
+    value: quay.io/rekonflux/trace-demo/pipelines-as-code-watcher:on-pr-{{revision}}
   - name: image-expires-after
     value: 5d
   - name: dockerfile

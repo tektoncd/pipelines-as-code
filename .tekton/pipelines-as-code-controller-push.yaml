@@ -23,7 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/rekonflux/pipelines-as-code-controller:{{revision}}
+    value: quay.io/rekonflux/trace-demo/pipelines-as-code-controller:{{revision}}
   - name: dockerfile
     value: Containerfile
   pipelineSpec:
