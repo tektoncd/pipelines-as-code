@@ -170,6 +170,10 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	return nil
 }
 
+func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
+	return nil, nil
+}
+
 func (v *Provider) concatAllYamlFiles(ctx context.Context, objects []string, sha string, runevent *info.Event) (string, error) {
 	var allTemplates string
 	for _, value := range objects {

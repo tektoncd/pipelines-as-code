@@ -34,6 +34,7 @@ type TestProviderImp struct {
 	FailGetCommitInfo      bool
 	CommitInfoErrorMsg     string
 	pacInfo                *info.PacOpts
+	CommitStatuses         []provider.CommitStatusInfo
 }
 
 func (v *TestProviderImp) SetPacInfo(pacInfo *info.PacOpts) {
@@ -141,4 +142,8 @@ func (v *TestProviderImp) CreateToken(_ context.Context, _ []string, _ *info.Eve
 
 func (v *TestProviderImp) GetTemplate(commentType provider.CommentType) string {
 	return provider.GetHTMLTemplate(commentType)
+}
+
+func (v *TestProviderImp) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
+	return v.CommitStatuses, nil
 }

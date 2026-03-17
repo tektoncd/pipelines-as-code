@@ -20,13 +20,13 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 
 	"github.com/gobwas/glob"
 	"github.com/google/cel-go/common/types"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"knative.dev/pkg/apis"
 )
 
 const (
@@ -424,7 +424,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 		if event.EventType == opscomments.RetestAllCommentEventType.String() ||
 			event.EventType == opscomments.OkToTestCommentEventType.String() {
 			logger.Debugf("MatchPipelinerunByAnnotation: filtering successful templates for event_type=%s", event.EventType)
-			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, matchedPRs)
+			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, vcx, matchedPRs)
 			if len(filtered) == 0 {
 				return nil, ErrNoFailedPipelineToRetest
 			}
@@ -438,7 +438,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 
 // filterSuccessfulTemplates filters out templates that already have successful PipelineRuns
 // when executing /ok-to-test or /retest gitops commands, implementing per-template checking.
-func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, cs *params.Run, event *info.Event, repo *apipac.Repository, matchedPRs []Match) []Match {
+func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, cs *params.Run, event *info.Event, repo *apipac.Repository, vcx provider.Interface, matchedPRs []Match) []Match {
 	if event.SHA == "" {
 		return matchedPRs
 	}
@@ -470,11 +470,25 @@ func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, c
 		}
 
 		// Check if this PipelineRun succeeded
-		if pr.Status.GetCondition(apis.ConditionSucceeded).IsTrue() {
+		if formatting.PipelineRunStatus(pr) == status.ConclusionSuccess {
 			// Keep the most recent successful run for each template
 			if existing, exists := successfulTemplates[originalPRName]; !exists ||
 				pr.CreationTimestamp.After(existing.CreationTimestamp.Time) {
 				successfulTemplates[originalPRName] = pr
+			}
+		}
+	}
+
+	// Also check provider commit statuses (covers pruned PipelineRuns)
+	commitStatuses, err := vcx.GetCommitStatuses(ctx, event)
+	if err != nil {
+		logger.Warnf("failed to get commit statuses from provider for SHA %s: %v", event.SHA, err)
+	} else if len(commitStatuses) > 0 {
+		appName := cs.Info.GetPacOpts().ApplicationName
+		for _, cs := range commitStatuses {
+			originalName := parseOriginalPRName(cs.Name, appName)
+			if originalName != "" && isSuccessStatus(cs.Status) {
+				successfulTemplates[originalName] = &tektonv1.PipelineRun{} // placeholder
 			}
 		}
 	}
@@ -495,6 +509,26 @@ func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, c
 
 	// Return the filtered list (which may be empty if all templates were skipped)
 	return filteredPRs
+}
+
+// parseOriginalPRName extracts the original PipelineRun name from a commit status name.
+// The commit status name format is "ApplicationName / OriginalPRName".
+func parseOriginalPRName(checkName, appName string) string {
+	prefix := appName + " / "
+	if strings.HasPrefix(checkName, prefix) {
+		return strings.TrimPrefix(checkName, prefix)
+	}
+	return ""
+}
+
+// isSuccessStatus returns true if the status string represents a successful state
+// across different git providers.
+func isSuccessStatus(status string) bool {
+	switch strings.ToLower(status) {
+	case "success", "successful", "completed":
+		return true
+	}
+	return false
 }
 
 func buildAvailableMatchingAnnotationErr(event *info.Event, pruns []*tektonv1.PipelineRun) string {

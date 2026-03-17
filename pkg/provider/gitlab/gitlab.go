@@ -438,6 +438,24 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	return nil
 }
 
+func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.gitlabClient == nil {
+		return nil, fmt.Errorf("%s", noClientErrStr)
+	}
+	statuses, _, err := v.Client().Commits.GetCommitStatuses(event.SourceProjectID, event.SHA, nil)
+	if err != nil {
+		return nil, err
+	}
+	var result []provider.CommitStatusInfo
+	for _, s := range statuses {
+		result = append(result, provider.CommitStatusInfo{
+			Name:   s.Name,
+			Status: s.Status,
+		})
+	}
+	return result, nil
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	if v.gitlabClient == nil {
 		return "", fmt.Errorf("no gitlab client has been initialized, " +
