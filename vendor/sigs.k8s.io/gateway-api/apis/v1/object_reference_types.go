@@ -27,12 +27,15 @@ package v1
 type LocalObjectReference struct {
 	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
 	// When unspecified or empty string, core API group is inferred.
+	// +required
 	Group Group `json:"group"`
 
 	// Kind is kind of the referent. For example "HTTPRoute" or "Service".
+	// +required
 	Kind Kind `json:"kind"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 }
 
@@ -60,6 +63,7 @@ type SecretObjectReference struct {
 	Kind *Kind `json:"kind"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 
 	// Namespace is the namespace of the referenced object. When unspecified, the local
@@ -121,6 +125,7 @@ type BackendObjectReference struct {
 	Kind *Kind `json:"kind,omitempty"`
 
 	// Name is the name of the referent.
+	// +required
 	Name ObjectName `json:"name"`
 
 	// Namespace is the namespace of the backend. When unspecified, the local
@@ -143,5 +148,43 @@ type BackendObjectReference struct {
 	// resource or this field.
 	//
 	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port *PortNumber `json:"port,omitempty"`
+}
+
+// ObjectReference identifies an API object including its namespace.
+//
+// The API object must be valid in the cluster; the Group and Kind must
+// be registered in the cluster for this reference to be valid.
+//
+// References to objects with invalid Group and Kind are not valid, and must
+// be rejected by the implementation, with appropriate Conditions set
+// on the containing object.
+type ObjectReference struct {
+	// Group is the group of the referent. For example, "gateway.networking.k8s.io".
+	// When set to the empty string, core API group is inferred.
+	// +required
+	Group Group `json:"group"`
+
+	// Kind is kind of the referent. For example "ConfigMap" or "Service".
+	// +required
+	Kind Kind `json:"kind"`
+
+	// Name is the name of the referent.
+	// +required
+	Name ObjectName `json:"name"`
+
+	// Namespace is the namespace of the referenced object. When unspecified, the local
+	// namespace is inferred.
+	//
+	// Note that when a namespace different than the local namespace is specified,
+	// a ReferenceGrant object is required in the referent namespace to allow that
+	// namespace's owner to accept the reference. See the ReferenceGrant
+	// documentation for details.
+	//
+	// Support: Core
+	//
+	// +optional
+	Namespace *Namespace `json:"namespace,omitempty"`
 }

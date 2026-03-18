@@ -20,7 +20,7 @@ func TestAnalyzer_Analyze(t *testing.T) {
 	logger, _ := logger.GetLogger()
 
 	// Create fake Kubernetes client
-	fakeClient := fake.NewSimpleClientset()
+	fakeClient := fake.NewClientset()
 
 	run := &params.Run{
 		Clients: paramclients.Clients{

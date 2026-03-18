@@ -77,7 +77,7 @@ func TestGetInstallLocation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			info.InstallNamespaces = tt.installNamespaces
-			kubeClient := fake.NewSimpleClientset(tt.deployments...)
+			kubeClient := fake.NewClientset(tt.deployments...)
 
 			run := &Run{
 				Clients: clients.Clients{
