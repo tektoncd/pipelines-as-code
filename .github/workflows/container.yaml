@@ -3,13 +3,23 @@ name: Create and publish a Docker image to ghcr on main and nightly with ko
 on:
   push:
     paths:
-      - "**.go"
-      - "**.yaml"
+      - "cmd/**"
+      - "pkg/**"
+      - "vendor/**"
+      - "go.mod"
+      - "go.sum"
+      - ".ko.yaml"
+      - ".github/workflows/container.yaml"
   # For testing when pushing to the main repo directly on pr
   # pull_request:
   #   paths:
-  #     - "**.go"
-  #     - "**.yaml"
+  #     - "cmd/**"
+  #     - "pkg/**"
+  #     - "vendor/**"
+  #     - "go.mod"
+  #     - "go.sum"
+  #     - ".ko.yaml"
+  #     - ".github/workflows/container.yaml"
 env:
   PLATFORMS: linux/amd64,linux/arm64,linux/ppc64le
 
