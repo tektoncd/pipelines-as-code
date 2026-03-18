@@ -112,7 +112,7 @@ func applyIncomingParams(req *http.Request, payloadBody []byte, params []string)
 // detectIncoming checks if the request is for an "incoming" webhook request.
 // If the request is for an "incoming" webhook request the request is parsed and matched to the expected
 // repository.
-func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloadBody []byte) (bool, *v1alpha1.Repository, error) {
+func (l *listener) detectIncoming(ctx context.Context, event *info.Event, req *http.Request, payloadBody []byte) (bool, *v1alpha1.Repository, error) {
 	if req.URL.Path != "/incoming" {
 		return false, nil, nil
 	}
@@ -182,45 +182,45 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 		if err != nil {
 			return false, nil, err
 		}
-		l.event.Provider.URL = enterpriseURL
-		l.event.Provider.Token = token
-		l.event.InstallationID = installationID
+		event.Provider.URL = enterpriseURL
+		event.Provider.Token = token
+		event.InstallationID = installationID
 		// Github app is not installed for provided repository url
-		if l.event.InstallationID == 0 {
+		if event.InstallationID == 0 {
 			return false, nil, fmt.Errorf("GithubApp is not installed for the provided repository url %s ", repo.Spec.URL)
 		}
 	}
 
 	// make sure accepted is json
 	if string(payloadBody) != "" {
-		if l.event.Event, err = applyIncomingParams(req, payloadBody, hook.Params); err != nil {
+		if event.Event, err = applyIncomingParams(req, payloadBody, hook.Params); err != nil {
 			return false, nil, err
 		}
 	}
 
 	// TODO: more than i think about it and more i think triggertarget should be
 	// eventType and vice versa, but keeping as is for now.
-	l.event.EventType = "incoming"
-	l.event.TriggerTarget = "push"
-	l.event.TargetPipelineRun = payload.PipelineRun
-	l.event.HeadBranch = payload.Branch
-	l.event.BaseBranch = payload.Branch
-	l.event.Request.Header = req.Header
-	l.event.Request.Payload = payloadBody
-	l.event.URL = repo.Spec.URL
-	l.event.Sender = "incoming"
+	event.EventType = "incoming"
+	event.TriggerTarget = "push"
+	event.TargetPipelineRun = payload.PipelineRun
+	event.HeadBranch = payload.Branch
+	event.BaseBranch = payload.Branch
+	event.Request.Header = req.Header
+	event.Request.Payload = payloadBody
+	event.URL = repo.Spec.URL
+	event.Sender = "incoming"
 
 	return true, repo, err
 }
 
-func (l *listener) processIncoming(targetRepo *v1alpha1.Repository) (provider.Interface, *zap.SugaredLogger, error) {
+func (l *listener) processIncoming(event *info.Event, targetRepo *v1alpha1.Repository) (provider.Interface, *zap.SugaredLogger, error) {
 	// can a git ssh URL be a Repo URL? I don't think this will even ever work
 	org, repo, err := formatting.GetRepoOwnerSplitted(targetRepo.Spec.URL)
 	if err != nil {
 		return nil, nil, err
 	}
-	l.event.Organization = org
-	l.event.Repository = repo
+	event.Organization = org
+	event.Repository = repo
 
 	var provider provider.Interface
 	if targetRepo.Spec.GitProvider == nil || targetRepo.Spec.GitProvider.Type == "" {

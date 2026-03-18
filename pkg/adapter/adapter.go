@@ -53,7 +53,6 @@ type listener struct {
 	run    *params.Run
 	kint   kubeinteraction.Interface
 	logger *zap.SugaredLogger
-	event  *info.Event
 }
 
 type Response struct {
@@ -131,9 +130,9 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		var event map[string]any
+		var eventBody map[string]any
 		if string(payload) != "" {
-			if err := json.Unmarshal(payload, &event); err != nil {
+			if err := json.Unmarshal(payload, &eventBody); err != nil {
 				l.logger.Errorf("Invalid event body format format: %s", err)
 				response.WriteHeader(http.StatusBadRequest)
 				return
@@ -143,7 +142,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		var gitProvider provider.Interface
 		var logger *zap.SugaredLogger
 
-		l.event = info.NewEvent()
+		event := info.NewEvent()
 		pacInfo := l.run.Info.GetPacOpts()
 
 		globalRepo, err := l.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(l.run.Info.Kube.Namespace).Get(
@@ -170,7 +169,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		isIncoming, targettedRepo, err := l.detectIncoming(ctx, request, payload)
+		isIncoming, targettedRepo, err := l.detectIncoming(ctx, event, request, payload)
 		if err != nil {
 			if errors.Is(err, errMissingFields) {
 				l.writeResponse(response, http.StatusBadRequest, err.Error())
@@ -180,7 +179,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		}
 
 		if isIncoming {
-			gitProvider, logger, err = l.processIncoming(targettedRepo)
+			gitProvider, logger, err = l.processIncoming(event, targettedRepo)
 		} else {
 			gitProvider, logger, err = l.detectProvider(request, string(payload))
 		}
@@ -196,7 +195,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			run:        l.run,
 			vcx:        gitProvider,
 			kint:       l.kint,
-			event:      l.event,
+			event:      event,
 			logger:     logger,
 			payload:    payload,
 			pacInfo:    &pacInfo,
