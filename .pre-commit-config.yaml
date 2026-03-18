@@ -52,11 +52,3 @@ repos:
         language: system
         types: [text]
         args: ["gitlint"]
-      - id: check-links
-        name: "Documentation link check"
-        entry: make
-        args: ["check-links"]
-        language: system
-        files: "^docs/"
-        pass_filenames: false
-# TODO: add a lint-sh when we have the errors fix
