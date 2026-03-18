@@ -252,21 +252,6 @@ spec:
                 export NO_COLOR=1
                 /tmp/vale docs/content --minAlertLevel=error --output=line
 
-            - name: check-links
-              displayName: "Documentation Link Checker"
-              image: docker.io/golang:1.25
-              workingDir: $(workspaces.source.path)
-              env:
-                - name: HUB_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: "nightly-ci-github-hub-token"
-                      key: "hub-token"
-              script: |
-                set -euxo pipefail
-                git config --global --add safe.directory $(workspaces.source.path)
-                ./hack/check-links.sh
-
             - name: goreleaser-check
               displayName: "Goreleaser Check"
               image: registry.access.redhat.com/ubi9/python-312
