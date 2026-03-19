@@ -293,6 +293,36 @@ func (v *Provider) isCommitPartOfPullRequest(sha, org, repo string, prs []*githu
 	return false, 0
 }
 
+func selectSingleOpenPullRequest(prs []*github.PullRequest) (*github.PullRequest, error) {
+	var found *github.PullRequest
+	count := 0
+	for _, pr := range prs {
+		if pr.GetState() == "open" {
+			count++
+			if count == 1 {
+				found = pr
+			}
+		}
+	}
+	switch count {
+	case 0:
+		return nil, nil
+	case 1:
+		return found, nil
+	default:
+		return nil, fmt.Errorf("found %d open pull requests associated with the commit", count)
+	}
+}
+
+func (v *Provider) resolveReRequestPullRequest(ctx context.Context, runevent *info.Event) (*github.PullRequest, error) {
+	prs, err := v.getPullRequestsWithCommit(ctx, runevent.SHA, runevent.Organization, runevent.Repository, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return selectSingleOpenPullRequest(prs)
+}
+
 func (v *Provider) processEvent(ctx context.Context, event *info.Event, eventInt any) (*info.Event, error) {
 	var processedEvent *info.Event
 	var err error
@@ -473,6 +503,22 @@ func (v *Provider) handleReRequestEvent(ctx context.Context, event *github.Check
 	runevent.HeadURL = event.GetCheckRun().GetCheckSuite().GetRepository().GetHTMLURL()
 	// If we don't have a pull_request in this it probably mean a push
 	if len(event.GetCheckRun().GetCheckSuite().PullRequests) == 0 {
+		// If head_branch is null, try to find a PR by SHA before assuming push
+		if runevent.HeadBranch == "" && runevent.SHA != "" {
+			pr, err := v.resolveReRequestPullRequest(ctx, runevent)
+			if err != nil {
+				return nil, fmt.Errorf("cannot determine pull request for check_run rerequest and SHA %s: %w", runevent.SHA, err)
+			}
+			if pr != nil {
+				runevent.PullRequestNumber = pr.GetNumber()
+				runevent.TriggerTarget = triggertype.PullRequest
+				v.Logger.Infof("Recheck of PR %s/%s#%d has been requested (resolved from SHA)", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
+				return v.populateRunEventFromPullRequest(runevent, pr), nil
+			}
+		}
+		if runevent.HeadBranch == "" {
+			return nil, fmt.Errorf("cannot determine branch for check_run rerequest: head_branch is null and no associated PR found for SHA %s", runevent.SHA)
+		}
 		runevent.BaseBranch = runevent.HeadBranch
 		runevent.BaseURL = runevent.HeadURL
 		runevent.EventType = "push"
@@ -503,6 +549,22 @@ func (v *Provider) handleCheckSuites(ctx context.Context, event *github.CheckSui
 	// If we don't have a pull_request in this it probably mean a push
 	// we are not able to know which
 	if len(event.GetCheckSuite().PullRequests) == 0 {
+		// If head_branch is null, try to find a PR by SHA before assuming push
+		if runevent.HeadBranch == "" && runevent.SHA != "" {
+			pr, err := v.resolveReRequestPullRequest(ctx, runevent)
+			if err != nil {
+				return nil, fmt.Errorf("cannot determine pull request for check_suite rerequest and SHA %s: %w", runevent.SHA, err)
+			}
+			if pr != nil {
+				runevent.PullRequestNumber = pr.GetNumber()
+				runevent.TriggerTarget = triggertype.PullRequest
+				v.Logger.Infof("Rerun of all checks on PR %s/%s#%d has been requested (resolved from SHA)", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
+				return v.populateRunEventFromPullRequest(runevent, pr), nil
+			}
+		}
+		if runevent.HeadBranch == "" {
+			return nil, fmt.Errorf("cannot determine branch for check_suite rerequest: head_branch is null and no associated PR found for SHA %s", runevent.SHA)
+		}
 		runevent.BaseBranch = runevent.HeadBranch
 		runevent.BaseURL = runevent.HeadURL
 		runevent.EventType = "push"
@@ -512,7 +574,6 @@ func (v *Provider) handleCheckSuites(ctx context.Context, event *github.CheckSui
 		runevent.Sender = event.GetSender().GetLogin()
 		v.userType = event.GetSender().GetType()
 		return runevent, nil
-		// return nil, fmt.Errorf("check suite event is not supported for push events")
 	}
 	runevent.PullRequestNumber = event.GetCheckSuite().PullRequests[0].GetNumber()
 	runevent.TriggerTarget = triggertype.PullRequest

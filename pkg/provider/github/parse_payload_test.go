@@ -74,23 +74,52 @@ var samplePRevent = github.PullRequestEvent{
 }
 
 var samplePR = github.PullRequest{
-	Number: github.Ptr(54321),
+	Number:  github.Ptr(54321),
+	State:   github.Ptr("open"),
+	HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/54321"),
 	Head: &github.PullRequestBranch{
-		SHA:  github.Ptr("samplePRsha"),
-		Repo: sampleRepo,
+		SHA: github.Ptr("samplePRsha"),
+		Ref: github.Ptr("feature-branch"),
+		Repo: &github.Repository{
+			Owner: &github.User{
+				Login: github.Ptr("owner"),
+			},
+			Name:    github.Ptr("reponame"),
+			HTMLURL: github.Ptr("https://github.com/owner/reponame"),
+		},
 	},
 	Base: &github.PullRequestBranch{
+		Ref:  github.Ptr("main"),
 		SHA:  github.Ptr("samplePRsha"),
 		Repo: sampleRepo,
 	},
+	User: &github.User{
+		Login: github.Ptr("contributor"),
+	},
+	Title: github.Ptr("my first PR"),
 }
 
 var samplePRAnother = github.PullRequest{
-	Number: github.Ptr(54321),
+	Number:  github.Ptr(54321),
+	State:   github.Ptr("open"),
+	HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/54321"),
 	Head: &github.PullRequestBranch{
-		SHA:  github.Ptr("samplePRshanew"),
+		SHA: github.Ptr("samplePRshanew"),
+		Ref: github.Ptr("feature-branch"),
+		Repo: &github.Repository{
+			Owner: &github.User{
+				Login: github.Ptr("owner"),
+			},
+			Name:    github.Ptr("reponame"),
+			HTMLURL: github.Ptr("https://github.com/owner/reponame"),
+		},
+	},
+	Base: &github.PullRequestBranch{
+		Ref:  github.Ptr("main"),
 		Repo: sampleRepo,
 	},
+	User:  &github.User{Login: github.Ptr("contributor")},
+	Title: github.Ptr("my first PR"),
 }
 
 func TestGetPullRequestsWithCommit(t *testing.T) {
@@ -588,11 +617,132 @@ func TestParsePayLoad(t *testing.T) {
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("headSHACheckSuite"),
+						HeadBranch: github.Ptr("main"),
+						HeadSHA:    github.Ptr("headSHACheckSuite"),
 					},
 				},
 			},
 			shaRet: "headSHACheckSuite",
+		},
+		{
+			name:          "good/rerequest check_run null head_branch resolves PR from SHA",
+			eventType:     "check_run",
+			githubClient:  true,
+			triggerTarget: string(triggertype.PullRequest),
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("samplePRsha"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/samplePRsha/pulls": []*github.PullRequest{&samplePR},
+			},
+			shaRet:                  "samplePRsha",
+			wantedPullRequestNumber: 54321,
+		},
+		{
+			name:          "good/rerequest check_suite null head_branch resolves PR from SHA",
+			eventType:     "check_suite",
+			githubClient:  true,
+			triggerTarget: string(triggertype.PullRequest),
+			payloadEventStruct: github.CheckSuiteEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckSuite: &github.CheckSuite{
+					HeadSHA: github.Ptr("samplePRsha"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/samplePRsha/pulls": []*github.PullRequest{&samplePR},
+			},
+			shaRet:                  "samplePRsha",
+			wantedPullRequestNumber: 54321,
+		},
+		{
+			name:          "bad/rerequest check_run null head_branch no PR found",
+			eventType:     "check_run",
+			githubClient:  true,
+			wantErrString: "cannot determine branch for check_run rerequest",
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("orphanSHA"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/orphanSHA/pulls": []*github.PullRequest{},
+			},
+		},
+		{
+			name:          "bad/rerequest check_suite null head_branch no PR found",
+			eventType:     "check_suite",
+			githubClient:  true,
+			wantErrString: "cannot determine branch for check_suite rerequest",
+			payloadEventStruct: github.CheckSuiteEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckSuite: &github.CheckSuite{
+					HeadSHA: github.Ptr("orphanSHA"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/orphanSHA/pulls": []*github.PullRequest{},
+			},
+		},
+		{
+			name:          "bad/rerequest check_run null head_branch only closed PRs found",
+			eventType:     "check_run",
+			githubClient:  true,
+			wantErrString: "cannot determine branch for check_run rerequest",
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("closedOnlySHA"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/closedOnlySHA/pulls": []*github.PullRequest{
+					{
+						Number: github.Ptr(111),
+						State:  github.Ptr("closed"),
+					},
+				},
+			},
+		},
+		{
+			name:          "bad/rerequest check_suite null head_branch multiple open PRs found",
+			eventType:     "check_suite",
+			githubClient:  true,
+			wantErrString: "found 2 open pull requests associated with the commit",
+			payloadEventStruct: github.CheckSuiteEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckSuite: &github.CheckSuite{
+					HeadSHA: github.Ptr("ambiguousSHA"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/ambiguousSHA/pulls": []*github.PullRequest{
+					{
+						Number: github.Ptr(101),
+						State:  github.Ptr("open"),
+					},
+					{
+						Number: github.Ptr(202),
+						State:  github.Ptr("open"),
+					},
+				},
+			},
 		},
 		{
 			name:               "bad/issue_comment_not_from_created",

@@ -561,6 +561,10 @@ func (v *Provider) getPullRequest(ctx context.Context, runevent *info.Event) (*i
 	}
 	v.cachedPullRequest = pr
 
+	return v.populateRunEventFromPullRequest(runevent, pr), nil
+}
+
+func (v *Provider) populateRunEventFromPullRequest(runevent *info.Event, pr *github.PullRequest) *info.Event {
 	// Make sure to use the Base for Default BaseBranch or there would be a potential hijack
 	runevent.DefaultBranch = pr.GetBase().GetRepo().GetDefaultBranch()
 	runevent.URL = pr.GetBase().GetRepo().GetHTMLURL()
@@ -587,7 +591,7 @@ func (v *Provider) getPullRequest(ctx context.Context, runevent *info.Event) (*i
 	v.RepositoryIDs = []int64{
 		pr.GetBase().GetRepo().GetID(),
 	}
-	return runevent, nil
+	return runevent
 }
 
 // GetFiles gets and caches the list of files changed by a given event.
