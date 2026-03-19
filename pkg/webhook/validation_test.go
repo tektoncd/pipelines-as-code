@@ -128,6 +128,7 @@ func TestReconciler_Admit(t *testing.T) {
 				Name:             "test-run",
 				InstallNamespace: "namespace",
 				URL:              "https://ghe.pipelinesascode.com/owner/repo/subgroup",
+				GitProviderType:  "github",
 			}),
 			allowed: false,
 			result:  "github repository URL must follow https://github.com/org/repo format without subgroups (found 3 path segments, expected 2): https://ghe.pipelinesascode.com/owner/repo/subgroup",
