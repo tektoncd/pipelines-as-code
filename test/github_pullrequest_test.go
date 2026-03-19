@@ -94,7 +94,7 @@ func TestGithubGHEPullRequestOnLabel(t *testing.T) {
 	defer g.TearDown(ctx, t)
 
 	// wait a bit that GitHub processed or we will get double events
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	g.Cnx.Clients.Log.Infof("Creating a label bug on PullRequest")
 	_, _, err := g.Provider.Client().Issues.AddLabelsToIssue(ctx,
@@ -131,7 +131,7 @@ func TestGithubGHEPullRequestOnLabel(t *testing.T) {
 			t.Errorf("Check run not created after 10 tries")
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	assert.Equal(t, len(res.CheckRuns), 1)
 	expected := fmt.Sprintf("%s / %s", settings.PACApplicationNameDefaultValue, "pipelinerun-on-label-")
@@ -231,7 +231,7 @@ func TestGithubGHEPullRequestInvalidSpecValues(t *testing.T) {
 			t.Errorf("Check run not created after 10 tries")
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 		counter++
 	}
 
@@ -290,7 +290,7 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 	}
 	err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	g.Cnx.Clients.Log.Infof("Creating /test on PullRequest to create a second run")
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
@@ -335,7 +335,7 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 			break
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 		i++
 	}
 	assert.Assert(t, foundCancelled, "No Pipelines has been found cancedl in NS %s", g.TargetNamespace)
@@ -370,7 +370,7 @@ func TestGithubGHECancelInProgressPRClosed(t *testing.T) {
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Sleeping for 10 seconds to let the pipelinerun to be cancelled")
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	g.Cnx.Clients.Log.Infof("Checking that the pipelinerun has been cancelled")
 
@@ -438,7 +438,7 @@ func TestGithubGHEPullRequestCELLabelEvent(t *testing.T) {
 	assert.Equal(t, len(prs.Items), 0, "No PipelineRun should be created on PR creation")
 
 	// wait a bit that GitHub processed or we will get double events
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	g.Cnx.Clients.Log.Infof("Creating a label 'bug' on PullRequest")
 	_, _, err = g.Provider.Client().Issues.AddLabelsToIssue(ctx,
@@ -475,7 +475,7 @@ func TestGithubGHEPullRequestCELLabelEvent(t *testing.T) {
 			t.Errorf("Check run not created after 10 tries")
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 		counter++
 	}
 	assert.Equal(t, len(res.CheckRuns), 1)

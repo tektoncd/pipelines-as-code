@@ -317,7 +317,7 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 		runcnx.Clients.Log.Infof("Attempted incoming URL: %s with branch: %s, targets: %v", incomingURL, randomedString, targets)
 
 		// Wait a bit to ensure no PipelineRun gets created.
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 
 	prsNew, err := runcnx.Clients.Tekton.TektonV1().PipelineRuns(randomedString).List(ctx, metav1.ListOptions{

@@ -61,7 +61,7 @@ func TestGithubGHEMaxKeepRuns(t *testing.T) {
 			}
 			break
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 		if count > 10 {
 			t.Fatalf("PipelineRun cleanups has not been done, we found %d in %s", len(prs.Items), g.TargetNamespace)
 		}

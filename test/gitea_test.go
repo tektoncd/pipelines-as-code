@@ -373,7 +373,7 @@ func TestGiteaConcurrencyExclusivenessMultipleRuns(t *testing.T) {
 			topts.ParamsRun.Clients.Log.Info("Found PipelineRunPending in PipelineRuns")
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	if !gotPipelineRunPending {
 		t.Fatalf("Did not find PipelineRunPending in PipelineRuns")
@@ -441,7 +441,7 @@ func TestGiteaConfigMaxKeepRun(t *testing.T) {
 	_, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
-	time.Sleep(15 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
+	time.Sleep(3 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
 
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)
@@ -516,7 +516,7 @@ func TestGiteaConfigCancelInProgress(t *testing.T) {
 	// Test that cancelling works with /retest - use specific PipelineRun name to bypass success check
 	tgitea.PostCommentOnPullRequest(t, topts, "/retest pr-cancel-in-progress")
 	topts.ParamsRun.Clients.Log.Info("Waiting 10 seconds before a new retest")
-	time.Sleep(10 * time.Second) // "Evil does not sleep. It waits." - Galadriel
+	time.Sleep(2 * time.Second) // "Evil does not sleep. It waits." - Galadriel
 	tgitea.PostCommentOnPullRequest(t, topts, "/retest pr-cancel-in-progress")
 	tgitea.WaitForStatus(t, topts, "heads/"+targetRef, "", false)
 
@@ -559,7 +559,7 @@ func TestGiteaConfigCancelInProgressAfterPRClosed(t *testing.T) {
 	assert.NilError(t, err)
 
 	topts.ParamsRun.Clients.Log.Info("Waiting 10 seconds to check things has been cancelled")
-	time.Sleep(10 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
+	time.Sleep(2 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
 
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)
@@ -590,7 +590,7 @@ func TestGiteaPush(t *testing.T) {
 	assert.Assert(t, resp.StatusCode < 400, resp)
 	assert.Assert(t, merged)
 	tgitea.WaitForStatus(t, topts, topts.PullRequest.Head.Sha, "", false)
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{
 		LabelSelector: pacapi.EventType + "=push",
 	})
@@ -1021,7 +1021,7 @@ func TestGiteaPipelineRunWithSameName(t *testing.T) {
 
 	// Wait for any webhook feedback loop to settle, then verify only 1 failure
 	// comment was posted (not duplicates from re-triggered no-op comment events).
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(
 		topts.PullRequest.Base.Repository.Owner.UserName,

@@ -60,7 +60,7 @@ func TestGiteaParamsStandardCheckForPushAndPullEvent(t *testing.T) {
 	assert.Assert(t, resp.StatusCode < 400, resp)
 	assert.Assert(t, merged)
 	tgitea.WaitForStatus(t, topts, topts.PullRequest.Head.Sha, "", false)
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// get standard parameter info for pull_request
 	_, _, sourceBranch, targetBranch = tgitea.GetStandardParams(t, topts, "pull_request")
@@ -543,7 +543,7 @@ my email is a true beauty and like groot, I AM pac`
 	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// check the repository CR now we should have two status the previous pull request and new one on push
 	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
@@ -626,7 +626,7 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	}
 	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// check the repository CR now we should have two status the previous pull request and new one on push
 	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
@@ -673,7 +673,7 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	}
 	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// check the repository CR now we should have two status the previous pull request and new one on push
 	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})

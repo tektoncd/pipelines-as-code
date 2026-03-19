@@ -305,7 +305,7 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 	g.Logger.Infof("Pull request %d has been merged", g.PRNumber)
 
 	// wait for API to reflect this PR in response
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	mergedSHA := mergeResult.GetSHA()
 

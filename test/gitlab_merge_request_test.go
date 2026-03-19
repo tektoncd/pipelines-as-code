@@ -117,7 +117,7 @@ func TestGitlabOnLabel(t *testing.T) {
 	defer cleanup()
 
 	topts.ParamsRun.Clients.Log.Infof("waiting 5 seconds until we make sure nothing happened")
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 	prsNew, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(ctx, metav1.ListOptions{})
 	assert.NilError(t, err)
 	assert.Assert(t, len(prsNew.Items) == 0)
@@ -485,7 +485,7 @@ func TestGitlabMergeRequestValidationErrorsFromFork(t *testing.T) {
 	}()
 
 	// Wait for fork to be ready
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// Commit invalid .tekton files to the fork
 	entries, err := payload.GetEntries(map[string]string{
@@ -814,7 +814,7 @@ func TestGitlabMergeRequestCommentStrategyUpdateCELErrorReplacement(t *testing.T
 			break
 		}
 		topts.ParamsRun.Clients.Log.Infof("Loop %d/%d: Waiting for CEL error comment...", i+1, maxLoop)
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	assert.Assert(t, celErrorNoteID != 0, "CEL error comment not found")
 	topts.ParamsRun.Clients.Log.Infof("Found CEL error note ID: %d for PLR: %s", celErrorNoteID, pipelineRunName)

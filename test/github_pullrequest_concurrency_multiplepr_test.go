@@ -137,7 +137,7 @@ func TestGithubGHEPullRequestConcurrencyMultiplePR(t *testing.T) {
 		}
 		runcnx.Clients.Log.Infof("number of unsuccessful PR %d out of %d, waiting 10s more, %d/%d", unsuccessful, allPipelinesRunsCnt, i, loopMax)
 		// it's high because it takes time to process on kind
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	if !finished {
 		t.Errorf("we didn't get %d pipelineruns as successful, some of them are still pending or it's abnormally slow to process the Q", allPipelinesRunsCnt)
@@ -168,7 +168,7 @@ func TestGithubGHEPullRequestConcurrencyMultiplePR(t *testing.T) {
 		}
 
 		runcnx.Clients.Log.Infof("we are still waiting for pipelineruns to be cleaned up, we have %d/%d, sleeping 10s, %d/%d", len(matchingPRs), allPipelinesRunsCnt, i, maxWaitLoopRun)
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	assert.Assert(t, success, "we didn't get %d pipelineruns as successful, some of them are still pending or it's abnormally slow to process the Q: %s", allPipelinesRunsCnt, allPipelineRunsNamesAndStatus)
 

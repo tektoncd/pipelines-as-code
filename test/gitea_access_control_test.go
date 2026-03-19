@@ -441,7 +441,7 @@ func TestGiteaPolicyAllowedOwnerFiles(t *testing.T) {
 	}
 	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
-	time.Sleep(5 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
+	time.Sleep(1 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
 
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)

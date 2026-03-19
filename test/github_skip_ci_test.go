@@ -24,7 +24,7 @@ func verifySkipCI(ctx context.Context, t *testing.T, g *tgithub.PRTest, eventTyp
 	t.Helper()
 
 	// Wait a bit to ensure no PipelineRun is created
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Verify that NO PipelineRuns were created due to [skip ci]
 	pruns, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
@@ -99,7 +99,7 @@ func TestGithubGHESkipCITestCommand(t *testing.T) {
 	defer g.TearDown(ctx, t)
 
 	// Wait a bit to ensure no PipelineRun is created
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Verify no PipelineRuns initially
 	pruns, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{

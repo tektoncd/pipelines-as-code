@@ -44,7 +44,7 @@ func TestGithubGHEWebhookCommentStrategyUpdateCELErrorReplacement(t *testing.T) 
 	g.RunPullRequest(ctx, t)
 
 	g.Cnx.Clients.Log.Infof("Waiting for CEL error comment to be created")
-	time.Sleep(15 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
@@ -107,7 +107,7 @@ func TestGithubGHEWebhookCommentStrategyUpdateCELErrorReplacement(t *testing.T) 
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
 	// Wait for comment to be updated
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 	updatedComments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
 		&github.IssueListCommentsOptions{})
@@ -171,7 +171,7 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
 	// Wait for comments to be created.
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
@@ -215,7 +215,7 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
 	// Wait for comments to be updated
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	updatedComments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
@@ -278,7 +278,7 @@ func TestGithubGHEWebhookCommentStrategyUpdateMarkerMatchingWithRegexChars(t *te
 	}
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 	// Wait for comments
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,

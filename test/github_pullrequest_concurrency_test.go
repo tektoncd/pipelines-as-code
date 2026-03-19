@@ -53,7 +53,7 @@ func TestGithubGHEPullRequestConcurrencyRestartedWhenWatcherIsUp(t *testing.T) {
 	assert.NilError(t, err)
 
 	tkubestuff.ScaleDeployment(ctx, t, runCnxS, 0, "pipelines-as-code-watcher", "pipelines-as-code")
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 	defer tkubestuff.ScaleDeployment(ctx, t, runCnxS, 1, "pipelines-as-code-watcher", "pipelines-as-code")
 	g := setupGithubConcurrency(ctx, t, maxNumberOfConcurrentPipelineRuns, numberOfPipelineRuns, label, yamlFiles)
 	defer g.TearDown(ctx, t)
@@ -68,7 +68,7 @@ func TestGithubGHEPullRequestConcurrencyRestartedWhenWatcherIsUp(t *testing.T) {
 
 		assert.Assert(t, len(prs.Items) <= numberOfPipelineRuns, "Too many PipelineRuns have been created, expected: %d, got: %d", numberOfPipelineRuns, len(prs.Items))
 		if len(prs.Items) != numberOfPipelineRuns {
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second)
 			g.Cnx.Clients.Log.Infof("Waiting for %d PipelineRuns to be created", numberOfPipelineRuns)
 			allPipelineRunsStarted = false
 			continue
@@ -203,7 +203,7 @@ func setupGithubConcurrency(ctx context.Context, t *testing.T, maxNumberOfConcur
 
 func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, numberOfPipelineRuns int, checkOrdering bool) {
 	g.Cnx.Clients.Log.Info("waiting to let controller process the event")
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	waitOpts := wait.Opts{
 		RepoName:        g.TargetNamespace,
@@ -268,7 +268,7 @@ func waitForPipelineRunsHasStarted(ctx context.Context, t *testing.T, g tgithub.
 		}
 		g.Cnx.Clients.Log.Infof("number of unsuccessful PR %d out of %d, waiting 10s more in the waiting loop: %d/%d", unsuccessful, numberOfPipelineRuns, i, maxLoop)
 		// it's high because it takes time to process on kind
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	if !finished {
 		prs, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
