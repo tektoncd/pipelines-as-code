@@ -85,7 +85,7 @@ func (r *Recorder) Count(ctx context.Context, provider, event, namespace, reposi
 
 	attribs := []attribute.KeyValue{
 		attribute.String("provider", provider),
-		attribute.String("event", event),
+		attribute.String("event-type", event),
 		attribute.String("namespace", namespace),
 		attribute.String("repository", repository),
 	}
@@ -197,7 +197,7 @@ func (r *Recorder) ReportGitProviderAPIUsage(provider, event, namespace, reposit
 
 	attribs := []attribute.KeyValue{
 		attribute.String("provider", provider),
-		attribute.String("event", event),
+		attribute.String("event-type", event),
 		attribute.String("namespace", namespace),
 		attribute.String("repository", repository),
 	}

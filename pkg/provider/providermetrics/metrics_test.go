@@ -17,6 +17,25 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+func attributesToMap[N int64 | float64](point metricdata.DataPoint[N]) map[string]string {
+	attrs := make(map[string]string, point.Attributes.Len())
+	for _, kv := range point.Attributes.ToSlice() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	return attrs
+}
+
+func assertAttributesContain[N int64 | float64](t *testing.T, point metricdata.DataPoint[N], want map[string]string) {
+	t.Helper()
+
+	attrs := attributesToMap(point)
+	for key, value := range want {
+		got, ok := attrs[key]
+		assert.Assert(t, ok)
+		assert.Equal(t, got, value)
+	}
+}
+
 func TestRecordAPIUsage(t *testing.T) {
 	type testCaseData struct {
 		desc      string
@@ -70,6 +89,7 @@ func TestRecordAPIUsage(t *testing.T) {
 			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
 			assert.Assert(t, ok)
 			assert.Equal(t, count.DataPoints[0].Value, int64(1))
+			assertAttributesContain(t, count.DataPoints[0], testCase.wantTags)
 		})
 	}
 }

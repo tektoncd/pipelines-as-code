@@ -18,6 +18,25 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
+func attributesToMap[N int64 | float64](point metricdata.DataPoint[N]) map[string]string {
+	attrs := make(map[string]string, point.Attributes.Len())
+	for _, kv := range point.Attributes.ToSlice() {
+		attrs[string(kv.Key)] = kv.Value.AsString()
+	}
+	return attrs
+}
+
+func assertAttributesContain[N int64 | float64](t *testing.T, point metricdata.DataPoint[N], want map[string]string) {
+	t.Helper()
+
+	attrs := attributesToMap(point)
+	for key, value := range want {
+		got, ok := attrs[key]
+		assert.Assert(t, ok)
+		assert.Equal(t, got, value)
+	}
+}
+
 // TestCountPipelineRun tests pipelinerun count metric.
 func TestCountPipelineRun(t *testing.T) {
 	tests := []struct {
@@ -131,6 +150,7 @@ func TestCountPipelineRun(t *testing.T) {
 				count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
 				assert.Assert(t, ok)
 				assert.Equal(t, count.DataPoints[0].Value, int64(1))
+				assertAttributesContain(t, count.DataPoints[0], tt.tags)
 			}
 		})
 	}
@@ -294,6 +314,7 @@ func TestCalculatePipelineRunDuration(t *testing.T) {
 			durationMetric, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[float64])
 			assert.Assert(t, ok)
 			assert.Equal(t, durationMetric.DataPoints[0].Value, duration.Seconds())
+			assertAttributesContain(t, durationMetric.DataPoints[0], tt.tags)
 		})
 	}
 }
