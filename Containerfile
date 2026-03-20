@@ -10,7 +10,8 @@ COPY --chown=1001:0 . .
 RUN CGO_ENABLED=0 go build -o /opt/app-root/src/binary ./cmd/${BUILD_TARGET}
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1764578379
-COPY --from=builder /opt/app-root/src/binary /usr/local/bin/pipelines-as-code
+ARG BUILD_TARGET=pipelines-as-code-controller
+COPY --from=builder /opt/app-root/src/binary /ko-app/${BUILD_TARGET}
 
 LABEL name="pipelines-as-code"
 LABEL com.redhat.component="pipelines-as-code"
@@ -20,4 +21,4 @@ LABEL io.openshift.tags="konflux"
 
 USER 65532:65532
 
-ENTRYPOINT ["/usr/local/bin/pipelines-as-code"]
+ENTRYPOINT ["/ko-app/${BUILD_TARGET}"]
