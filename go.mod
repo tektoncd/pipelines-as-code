@@ -166,8 +166,3 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 )
-
-replace (
-	knative.dev/eventing => knative.dev/eventing v0.47.2
-	knative.dev/pkg => knative.dev/pkg v0.0.0-20260120122510-4a022ed9999a
-)
