@@ -10,7 +10,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
 	evadapter "knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/pkg/client/injection/kube/client"
 	"knative.dev/pkg/injection/sharedmain"
@@ -36,17 +35,6 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to init kinit client : ", err)
 	}
-
-	// Initialize tracing
-	tracerProvider, err := tracing.New(ctx, run.Clients.Log)
-	if err != nil {
-		log.Fatal("failed to init tracing: ", err)
-	}
-	defer func() {
-		if err := tracerProvider.Shutdown(ctx); err != nil {
-			run.Clients.Log.Warnf("failed to shutdown tracer provider: %v", err)
-		}
-	}()
 
 	loggerConfiguratorOpt := evadapter.WithLoggerConfiguratorConfigMapName(logging.ConfigMapName())
 	loggerConfigurator := evadapter.NewLoggerConfiguratorFromConfigMap(PACControllerLogKey, loggerConfiguratorOpt)
