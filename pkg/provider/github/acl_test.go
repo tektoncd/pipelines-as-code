@@ -88,12 +88,11 @@ func TestCheckPolicyAllowing(t *testing.T) {
 			repo := &v1alpha1.Repository{Spec: v1alpha1.RepositorySpec{
 				Settings: &v1alpha1.Settings{},
 			}}
-			gprovider := Provider{
-				ghClient:      fakeclient,
-				repo:          repo,
-				Logger:        logger,
-				PaginedNumber: 1,
-			}
+			gprovider := New()
+			gprovider.SetGithubClient(fakeclient)
+			gprovider.repo = repo
+			gprovider.SetLogger(logger)
+			gprovider.PaginedNumber = 1
 
 			gotAllowed, gotReason := gprovider.CheckPolicyAllowing(ctx, event, tt.allowedTeams)
 			assert.Equal(t, tt.wantAllowed, gotAllowed)
@@ -325,14 +324,13 @@ func TestOkToTestComment(t *testing.T) {
 					RememberOKToTest: tt.rememberOkToTest,
 				},
 			}
-			gprovider := Provider{
-				ghClient:      fakeclient,
-				repo:          repo,
-				Logger:        logger,
-				PaginedNumber: 1,
-				Run:           &params.Run{},
-				pacInfo:       pacopts,
-			}
+			gprovider := New()
+			gprovider.SetGithubClient(fakeclient)
+			gprovider.repo = repo
+			gprovider.SetLogger(logger)
+			gprovider.PaginedNumber = 1
+			gprovider.Run = &params.Run{}
+			gprovider.SetPacInfo(pacopts)
 
 			got, err := gprovider.IsAllowed(ctx, &tt.runevent)
 			if (err != nil) != tt.wantErr {
@@ -477,14 +475,13 @@ func TestOkToTestCommentSHA(t *testing.T) {
 					RequireOkToTestSHA: tt.requireOkToTestSHA,
 				},
 			}
-			gprovider := Provider{
-				ghClient:      fakeclient,
-				repo:          repo,
-				Logger:        logger,
-				PaginedNumber: 1,
-				Run:           &params.Run{},
-				pacInfo:       pacopts,
-			}
+			gprovider := New()
+			gprovider.SetGithubClient(fakeclient)
+			gprovider.repo = repo
+			gprovider.SetLogger(logger)
+			gprovider.PaginedNumber = 1
+			gprovider.Run = &params.Run{}
+			gprovider.SetPacInfo(pacopts)
 
 			payload := fmt.Sprintf(`{"action": "created", "repository": {"name": "repo", "owner": {"login": "owner"}}, "sender": {"login": %q}, "issue": {"pull_request": {"html_url": "https://github.com/owner/repo/pull/1"}}, "comment": {"body": %q}}`,
 				tt.runevent.Sender, tt.commentBody)
@@ -553,11 +550,10 @@ func TestAclCheckAll(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 	ctx, _ := rtesting.SetupFakeContext(t)
-	gprovider := Provider{
-		ghClient:      fakeclient,
-		Logger:        logger,
-		PaginedNumber: 1,
-	}
+	gprovider := New()
+	gprovider.SetGithubClient(fakeclient)
+	gprovider.SetLogger(logger)
+	gprovider.PaginedNumber = 1
 
 	tests := []struct {
 		name     string
@@ -743,10 +739,9 @@ func TestIfPullRequestIsForSameRepoWithoutFork(t *testing.T) {
 			repo := &v1alpha1.Repository{Spec: v1alpha1.RepositorySpec{
 				Settings: &v1alpha1.Settings{},
 			}}
-			gprovider := Provider{
-				ghClient: fakeclient,
-				repo:     repo,
-			}
+			gprovider := New()
+			gprovider.SetGithubClient(fakeclient)
+			gprovider.repo = repo
 
 			got, err := gprovider.aclCheckAll(ctx, tt.event)
 			if (err != nil) != tt.wantError {

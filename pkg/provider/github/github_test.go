@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,7 +79,8 @@ func TestGetTaskURI(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
-			provider := &Provider{ghClient: fakeclient}
+			provider := New()
+			provider.SetGithubClient(fakeclient)
 			event := info.NewEvent()
 			event.HeadBranch = "main"
 			event.URL = tt.eventURL
@@ -354,11 +356,10 @@ func TestGetTektonDir(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
-			gvcs := Provider{
-				ghClient:     fakeclient,
-				providerName: "github",
-				Logger:       fakelogger,
-			}
+			gvcs := New()
+			gvcs.SetGithubClient(fakeclient)
+			gvcs.providerName = "github"
+			gvcs.SetLogger(fakelogger)
 
 			defer func() {
 				if !t.Failed() {
@@ -463,9 +464,8 @@ func TestGetFileInsideRepo(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
-			gvcs := Provider{
-				ghClient: fakeclient,
-			}
+			gvcs := New()
+			gvcs.SetGithubClient(fakeclient)
 			for s, f := range tt.rets {
 				mux.HandleFunc(s, f)
 			}
@@ -2085,4 +2085,176 @@ func TestFetchAppSlug(t *testing.T) {
 			assert.Equal(t, slug, tt.wantSlug)
 		})
 	}
+}
+
+func TestGetObject(t *testing.T) {
+	tests := []struct {
+		name            string
+		sha             string
+		blobContent     string
+		prePopulate     bool
+		returnError     bool
+		wantErr         string
+		verifyCached    bool
+		verifyNotCached bool
+		verifyAPICount  int
+	}{
+		{
+			name:         "cache miss - first call hits API and caches",
+			sha:          "abc123def456",
+			blobContent:  "test content",
+			verifyCached: true,
+		},
+		{
+			name:         "cache hit - returns cached data without API call",
+			sha:          "cached123",
+			blobContent:  "cached test content",
+			prePopulate:  true,
+			verifyCached: true,
+		},
+		{
+			name:            "error not cached - API errors are not cached",
+			sha:             "nonexistent",
+			returnError:     true,
+			wantErr:         "404",
+			verifyNotCached: true,
+		},
+		{
+			name:           "second API call uses cache",
+			sha:            "dedup123",
+			blobContent:    "dedup content",
+			verifyAPICount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			log, _ := logger.GetLogger()
+			provider := New()
+			provider.SetLogger(log)
+			event := &info.Event{
+				Organization: "test-org",
+				Repository:   "test-repo",
+			}
+
+			// Pre-populate cache
+			if tt.prePopulate {
+				provider.blobCache.mutex.Lock()
+				provider.blobs[tt.sha] = []byte(tt.blobContent)
+				provider.blobCache.mutex.Unlock()
+			}
+
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+			provider.SetGithubClient(fakeclient)
+
+			callCount := 0
+			if tt.returnError {
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/blobs/%s", event.Organization, event.Repository, tt.sha),
+					func(w http.ResponseWriter, _ *http.Request) {
+						callCount++
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprint(w, `{"message": "Not Found"}`)
+					})
+			} else {
+				encodedContent := base64.StdEncoding.EncodeToString([]byte(tt.blobContent))
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/blobs/%s", event.Organization, event.Repository, tt.sha),
+					func(w http.ResponseWriter, _ *http.Request) {
+						callCount++
+						fmt.Fprintf(w, `{"content": "%s", "encoding": "base64"}`, encodedContent)
+					})
+			}
+
+			if tt.verifyAPICount > 0 {
+				for i := 0; i < tt.verifyAPICount; i++ {
+					data, err := provider.getObject(ctx, tt.sha, event)
+					assert.NilError(t, err)
+					assert.Equal(t, string(data), tt.blobContent)
+				}
+				assert.Equal(t, callCount, 1, "cache should reduce API calls")
+			} else {
+				data, err := provider.getObject(ctx, tt.sha, event)
+				if tt.wantErr != "" {
+					assert.ErrorContains(t, err, tt.wantErr)
+				} else {
+					assert.NilError(t, err)
+					assert.Equal(t, string(data), tt.blobContent)
+				}
+			}
+
+			provider.blobCache.mutex.RLock()
+			cached, ok := provider.blobs[tt.sha]
+			provider.blobCache.mutex.RUnlock()
+
+			if tt.verifyCached {
+				assert.Assert(t, ok, "blob should be cached")
+				assert.Equal(t, string(cached), tt.blobContent)
+			}
+			if tt.verifyNotCached {
+				assert.Assert(t, !ok, "blob should not be cached on error")
+			}
+		})
+	}
+}
+
+func TestGetObject_ConcurrentAccess(t *testing.T) {
+	ctx := context.Background()
+	log, _ := logger.GetLogger()
+	provider := New()
+	provider.SetLogger(log)
+	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	provider.SetGithubClient(fakeclient)
+	event := &info.Event{
+		Organization: "test-org",
+		Repository:   "test-repo",
+	}
+
+	blobs := make(map[string]string)
+	for i := 0; i < 5; i++ {
+		sha := fmt.Sprintf("sha%d", i)
+		content := fmt.Sprintf("content %d", i)
+		blobs[sha] = content
+	}
+
+	for sha, content := range blobs {
+		encodedContent := base64.StdEncoding.EncodeToString([]byte(content))
+		mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/blobs/%s", event.Organization, event.Repository, sha),
+			func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprintf(w, `{"content": "%s", "encoding": "base64"}`, encodedContent)
+			})
+	}
+
+	var wg sync.WaitGroup
+	errors := make(chan error, 20)
+
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			sha := fmt.Sprintf("sha%d", n%5)
+			expectedContent := fmt.Sprintf("content %d", n%5)
+
+			data, err := provider.getObject(ctx, sha, event)
+			if err != nil {
+				errors <- err
+				return
+			}
+			if string(data) != expectedContent {
+				errors <- fmt.Errorf("expected %q, got %q", expectedContent, string(data))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Fatalf("concurrent test failed: %v", err)
+	}
+
+	provider.blobCache.mutex.RLock()
+	assert.Equal(t, len(provider.blobs), 5)
+	provider.blobCache.mutex.RUnlock()
 }

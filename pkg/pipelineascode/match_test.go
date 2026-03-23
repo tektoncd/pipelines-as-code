@@ -557,10 +557,9 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 			k8int := &kitesthelper.KinterfaceTest{
 				ConsoleURL: "https://console.url",
 			}
-			vcx := &ghprovider.Provider{
-				Token:  github.Ptr("None"),
-				Logger: logger,
-			}
+			vcx := ghprovider.New()
+			vcx.Token = github.Ptr("None")
+			vcx.SetLogger(logger)
 			vcx.SetGithubClient(fakeclient)
 			pacInfo := &info.PacOpts{
 				Settings: settings.Settings{

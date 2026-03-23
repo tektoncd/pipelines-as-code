@@ -60,6 +60,7 @@ type Provider struct {
 	PaginedNumber int
 	userType      string // The type of user i.e bot or not
 	skippedRun
+	blobCache
 	triggerEvent       string
 	cachedChangedFiles *changedfiles.ChangedFiles
 	commitInfo         *github.Commit
@@ -71,12 +72,21 @@ type skippedRun struct {
 	checkRunID int64
 }
 
+type blobCache struct {
+	mutex *sync.RWMutex
+	blobs map[string][]byte
+}
+
 func New() *Provider {
 	return &Provider{
 		APIURL:        github.Ptr(keys.PublicGithubAPIURL),
 		PaginedNumber: defaultPaginedNumber,
 		skippedRun: skippedRun{
 			mutex: &sync.Mutex{},
+		},
+		blobCache: blobCache{
+			mutex: &sync.RWMutex{},
+			blobs: make(map[string][]byte),
 		},
 	}
 }
@@ -607,6 +617,16 @@ func (v *Provider) fetchChangedFiles(ctx context.Context, runevent *info.Event) 
 
 // getObject Get an object from a repository.
 func (v *Provider) getObject(ctx context.Context, sha string, runevent *info.Event) ([]byte, error) {
+	v.blobCache.mutex.RLock()
+	if data, ok := v.blobs[sha]; ok {
+		v.blobCache.mutex.RUnlock()
+		if v.Logger != nil {
+			v.Logger.Debugw("blob cache hit", "sha", sha, "size_bytes", len(data))
+		}
+		return data, nil
+	}
+	v.blobCache.mutex.RUnlock()
+
 	blob, _, err := wrapAPI(v, "get_blob", func() (*github.Blob, *github.Response, error) {
 		return v.Client().Git.GetBlob(ctx, runevent.Organization, runevent.Repository, sha)
 	})
@@ -618,7 +638,16 @@ func (v *Provider) getObject(ctx context.Context, sha string, runevent *info.Eve
 	if err != nil {
 		return nil, err
 	}
-	return decoded, err
+
+	v.blobCache.mutex.Lock()
+	v.blobs[sha] = decoded
+	v.blobCache.mutex.Unlock()
+
+	if v.Logger != nil {
+		v.Logger.Debugw("blob cached", "sha", sha, "size_bytes", len(decoded))
+	}
+
+	return decoded, nil
 }
 
 // ListRepos lists all the repos for a particular token.

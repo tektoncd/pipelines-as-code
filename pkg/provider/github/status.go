@@ -101,8 +101,8 @@ func isFailedCheckrun(run *github.CheckRun) bool {
 }
 
 func (v *Provider) canIUseCheckrunID(checkrunid *int64) bool {
-	v.mutex.Lock()
-	defer v.mutex.Unlock()
+	v.skippedRun.mutex.Lock()
+	defer v.skippedRun.mutex.Unlock()
 
 	if v.checkRunID == 0 {
 		v.checkRunID = *checkrunid

@@ -662,11 +662,10 @@ func TestRun(t *testing.T) {
 					HubCatalogs:        &hubCatalogs,
 				},
 			}
-			vcx := &ghprovider.Provider{
-				Run:    cs,
-				Token:  github.Ptr("None"),
-				Logger: logger,
-			}
+			vcx := ghprovider.New()
+			vcx.Run = cs
+			vcx.Token = github.Ptr("None")
+			vcx.SetLogger(logger)
 			vcx.SetGithubClient(fakeclient)
 			vcx.SetPacInfo(pacInfo)
 			p := NewPacs(&tt.runevent, vcx, cs, pacInfo, k8int, logger, nil)
