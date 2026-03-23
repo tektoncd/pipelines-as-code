@@ -231,11 +231,13 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		// clone the request to use it further
 		localRequest := request.Clone(request.Context())
 
+		// End the webhook span synchronously so it exports before the handler returns.
+		// processEvent runs async and creates its own child spans.
+		span.End()
+
 		go func() {
-			defer span.End()
 			err := s.processEvent(tracedCtx, localRequest)
 			if err != nil {
-				span.RecordError(err)
 				logger.Errorf("an error occurred: %v", err)
 			}
 		}()
