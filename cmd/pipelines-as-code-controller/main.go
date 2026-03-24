@@ -40,7 +40,9 @@ func main() {
 	loggerConfigurator := evadapter.NewLoggerConfiguratorFromConfigMap(PACControllerLogKey, loggerConfiguratorOpt)
 	copts := []evadapter.ConfiguratorOption{
 		evadapter.WithLoggerConfigurator(loggerConfigurator),
-		evadapter.WithObservabilityConfigurator(evadapter.NewObservabilityConfiguratorFromConfigMap()),
+		evadapter.WithObservabilityConfigurator(evadapter.NewObservabilityConfiguratorFromConfigMap(
+			evadapter.WithObservabilityConfiguratorConfigMapName("pipelines-as-code-config-observability"),
+		)),
 		evadapter.WithCloudEventsStatusReporterConfigurator(evadapter.NewCloudEventsReporterConfiguratorFromConfigMap()),
 	}
 	// put logger configurator to ctx
