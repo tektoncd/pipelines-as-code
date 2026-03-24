@@ -51,19 +51,19 @@ func emitTimingSpans(pr *tektonv1.PipelineRun) {
 	tracer := otel.GetTracerProvider().Tracer(tracing.TracerName)
 	commonAttrs := buildCommonAttributes(pr)
 
-	// Emit wait_duration: creationTimestamp -> status.startTime
+	// Emit waitDuration: creationTimestamp -> status.startTime
 	if pr.Status.StartTime != nil {
-		_, waitSpan := tracer.Start(parentCtx, "wait_duration",
+		_, waitSpan := tracer.Start(parentCtx, "waitDuration",
 			trace.WithTimestamp(pr.CreationTimestamp.Time),
 			trace.WithAttributes(commonAttrs...),
 		)
 		waitSpan.End(trace.WithTimestamp(pr.Status.StartTime.Time))
 	}
 
-	// Emit execute_duration: status.startTime -> status.completionTime
+	// Emit executeDuration: status.startTime -> status.completionTime
 	if pr.Status.StartTime != nil && pr.Status.CompletionTime != nil {
 		execAttrs := append(commonAttrs, buildExecuteAttributes(pr)...)
-		_, execSpan := tracer.Start(parentCtx, "execute_duration",
+		_, execSpan := tracer.Start(parentCtx, "executeDuration",
 			trace.WithTimestamp(pr.Status.StartTime.Time),
 			trace.WithAttributes(execAttrs...),
 		)

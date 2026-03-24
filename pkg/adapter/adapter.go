@@ -202,7 +202,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 
 		// Start a span for webhook handling
 		tracer := otel.Tracer(tracing.TracerName)
-		tracedCtx, span := tracer.Start(tracedCtx, "PipelinesAsCode:HandleWebhook",
+		tracedCtx, span := tracer.Start(tracedCtx, "PipelinesAsCode:ProcessEvent",
 			trace.WithSpanKind(trace.SpanKindServer),
 		)
 

@@ -218,7 +218,7 @@ func TestEmitTimingSpans(t *testing.T) {
 			wantSpanCount:  0,
 		},
 		{
-			name:              "missing completionTime emits only wait_duration",
+			name:              "missing completionTime emits only waitDuration",
 			labels:            map[string]string{applicationLabel: "my-app"},
 			uid:               "uid-nocomp",
 			namespace:         "ns-nocomp",
@@ -300,8 +300,8 @@ func TestEmitTimingSpans(t *testing.T) {
 			assert.Equal(t, len(spans), tt.wantSpanCount, "unexpected span count for %s", tt.name)
 
 			if tt.wantWaitSpan {
-				ws := findSpan(spans, "wait_duration")
-				assert.Assert(t, ws != nil, "expected wait_duration span")
+				ws := findSpan(spans, "waitDuration")
+				assert.Assert(t, ws != nil, "expected waitDuration span")
 				assert.Equal(t, ws.StartTime(), creationTime)
 				assert.Equal(t, ws.EndTime(), tt.startTime.Time)
 				assert.Equal(t, spanAttr(ws, "konflux.namespace"), tt.namespace)
@@ -317,8 +317,8 @@ func TestEmitTimingSpans(t *testing.T) {
 			}
 
 			if tt.wantExecSpan {
-				es := findSpan(spans, "execute_duration")
-				assert.Assert(t, es != nil, "expected execute_duration span")
+				es := findSpan(spans, "executeDuration")
+				assert.Assert(t, es != nil, "expected executeDuration span")
 				assert.Equal(t, es.StartTime(), tt.startTime.Time)
 				assert.Equal(t, es.EndTime(), tt.completionTime.Time)
 				assert.Equal(t, spanAttr(es, "konflux.namespace"), tt.namespace)
