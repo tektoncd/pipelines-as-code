@@ -21,6 +21,8 @@ metadata:
     app.kubernetes.io/version: "devel"
     app.kubernetes.io/part-of: pipelines-as-code
 data:
+  metrics-protocol: prometheus
+  metrics-endpoint: ":9090"
   _example: |
     ################################
     #                              #
@@ -35,18 +37,17 @@ data:
     # These sample configuration options may be copied out of
     # this example block and unindented to be in the data block
     # to actually change the configuration.
-    # metrics.backend-destination field specifies the system metrics destination.
-    # It supports either prometheus (the default) or stackdriver.
-    # Note: Using Stackdriver will incur additional charges.
-    metrics.backend-destination: prometheus
-    # metrics.stackdriver-project-id field specifies the Stackdriver project ID. This
-    # field is optional. When running on GCE, application default credentials will be
-    # used and metrics will be sent to the cluster's project if this field is
-    # not provided.
-    metrics.stackdriver-project-id: "<your stackdriver project id>"
-    # metrics.allow-stackdriver-custom-metrics indicates whether it is allowed
-    # to send metrics to Stackdriver using "global" resource type and custom
-    # metric type. Setting this flag to "true" could cause extra Stackdriver
-    # charge.  If metrics.backend-destination is not Stackdriver, this is
-    # ignored.
-    metrics.allow-stackdriver-custom-metrics: "false"
+
+    # metrics-protocol specifies the metrics export protocol.
+    # Supported values: "prometheus", "grpc", "http/protobuf", "none".
+    # Default is "none" (metrics disabled).
+    metrics-protocol: prometheus
+
+    # metrics-endpoint specifies the host:port for the metrics server.
+    # For prometheus, this is the listen address (e.g. ":9090").
+    # For grpc/http, this is the collector endpoint.
+    # metrics-endpoint: ""
+
+    # metrics-export-interval specifies how often metrics are exported.
+    # Only applicable for grpc and http/protobuf protocols.
+    # metrics-export-interval: "30s"
