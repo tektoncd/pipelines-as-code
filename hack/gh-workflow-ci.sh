@@ -213,9 +213,17 @@ run_e2e_tests() {
 
   mkdir -p /tmp/logs
 
+  local test_pattern
+  local test_status=0
+  local raw_output=/tmp/logs/e2e-test-output.json
+
   # shellcheck disable=SC2001
-  make test-e2e GO_TEST_FLAGS="-v -run \"$(echo "${tests[*]}" | sed 's/ /|/g')\"" 2>&1 | tee -a /tmp/logs/e2e-test-output.log
-  return "${PIPESTATUS[0]}"
+  test_pattern="$(echo "${tests[*]}" | sed 's/ /|/g')"
+  make test-e2e GO_TEST_FLAGS="-json -run \"${test_pattern}\"" 2>&1 | tee "${raw_output}" || test_status=$?
+  if ! TESTRR_RUN_LABEL="${TESTRR_RUN_LABEL:-gha-e2e-${target}}" ./hack/upload-testrr.sh "${raw_output}"; then
+    echo "::warning::testrr upload failed; continuing without failing GitHub Actions"
+  fi
+  return "${test_status}"
 }
 
 output_logs() {
