@@ -25,18 +25,19 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
-	metricsutils "github.com/openshift-pipelines/pipelines-as-code/pkg/test/metricstest"
 
+	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"knative.dev/pkg/metrics/metricstest"
-	_ "knative.dev/pkg/metrics/testing"
 	"knative.dev/pkg/ptr"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
@@ -348,7 +349,11 @@ func TestGetTektonDir(t *testing.T) {
 	}
 	for _, tt := range testGetTektonDir {
 		t.Run(tt.name, func(t *testing.T) {
-			metricsutils.ResetMetrics()
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(provider)
+
 			observer, exporter := zapobserver.New(zap.InfoLevel)
 			fakelogger := zap.New(observer).Sugar()
 			ctx, _ := rtesting.SetupFakeContext(t)
@@ -359,17 +364,6 @@ func TestGetTektonDir(t *testing.T) {
 				providerName: "github",
 				Logger:       fakelogger,
 			}
-
-			defer func() {
-				if !t.Failed() {
-					metricstest.CheckCountData(
-						t,
-						"pipelines_as_code_git_provider_api_request_count",
-						map[string]string{"provider": "github"},
-						tt.expectedGHApiCalls,
-					)
-				}
-			}()
 
 			if tt.provenance == "default_branch" {
 				tt.event.SHA = tt.event.DefaultBranch
@@ -386,6 +380,17 @@ func TestGetTektonDir(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+
+			var rm metricdata.ResourceMetrics
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(tt.expectedGHApiCalls))
 
 			var gotMatch bool
 			if tt.expectedString == "" {
@@ -1017,7 +1022,10 @@ func TestGetFiles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
-			metricsutils.ResetMetrics()
+			prmetrics.ResetRecorder()
+			reader := sdkmetric.NewManualReader()
+			metricProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			otel.SetMeterProvider(metricProvider)
 
 			if tt.event.TriggerTarget == "pull_request" {
 				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/pulls/%d/files",
@@ -1041,9 +1049,6 @@ func TestGetFiles(t *testing.T) {
 					fmt.Fprint(rw, string(b))
 				})
 			}
-
-			metricsTags := map[string]string{"provider": "github", "event-type": string(tt.event.TriggerTarget)}
-			metricstest.CheckStatsNotReported(t, "pipelines_as_code_git_provider_api_request_count")
 
 			log, _ := logger.GetLogger()
 			ctx, _ := rtesting.SetupFakeContext(t)
@@ -1075,9 +1080,24 @@ func TestGetFiles(t *testing.T) {
 			}
 
 			// Check caching
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.wantAPIRequestCount)
+			var rm metricdata.ResourceMetrics
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+
+			assert.Equal(t, len(rm.ScopeMetrics), 1)
+			assert.Equal(t, len(rm.ScopeMetrics[0].Metrics), 1)
+			assert.Equal(t, rm.ScopeMetrics[0].Metrics[0].Name, "pipelines_as_code_git_provider_api_request_count")
+			count, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(tt.wantAPIRequestCount))
+
 			_, _ = provider.GetFiles(ctx, tt.event)
-			metricstest.CheckCountData(t, "pipelines_as_code_git_provider_api_request_count", metricsTags, tt.wantAPIRequestCount)
+			// recollect the metrics after the second call
+			err = reader.Collect(ctx, &rm)
+			assert.NilError(t, err, "error collecting metrics")
+			count, ok = rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Sum[int64])
+			assert.Assert(t, ok)
+			assert.Equal(t, count.DataPoints[0].Value, int64(tt.wantAPIRequestCount))
 		})
 	}
 }
