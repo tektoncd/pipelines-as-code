@@ -19,6 +19,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	thelp "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab/test"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
@@ -577,6 +578,97 @@ func TestGetCommitInfo(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+func TestGetCommitStatuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		event        *info.Event
+		provider     *Provider
+		mockHandlers map[string]func(http.ResponseWriter, *http.Request)
+		want         []provider.CommitStatusInfo
+	}{
+		{
+			name: "uses event source project statuses",
+			event: &info.Event{
+				SHA:             "abc123",
+				SourceProjectID: 101,
+				TargetProjectID: 202,
+			},
+			provider: &Provider{},
+			mockHandlers: map[string]func(http.ResponseWriter, *http.Request){
+				"/projects/101/repository/commits/abc123/statuses": func(rw http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, r.Method, http.MethodGet)
+					fmt.Fprint(rw, `[{"name":"Pipelines as Code CI / always-good-pipelinerun","status":"success"},{"name":"Pipelines as Code CI / pipelinerun-exit-1","status":"failed"}]`)
+				},
+			},
+			want: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / always-good-pipelinerun", Status: "success"},
+				{Name: "Pipelines as Code CI / pipelinerun-exit-1", Status: "failed"},
+			},
+		},
+		{
+			name: "falls back to provider source project id when event source project id is empty",
+			event: &info.Event{
+				SHA:             "def456",
+				TargetProjectID: 202,
+			},
+			provider: &Provider{
+				sourceProjectID: 303,
+			},
+			mockHandlers: map[string]func(http.ResponseWriter, *http.Request){
+				"/projects/303/repository/commits/def456/statuses": func(rw http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, r.Method, http.MethodGet)
+					fmt.Fprint(rw, `[{"name":"Pipelines as Code CI / from-provider-source","status":"success"}]`)
+				},
+			},
+			want: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / from-provider-source", Status: "success"},
+			},
+		},
+		{
+			name: "falls back to target project when source project lookup fails",
+			event: &info.Event{
+				SHA:             "fedcba",
+				SourceProjectID: 404,
+				TargetProjectID: 505,
+			},
+			provider: &Provider{},
+			mockHandlers: map[string]func(http.ResponseWriter, *http.Request){
+				"/projects/404/repository/commits/fedcba/statuses": func(rw http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, r.Method, http.MethodGet)
+					rw.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(rw, `{"message":"404 Project Not Found"}`)
+				},
+				"/projects/505/repository/commits/fedcba/statuses": func(rw http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, r.Method, http.MethodGet)
+					fmt.Fprint(rw, `[{"name":"Pipelines as Code CI / from-target","status":"success"}]`)
+				},
+			},
+			want: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / from-target", Status: "success"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeclient, mux, tearDown := thelp.Setup(t)
+			defer tearDown()
+			logger, _ := logger.GetLogger()
+
+			for endpoint, handler := range tt.mockHandlers {
+				mux.HandleFunc(endpoint, handler)
+			}
+
+			tt.provider.gitlabClient = fakeclient
+			tt.provider.Logger = logger
+
+			got, err := tt.provider.GetCommitStatuses(context.Background(), tt.event)
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.want)
 		})
 	}
 }

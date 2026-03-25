@@ -47,8 +47,14 @@ github_enterprise:
 gitlab:
   api_url: "https://gitlab.com"
   token: ""
+  # Optional second identity for fork-based GitLab tests.
+  # Use a token from a different GitLab user than `token`.
+  second_token: ""
   # Group/namespace where test projects will be created and deleted
   group: "pac-e2e-tests"
+  # Optional namespace for forks created by `second_token`.
+  # If omitted, GitLab uses the second user's default namespace.
+  second_group: ""
   smee_url: ""  # Auto-generated in CI; set manually for local testing
 
 # Gitea / Forgejo

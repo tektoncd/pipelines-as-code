@@ -438,6 +438,67 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	return nil
 }
 
+func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.gitlabClient == nil {
+		return nil, fmt.Errorf("%s", noClientErrStr)
+	}
+
+	sourceProjectID := event.SourceProjectID
+	if sourceProjectID == 0 {
+		sourceProjectID = v.sourceProjectID
+	}
+
+	targetProjectID := event.TargetProjectID
+	if targetProjectID == 0 {
+		targetProjectID = v.targetProjectID
+	}
+
+	projectIDs := []int64{}
+	if sourceProjectID != 0 {
+		projectIDs = append(projectIDs, sourceProjectID)
+	}
+	if targetProjectID != 0 && targetProjectID != sourceProjectID {
+		projectIDs = append(projectIDs, targetProjectID)
+	}
+
+	var (
+		firstErr error
+		result   []provider.CommitStatusInfo
+		seen     = map[string]struct{}{}
+	)
+
+	for _, projectID := range projectIDs {
+		statuses, _, err := v.Client().Commits.GetCommitStatuses(projectID, event.SHA, &gitlab.GetCommitStatusesOptions{})
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			if v.Logger != nil {
+				v.Logger.Debugf("failed to get commit statuses from gitlab project ID %d for SHA %s: %v", projectID, event.SHA, err)
+			}
+			continue
+		}
+
+		for _, s := range statuses {
+			key := fmt.Sprintf("%s\x00%s", s.Name, s.Status)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, provider.CommitStatusInfo{
+				Name:   s.Name,
+				Status: s.Status,
+			})
+		}
+	}
+
+	if len(result) > 0 {
+		return result, nil
+	}
+
+	return nil, firstErr
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	if v.gitlabClient == nil {
 		return "", fmt.Errorf("no gitlab client has been initialized, " +

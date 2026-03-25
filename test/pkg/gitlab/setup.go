@@ -52,6 +52,49 @@ func Setup(ctx context.Context) (*params.Run, options.E2E, gitlab.Provider, erro
 	return run, e2eoptions, glprovider, nil
 }
 
+func HasSecondIdentity() bool {
+	token, ok := os.LookupEnv("TEST_GITLAB_SECOND_TOKEN")
+	return ok && token != ""
+}
+
+func SetupSecond(ctx context.Context, run *params.Run) (options.E2E, gitlab.Provider, error) {
+	if err := setup.RequireEnvs(
+		"TEST_GITLAB_API_URL",
+		"TEST_GITLAB_SECOND_TOKEN",
+	); err != nil {
+		return options.E2E{}, gitlab.Provider{}, err
+	}
+
+	gitlabURL := os.Getenv("TEST_GITLAB_API_URL")
+	gitlabToken := os.Getenv("TEST_GITLAB_SECOND_TOKEN")
+	controllerURL := os.Getenv("TEST_EL_URL")
+
+	if run == nil {
+		run = params.New()
+		if err := run.Clients.NewClients(ctx, &run.Info); err != nil {
+			return options.E2E{}, gitlab.Provider{}, err
+		}
+	}
+
+	e2eoptions := options.E2E{
+		ControllerURL: controllerURL,
+		UserName:      "oauth2",
+		Password:      gitlabToken,
+	}
+	glprovider := gitlab.Provider{}
+	err := glprovider.SetClient(ctx, run, &info.Event{
+		Provider: &info.Provider{
+			Token: gitlabToken,
+			URL:   gitlabURL,
+		},
+	}, nil, nil)
+	if err != nil {
+		return options.E2E{}, gitlab.Provider{}, err
+	}
+
+	return e2eoptions, glprovider, nil
+}
+
 func TearDown(ctx context.Context, t *testing.T, topts *TestOpts) {
 	if os.Getenv("TEST_NOCLEANUP") == "true" {
 		topts.ParamsRun.Clients.Log.Infof("Not cleaning up and closing PR since TEST_NOCLEANUP is set")

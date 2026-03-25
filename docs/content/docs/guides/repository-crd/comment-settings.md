@@ -41,6 +41,15 @@ in the target repository, because GitLab only creates pipeline entries for commi
 that actually trigger CI in that specific project. If either status update
 succeeds, Pipelines-as-Code does not post a comment on the Merge Request.
 
+Successful commit status reporting is also important for the `/retest` command.
+When PipelineRuns are pruned from the cluster, Pipelines-as-Code queries
+GitLab's commit status API to identify which pipelines previously succeeded,
+ensuring only failed pipelines are re-run. If commit statuses were never
+reported (for example, because both status updates failed and only a comment was
+posted), Pipelines-as-Code cannot determine prior results and will fail to
+re-run any pipelines when `/retest` unless you retest individual pipelineruns
+with `/test <pipeline-name>`.
+
 When a status update succeeds, you can see the status in the GitLab UI in the `Pipelines` tab, as
 shown in the following example:
 

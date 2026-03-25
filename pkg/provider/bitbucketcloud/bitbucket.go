@@ -159,6 +159,10 @@ func (v *Provider) CreateStatus(_ context.Context, event *info.Event, statusopts
 	return nil
 }
 
+func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
+	return nil, nil
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	v.provenance = provenance
 	repositoryFiles, err := v.getDir(event, path)

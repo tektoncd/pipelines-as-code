@@ -47,6 +47,8 @@ this repo should differ from the one which is configured as part of `TEST_GITHUB
 - `TEST_GITLAB_API_URL` - Gitlab API URL i.e: `https://gitlab.com`
 - `TEST_GITLAB_GROUP` - Gitlab group/namespace where test projects will be created and deleted
 - `TEST_GITLAB_TOKEN` - Gitlab Token
+- `TEST_GITLAB_SECOND_TOKEN` - Optional second GitLab token from a different user for fork-based GitLab tests
+- `TEST_GITLAB_SECOND_GROUP` - Optional group/namespace where the second user should create forks
 - `TEST_GITLAB_SMEEURL` - Smee URL for forwarding GitLab webhooks to the controller
 - `TEST_GITEA_API_URL` - URL where GITEA is running (i.e: [GITEA_HOST](http://localhost:3000))
 - `TEST_GITEA_SMEEURL` - URL of smee
@@ -132,10 +134,14 @@ instance to your local controller (the same pattern as Gitea tests).
    export TEST_GITLAB_API_URL=https://gitlab.pipelinesascode.com
    export TEST_GITLAB_TOKEN=<your-token>
    export TEST_GITLAB_GROUP=<your-group>
+   export TEST_GITLAB_SECOND_TOKEN=<second-user-token> # optional, required for real fork fallback tests
+   export TEST_GITLAB_SECOND_GROUP=<second-user-group> # optional, recommended when the second user has multiple namespaces
    export TEST_GITLAB_SMEEURL="${SMEE_URL}"
    export TEST_EL_URL=https://your-controller-url
    export TEST_EL_WEBHOOK_SECRET=<your-webhook-secret>
    ```
+
+   Fork-status fallback tests skip automatically when `TEST_GITLAB_SECOND_TOKEN` is not set.
 
 4. Run the tests:
 

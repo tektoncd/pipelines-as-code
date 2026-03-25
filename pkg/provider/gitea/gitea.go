@@ -360,6 +360,10 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 	return nil
 }
 
+func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
+	return nil, nil
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	// default set provenance from the SHA
 	revision := event.SHA

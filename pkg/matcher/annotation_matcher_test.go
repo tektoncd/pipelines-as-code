@@ -25,6 +25,7 @@ import (
 	ghprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
+	testprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
@@ -3078,6 +3079,33 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 		},
 	}
 
+	// Template E: has a running run - should be kept for /retest
+	runningPRE := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "template-e-running",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				keys.SHA:            "test-sha",
+				keys.OriginalPRName: "template-e",
+			},
+			Annotations: map[string]string{
+				keys.OriginalPRName: "template-e",
+			},
+			CreationTimestamp: now,
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					apis.Condition{
+						Type:   apis.ConditionSucceeded,
+						Status: corev1.ConditionUnknown,
+						Reason: "Running",
+					},
+				},
+			},
+		},
+	}
+
 	// PipelineRun with different SHA - should not interfere
 	differentSHAPR := &tektonv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3128,7 +3156,7 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 	// Setup test clients
 	tdata := testclient.Data{
 		PipelineRuns: []*tektonv1.PipelineRun{
-			successfulPRA, failedPRB, olderSuccessfulPRD, newerSuccessfulPRD, differentSHAPR, noOriginalNamePR,
+			successfulPRA, failedPRB, olderSuccessfulPRD, newerSuccessfulPRD, runningPRE, differentSHAPR, noOriginalNamePR,
 		},
 		Repositories: []*v1alpha1.Repository{repo},
 	}
@@ -3169,8 +3197,9 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 				createMatchedPR("template-b"), // has failed run - should be kept
 				createMatchedPR("template-c"), // no previous runs - should be kept
 				createMatchedPR("template-d"), // has multiple successful runs - should be filtered
+				createMatchedPR("template-e"), // has a running run - should be kept
 			},
-			expectedNames: []string{"template-b", "template-c"},
+			expectedNames: []string{"template-b", "template-c", "template-e"},
 		},
 		{
 			name:      "Ok-to-test command filters templates with successful runs",
@@ -3250,7 +3279,7 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 				return
 			}
 
-			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, tt.matchedPRs)
+			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, &ghprovider.Provider{}, tt.matchedPRs)
 
 			// Check that the correct number of templates remain
 			assert.Equal(t, len(tt.expectedNames), len(filtered),
@@ -3284,6 +3313,133 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 					}
 				}
 				assert.Assert(t, found, "Unexpected template %s found in %v", actualName, actualNames)
+			}
+		})
+	}
+}
+
+func TestFilterSuccessfulTemplatesFallbackToCommitStatuses(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.DebugLevel)
+	logger := zap.New(observer).Sugar()
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+	}
+
+	// No PipelineRuns in the cluster (pruned)
+	tdata := testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+
+	cs := &params.Run{
+		Clients: clients.Clients{
+			Log:    logger,
+			Tekton: stdata.Pipeline,
+			Kube:   stdata.Kube,
+		},
+	}
+	pac := info.NewPacOpts()
+	pac.ApplicationName = "Pipelines as Code CI"
+	cs.Info.Pac = pac
+
+	createMatchedPR := func(name string) Match {
+		return Match{
+			PipelineRun: &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name           string
+		commitStatuses []provider.CommitStatusInfo
+		matchedPRs     []Match
+		expectedNames  []string
+	}{
+		{
+			name: "Fallback filters successful templates from commit statuses",
+			commitStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / template-a", Status: "success"},
+				{Name: "Pipelines as Code CI / template-b", Status: "failed"},
+			},
+			matchedPRs: []Match{
+				createMatchedPR("template-a"),
+				createMatchedPR("template-b"),
+				createMatchedPR("template-c"),
+			},
+			expectedNames: []string{"template-b", "template-c"},
+		},
+		{
+			name: "Fallback with all successful statuses filters all",
+			commitStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / template-a", Status: "success"},
+				{Name: "Pipelines as Code CI / template-b", Status: "successful"},
+			},
+			matchedPRs: []Match{
+				createMatchedPR("template-a"),
+				createMatchedPR("template-b"),
+			},
+			expectedNames: []string{},
+		},
+		{
+			name: "Fallback ignores statuses with different app name prefix",
+			commitStatuses: []provider.CommitStatusInfo{
+				{Name: "Other App / template-a", Status: "success"},
+				{Name: "Pipelines as Code CI / template-b", Status: "success"},
+			},
+			matchedPRs: []Match{
+				createMatchedPR("template-a"),
+				createMatchedPR("template-b"),
+			},
+			expectedNames: []string{"template-a"},
+		},
+		{
+			name:           "No commit statuses re-runs all",
+			commitStatuses: nil,
+			matchedPRs: []Match{
+				createMatchedPR("template-a"),
+				createMatchedPR("template-b"),
+			},
+			expectedNames: []string{"template-a", "template-b"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := &info.Event{
+				EventType: "retest",
+				SHA:       "test-sha-pruned",
+			}
+			vcx := &testprovider.TestProviderImp{
+				CommitStatuses: tt.commitStatuses,
+			}
+
+			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, vcx, tt.matchedPRs)
+
+			assert.Equal(t, len(tt.expectedNames), len(filtered),
+				"Expected %d templates but got %d", len(tt.expectedNames), len(filtered))
+
+			var actualNames []string
+			for _, match := range filtered {
+				actualNames = append(actualNames, getName(match.PipelineRun))
+			}
+
+			for _, expectedName := range tt.expectedNames {
+				found := false
+				for _, actualName := range actualNames {
+					if actualName == expectedName {
+						found = true
+						break
+					}
+				}
+				assert.Assert(t, found, "Expected template %s not found in %v", expectedName, actualNames)
 			}
 		})
 	}

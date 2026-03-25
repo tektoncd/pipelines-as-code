@@ -33,6 +33,13 @@ type Interface interface {
 	CheckPolicyAllowing(context.Context, *info.Event, []string) (bool, string)
 	GetTemplate(CommentType) string
 	CreateComment(ctx context.Context, event *info.Event, comment, updateMarker string) error
+	GetCommitStatuses(ctx context.Context, event *info.Event) ([]CommitStatusInfo, error)
+}
+
+// CommitStatusInfo represents a commit status from a git provider.
+type CommitStatusInfo struct {
+	Name   string // e.g. "Pipelines as Code CI / always-good-pipelinerun"
+	Status string // provider-specific status string (e.g. "success", "failed")
 }
 
 const DefaultProviderAPIUser = "git"
