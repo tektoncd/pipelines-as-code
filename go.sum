@@ -273,8 +273,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tektoncd/pipeline v1.10.0 h1:UlVEIs8cxBAmGEYJe7qMr9D79crBKijt6uHtuAH1wt8=
-github.com/tektoncd/pipeline v1.10.0/go.mod h1:KEXGPxGN/Mj9miXTXf2EA15+049xTxmmuHk8Nx44Sjg=
+github.com/tektoncd/pipeline v1.10.2 h1:xwKnTe+lpjpdgnT8AFORjgntSr63PlCI2u75q1C1LKc=
+github.com/tektoncd/pipeline v1.10.2/go.mod h1:KEXGPxGN/Mj9miXTXf2EA15+049xTxmmuHk8Nx44Sjg=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
