@@ -23,6 +23,7 @@ on:
       - "**.go"
       - ".github/workflows/**"
       - "test/testdata/**"
+      - "vendor/**"
 
 jobs:
   e2e-tests:
