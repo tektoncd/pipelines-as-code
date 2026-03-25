@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
@@ -214,6 +215,40 @@ func TestGiteaACLOrgPendingApproval(t *testing.T) {
 	topts.Regexp = regexp.MustCompile(`.*is skipping this commit.*`)
 	tgitea.WaitForPullRequestCommentMatch(t, topts)
 	topts.GiteaCNX = adminCnx
+}
+
+func TestGiteaSuccessStatusAfterOkToTest(t *testing.T) {
+	topts := &tgitea.TestOpts{
+		TargetEvent: triggertype.PullRequest.String(),
+		YAMLFiles: map[string]string{
+			".tekton/pr.yaml": "testdata/pipelinerun.yaml",
+		},
+		ExpectEvents: false,
+	}
+	_, f := tgitea.TestPR(t, topts)
+	defer f()
+	adminCnx := topts.GiteaCNX
+	secondcnx, _, err := tgitea.CreateGiteaUserSecondCnx(topts, topts.TargetRefName, topts.GiteaPassword)
+	assert.NilError(t, err)
+	topts.GiteaCNX = secondcnx
+	topts.PullRequest = tgitea.CreateForkPullRequest(t, topts, secondcnx, "")
+	topts.GiteaCNX = adminCnx
+	_, _, err = topts.GiteaCNX.Client().CreateIssueComment(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index, forgejo.CreateIssueCommentOption{Body: okToTestComment})
+	assert.NilError(t, err)
+	// there will be 3 statuses, when pull request is opened, a pending status is created and when the /ok-to-test comment is added,
+	// that status transitions to success and one for pipeline run, gitea doesn't update the previous one it just creates a new one.
+	topts.CheckForNumberStatus = 3
+	tgitea.WaitForStatus(t, topts, topts.PullRequest.Head.Sha, "", false)
+	statuses, _, err := topts.GiteaCNX.Client().ListStatuses(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Head.Sha, forgejo.ListStatusesOption{})
+	assert.NilError(t, err)
+	foundSuccess := false
+	for _, status := range statuses {
+		if status.State == forgejo.StatusSuccess && status.Context == "Pipelines as Code CI" {
+			foundSuccess = true
+			break
+		}
+	}
+	assert.Assert(t, foundSuccess, "success status for \"Pipelines as Code CI\" context not found")
 }
 
 // TestGiteaACLCommentsAllowing tests that the gitops comment commands work.
