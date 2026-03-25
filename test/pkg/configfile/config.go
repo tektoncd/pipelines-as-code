@@ -46,10 +46,12 @@ type GitHubEnterpriseConfig struct {
 }
 
 type GitLabConfig struct {
-	APIURL  string `env:"TEST_GITLAB_API_URL" json:"api_url"  yaml:"api_url"`
-	Token   string `env:"TEST_GITLAB_TOKEN"   json:"token"    yaml:"token"`
-	Group   string `env:"TEST_GITLAB_GROUP"   json:"group"    yaml:"group"`
-	SmeeURL string `env:"TEST_GITLAB_SMEEURL" json:"smee_url" yaml:"smee_url"`
+	APIURL      string `env:"TEST_GITLAB_API_URL"      json:"api_url"      yaml:"api_url"`
+	Token       string `env:"TEST_GITLAB_TOKEN"        json:"token"        yaml:"token"`
+	SecondToken string `env:"TEST_GITLAB_SECOND_TOKEN" json:"second_token" yaml:"second_token"`
+	Group       string `env:"TEST_GITLAB_GROUP"        json:"group"        yaml:"group"`
+	SecondGroup string `env:"TEST_GITLAB_SECOND_GROUP" json:"second_group" yaml:"second_group"`
+	SmeeURL     string `env:"TEST_GITLAB_SMEEURL"      json:"smee_url"     yaml:"smee_url"`
 }
 
 type GiteaConfig struct {

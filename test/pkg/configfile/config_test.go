@@ -136,7 +136,9 @@ github_enterprise:
 gitlab:
   api_url: "https://gitlab.com"
   token: "glpat-xyz"
+  second_token: "glpat-second"
   group: "pac-e2e-tests"
+  second_group: "pac-e2e-tests-second"
   smee_url: "https://hook.pipelinesascode.com/gitlab-test"
 gitea:
   api_url: "http://localhost:3000"
@@ -170,7 +172,8 @@ bitbucket_server:
 		"TEST_GITHUB_SECOND_API_URL", "TEST_GITHUB_SECOND_TOKEN",
 		"TEST_GITHUB_SECOND_EL_URL", "TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP",
 		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID",
-		"TEST_GITLAB_API_URL", "TEST_GITLAB_TOKEN", "TEST_GITLAB_GROUP", "TEST_GITLAB_SMEEURL",
+		"TEST_GITLAB_API_URL", "TEST_GITLAB_TOKEN", "TEST_GITLAB_SECOND_TOKEN",
+		"TEST_GITLAB_GROUP", "TEST_GITLAB_SECOND_GROUP", "TEST_GITLAB_SMEEURL",
 		"TEST_GITEA_API_URL", "TEST_GITEA_INTERNAL_URL", "TEST_GITEA_PASSWORD",
 		"TEST_GITEA_USERNAME", "TEST_GITEA_REPO_OWNER", "TEST_GITEA_SMEEURL",
 		"TEST_BITBUCKET_CLOUD_API_URL", "TEST_BITBUCKET_CLOUD_USER",
@@ -204,7 +207,9 @@ bitbucket_server:
 		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID": "1",
 		"TEST_GITLAB_API_URL":                     "https://gitlab.com",
 		"TEST_GITLAB_TOKEN":                       "glpat-xyz",
+		"TEST_GITLAB_SECOND_TOKEN":                "glpat-second",
 		"TEST_GITLAB_GROUP":                       "pac-e2e-tests",
+		"TEST_GITLAB_SECOND_GROUP":                "pac-e2e-tests-second",
 		"TEST_GITLAB_SMEEURL":                     "https://hook.pipelinesascode.com/gitlab-test",
 		"TEST_GITEA_API_URL":                      "http://localhost:3000",
 		"TEST_GITEA_INTERNAL_URL":                 "http://forgejo:3000",

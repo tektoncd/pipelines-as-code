@@ -33,7 +33,9 @@ type TestOpts struct {
 	SHA                  string
 	ParamsRun            *params.Run
 	GLProvider           gitlab2.Provider
+	SecondGLProvider     gitlab2.Provider
 	Opts                 options.E2E
+	SecondOpts           options.E2E
 	YAMLFiles            map[string]string
 	ExtraArgs            map[string]string
 	Regexp               *regexp.Regexp
@@ -151,6 +153,24 @@ func CreateMR(client *gitlab.Client, pid int, sourceBranch, targetBranch, title 
 		return -1, err
 	}
 	return int(mr.IID), nil
+}
+
+func SetupSecondIdentity(ctx context.Context, topts *TestOpts) error {
+	if topts.SecondOpts.Password != "" {
+		return nil
+	}
+	if topts.ParamsRun == nil {
+		return fmt.Errorf("primary GitLab test setup must be initialized before the second identity")
+	}
+
+	opts, provider, err := SetupSecond(ctx, topts.ParamsRun)
+	if err != nil {
+		return err
+	}
+	topts.SecondOpts = opts
+	topts.SecondGLProvider = provider
+
+	return nil
 }
 
 func CreateTag(client *gitlab.Client, pid int, tagName string) error {

@@ -25,7 +25,7 @@ failure is not with your PR but seems to be an infrastructure issue.
 - Previously **failed** PipelineRuns exist for the same commit, OR
 - No PipelineRun has run for the same commit yet
 
-If a successful PipelineRun already exists for the same commit, `/retest` **skips** it to avoid unnecessary duplication.
+If a successful PipelineRun already exists for the same commit, `/retest` **skips** it to avoid unnecessary duplication. When PipelineRuns have been pruned from the cluster (for example, by a retention policy), Pipelines-as-Code falls back to querying the Git provider's commit status API to determine which pipelines previously succeeded, ensuring only failed pipelines are re-run even when the original PipelineRun objects no longer exist.
 
 **When to use it:** To force a rerun regardless of previous status, use:
 

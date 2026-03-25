@@ -46,7 +46,11 @@ func (ac *reconciler) Admit(_ context.Context, request *v1.AdmissionRequest) *v1
 			return webhook.MakeErrorStatus("URL must be set")
 		}
 
-		if err := validateRepositoryURL(repo.Spec.URL); err != nil {
+		var gitProviderType string
+		if repo.Spec.GitProvider != nil {
+			gitProviderType = repo.Spec.GitProvider.Type
+		}
+		if err := validateRepositoryURL(repo.Spec.URL, gitProviderType); err != nil {
 			return webhook.MakeErrorStatus("%s", err.Error())
 		}
 	}
@@ -94,7 +98,7 @@ func checkIfRepoExist(pac pac.RepositoryLister, repo *v1alpha1.Repository, ns st
 	return false, nil
 }
 
-func validateRepositoryURL(repoURL string) error {
+func validateRepositoryURL(repoURL, gitProviderType string) error {
 	parsedURL, err := url.Parse(repoURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
@@ -108,7 +112,7 @@ func validateRepositoryURL(repoURL string) error {
 	// (like https://github.com/org/repo/extra).
 	// Detect if this is a GitHub instance (github.com or GHE) by checking headers
 	//  and API endpoints.
-	if isGitHubInstance(parsedURL.Host, parsedURL.Scheme) {
+	if isGitHubInstance(parsedURL.Host, parsedURL.Scheme, gitProviderType) {
 		// Remove leading and trailing "/"
 		repoPath := strings.Trim(parsedURL.Path, "/")
 
@@ -122,8 +126,12 @@ func validateRepositoryURL(repoURL string) error {
 }
 
 // isGitHubInstance detects if a host is github.com or a GitHub Enterprise instance.
-// It checks the server header and /api/v3/meta endpoint.
-func isGitHubInstance(host, scheme string) bool {
+// It checks the provider type first, then the host, and falls back to HTTP detection.
+func isGitHubInstance(host, scheme, gitProviderType string) bool {
+	if gitProviderType == "github" {
+		return true
+	}
+
 	if host == "github.com" {
 		return true
 	}
