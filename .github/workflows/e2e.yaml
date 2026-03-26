@@ -19,6 +19,7 @@ on:
       - opened
       - reopened
       - synchronize
+      - labeled
     paths:
       - "**.go"
       - ".github/workflows/**"
@@ -32,7 +33,8 @@ jobs:
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'pull_request_target'
+      (github.event_name == 'pull_request_target' && github.event.action != 'labeled') ||
+      (github.event_name == 'pull_request_target' && github.event.action == 'labeled' && github.event.label.name == 'ok-to-test')
     concurrency:
       group: ${{ github.workflow }}-${{ matrix.provider }}-${{ github.event.pull_request.number || github.ref_name }}
       cancel-in-progress: true
@@ -61,7 +63,7 @@ jobs:
       KOCACHE: /tmp/ko-cache
       KO_DOCKER_REPO: registry.paac-127-0-0-1.nip.io
       KUBECONFIG: /home/runner/.kube/config.local
-      TARGET_TEAM_SLUGS: "pipeline-as-code,pipeline-as-code-contributors"
+      TARGET_TEAM_SLUGS: "pipelines-as-code.maintainers"
       TEST_EL_URL: https://paac.paac-127-0-0-1.nip.io
       TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 
@@ -131,163 +133,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
-            if (!context || !context.payload || !context.payload.pull_request) {
-              core.setFailed('Invalid GitHub context: missing required pull_request information');
-              return;
-            }
-
-            async function run() {
-              const actor = context.payload.pull_request.user.login;
-              const repoOwner = context.repo.owner;
-              const repoName = context.repo.repo;
-              const targetOrg = context.repo.owner;
-
-              core.info(`🔍 Starting permission check for user: @${actor}`);
-              core.info(`📋 Repository: ${repoOwner}/${repoName}`);
-              core.info(`🏢 Target organization: ${targetOrg}`);
-
-              // Condition 1: Check if the user is a trusted bot.
-              const trustedBots = ["dependabot[bot]", "renovate[bot]"];
-              core.info(`🤖 Checking if @${actor} is a trusted bot...`);
-              core.info(`   Trusted bots list: ${trustedBots.join(', ')}`);
-
-              if (trustedBots.includes(actor)) {
-                core.info(`✅ Condition met: User @${actor} is a trusted bot. Proceeding.`);
-                return; // Success
-              }
-              core.info(`   ❌ User @${actor} is not a trusted bot.`);
-
-              // Condition 2: Check for public membership in the target organization.
-              core.info(`\n👥 Condition 2: Checking organization and team membership...`);
-              core.info(
-                `User @${actor} is not a trusted bot. Checking for membership in '${targetOrg}'...`,
-              );
-              try {
-                // Optional: check membership in one or more org teams (set TARGET_TEAM_SLUGS as comma-separated slugs in workflow env)
-                const teamSlugsEnv = process.env.TARGET_TEAM_SLUGS || "";
-                const teamSlugs = teamSlugsEnv
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-
-                core.info(`🔧 TARGET_TEAM_SLUGS environment variable: "${teamSlugsEnv}"`);
-                core.info(`📝 Parsed team slugs: [${teamSlugs.join(', ')}]`);
-
-                if (teamSlugs.length > 0) {
-                  core.info(`🔍 Checking team membership for ${teamSlugs.length} team(s)...`);
-                  for (const team_slug of teamSlugs) {
-                    core.info(`   Checking team: ${team_slug}...`);
-                    try {
-                      const membership = await github.rest.teams.getMembershipForUserInOrg({
-                        org: targetOrg,
-                        team_slug,
-                        username: actor,
-                      });
-                      core.info(`   API response for team '${team_slug}': ${JSON.stringify(membership.data)}`);
-                      if (
-                        membership &&
-                        membership.data &&
-                        membership.data.state === "active"
-                      ) {
-                        core.info(
-                          `✅ Condition met: User @${actor} is a member of team '${team_slug}' in '${targetOrg}'. Proceeding.`,
-                        );
-                        return; // Success
-                      } else {
-                        core.info(`   ⚠️ Team membership found but state is not 'active': ${membership.data.state}`);
-                      }
-                    } catch (err) {
-                      // Not a member of this team or team doesn't exist — continue to next
-                      core.info(
-                        `   ❌ User @${actor} is not a member of team '${team_slug}' (or team not found). Error: ${err.message}`,
-                      );
-                    }
-                  }
-                  // If we tried team checks and none matched, continue to next org membership checks
-                  core.info(
-                    `ⓘ User @${actor} is not a member of any configured teams in '${targetOrg}'. Falling back to org membership checks.`,
-                  );
-                } else {
-                  core.info(`ℹ️ No teams configured in TARGET_TEAM_SLUGS. Skipping team membership checks.`);
-                }
-                core.info(`🏢 Checking organization membership for @${actor} in '${targetOrg}'...`);
-                try {
-                  core.info(`   Attempting checkMembershipForUser API call...`);
-                  await github.rest.orgs.checkMembershipForUser({
-                    org: targetOrg,
-                    username: actor,
-                  });
-                  core.info(
-                    `✅ Condition met: User @${actor} is a member of '${targetOrg}'. Proceeding.`,
-                  );
-                  return; // Success
-                } catch (err) {
-                  // Try public membership as fallback
-                  core.info(`   ❌ Private membership check failed: ${err.message}`);
-                  core.info(`   Attempting checkPublicMembershipForUser API call...`);
-                  try {
-                    await github.rest.orgs.checkPublicMembershipForUser({
-                      org: targetOrg,
-                      username: actor,
-                    });
-                    core.info(
-                      `✅ Condition met: User @${actor} is a public member of '${targetOrg}'. Proceeding.`,
-                    );
-                    return; // Success
-                  } catch (publicErr) {
-                    // Neither private nor public member - will be caught by outer catch
-                    core.info(`   ❌ Public membership check failed: ${publicErr.message}`);
-                    throw publicErr;
-                  }
-                }
-              } catch (error) {
-                // This is not a failure, just one unmet condition. Log and continue.
-                core.info(
-                  `ⓘ User @${actor} is not a public member of '${targetOrg}'. Checking repository permissions as a fallback.`,
-                );
-              }
-
-              // Condition 3: Check for write/admin permission on the repository.
-              core.info(`\n🔐 Condition 3: Checking repository collaborator permissions...`);
-              try {
-                core.info(`   Attempting getCollaboratorPermissionLevel API call...`);
-                const response = await github.rest.repos.getCollaboratorPermissionLevel({
-                  owner: repoOwner,
-                  repo: repoName,
-                  username: actor,
-                });
-
-                const permission = response.data.permission;
-                core.info(`   User @${actor} has '${permission}' permission on ${repoOwner}/${repoName}`);
-
-                if (permission === "admin" || permission === "write") {
-                  core.info(
-                    `✅ Condition met: User @${actor} has '${permission}' repository permission. Proceeding.`,
-                  );
-                  return; // Success
-                } else {
-                  // If we reach here, no conditions were met. This is the final failure.
-                  core.info(`   ❌ Permission '${permission}' is insufficient (requires 'write' or 'admin')`);
-                  core.setFailed(
-                    `❌ Permission check failed. User @${actor} did not meet any required conditions (trusted bot, org member, or repo write access).`,
-                  );
-                  return;
-                }
-              } catch (error) {
-                // This error means they are not even a collaborator.
-                core.info(`   ❌ Collaborator permission check failed: ${error.message}`);
-                core.setFailed(
-                  `❌ Permission check failed. User @${actor} is not a collaborator on this repository and did not meet other conditions.`,
-                );
-                return;
-              }
-            }
-
-            run().catch(err => {
-              core.error(`💥 Unexpected error during permission check: ${err.message}`);
-              core.error(`   Stack trace: ${err.stack}`);
-              core.setFailed(`Unexpected error during permission check: ${err.message}`);
-            });
+            const script = require('./.github/scripts/check-pr-permissions.js')
+            await script({github, context, core})
 
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
