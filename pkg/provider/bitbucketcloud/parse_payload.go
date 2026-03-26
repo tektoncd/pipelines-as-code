@@ -130,7 +130,7 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		case provider.Valid(event, pullRequestsCreated):
 			processedEvent.EventType = triggertype.PullRequest.String()
 		case provider.Valid(event, pullRequestsCommentCreated):
-			opscomments.SetEventTypeAndTargetPR(processedEvent, e.Comment.Content.Raw)
+			opscomments.SetEventTypeAndTargetPR(processedEvent, e.Comment.Content.Raw, "/")
 		case provider.Valid(event, pullRequestsClosed):
 			processedEvent.EventType = string(triggertype.PullRequestClosed)
 			processedEvent.TriggerTarget = triggertype.PullRequestClosed

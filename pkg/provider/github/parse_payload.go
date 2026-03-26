@@ -16,11 +16,13 @@ import (
 	github75 "github.com/google/go-github/v75/github"
 	"github.com/google/go-github/v81/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -546,7 +548,6 @@ func (v *Provider) handleIssueCommentEvent(ctx context.Context, event *github.Is
 		return info.NewEvent(), fmt.Errorf("issue comment is not coming from a pull_request")
 	}
 	v.userType = event.GetSender().GetType()
-	opscomments.SetEventTypeAndTargetPR(runevent, event.GetComment().GetBody())
 
 	// We are getting the full URL so we have to get the last part to get the PR number,
 	// we don\'t have to care about URL query string/hash and other stuff because
@@ -558,23 +559,35 @@ func (v *Provider) handleIssueCommentEvent(ctx context.Context, event *github.Is
 	}
 
 	v.Logger.Infof("issue_comment: pipelinerun %s on %s/%s#%d has been requested", action, runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
-	pr, err := v.getPullRequest(ctx, runevent)
+	processedEvent, err := v.getPullRequest(ctx, runevent)
 	if err != nil {
 		return nil, err
 	}
 
+	repo, err := MatchEventURLRepo(ctx, v.Run, processedEvent, "")
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("no repository found matching URL: %s", processedEvent.URL)
+	}
+
+	gitOpsCommentPrefix := provider.GetGitOpsCommentPrefix(repo)
+
+	opscomments.SetEventTypeAndTargetPR(runevent, event.GetComment().GetBody(), gitOpsCommentPrefix)
+
 	commentBody := event.GetComment().GetBody()
-	if opscomments.IsOkToTestComment(commentBody) && v.pacInfo.RequireOkToTestSHA {
-		shaFromCommentRaw := opscomments.GetSHAFromOkToTestComment(commentBody)
+	if opscomments.IsOkToTestComment(commentBody, gitOpsCommentPrefix) && v.pacInfo.RequireOkToTestSHA {
+		shaFromCommentRaw := opscomments.GetSHAFromOkToTestComment(commentBody, gitOpsCommentPrefix)
 		if shaFromCommentRaw == "" {
 			v.Logger.Errorf(errSHANotProvided)
-			if err := v.CreateComment(ctx, runevent, fmt.Sprintf(errSHANotProvidedComment, pr.SHA), ""); err != nil {
+			if err := v.CreateComment(ctx, runevent, fmt.Sprintf(errSHANotProvidedComment, processedEvent.SHA), ""); err != nil {
 				v.Logger.Errorf("failed to create comment: %v", err)
 			}
 			return info.NewEvent(), errors.New(errSHANotProvided)
 		}
 		shaFromComment := strings.ToLower(shaFromCommentRaw)
-		prSHALower := strings.ToLower(pr.SHA)
+		prSHALower := strings.ToLower(processedEvent.SHA)
 		shaLen := len(shaFromCommentRaw)
 
 		// Validate SHA-1 based on length:
@@ -583,27 +596,27 @@ func (v *Provider) handleIssueCommentEvent(ctx context.Context, event *github.Is
 		if shaLen < 40 {
 			// Short SHA: verify it's a valid prefix
 			if !strings.HasPrefix(prSHALower, shaFromComment) {
-				msg := fmt.Sprintf(errSHAPrefixMismatch, shaFromCommentRaw, pr.SHA)
+				msg := fmt.Sprintf(errSHAPrefixMismatch, shaFromCommentRaw, processedEvent.SHA)
 				v.Logger.Errorf(msg)
 				if err := v.CreateComment(ctx, runevent, msg, ""); err != nil {
 					v.Logger.Errorf("failed to create comment: %v", err)
 				}
-				return info.NewEvent(), fmt.Errorf(errSHAPrefixMismatch, shaFromCommentRaw, pr.SHA)
+				return info.NewEvent(), fmt.Errorf(errSHAPrefixMismatch, shaFromCommentRaw, processedEvent.SHA)
 			}
 		} else if shaLen == 40 {
 			// Full SHA-1: verify exact match
 			if prSHALower != shaFromComment {
-				msg := fmt.Sprintf(errSHANotMatch, shaFromCommentRaw, pr.SHA)
+				msg := fmt.Sprintf(errSHANotMatch, shaFromCommentRaw, processedEvent.SHA)
 				v.Logger.Errorf(msg)
 				if err := v.CreateComment(ctx, runevent, msg, ""); err != nil {
 					v.Logger.Errorf("failed to create comment: %v", err)
 				}
-				return info.NewEvent(), fmt.Errorf(errSHANotMatch, shaFromCommentRaw, pr.SHA)
+				return info.NewEvent(), fmt.Errorf(errSHANotMatch, shaFromCommentRaw, processedEvent.SHA)
 			}
 		}
 	}
 
-	return pr, nil
+	return processedEvent, nil
 }
 
 func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.CommitCommentEvent) (*info.Event, error) {
@@ -621,8 +634,19 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	runevent.HeadURL = runevent.URL
 	runevent.BaseURL = runevent.HeadURL
 	runevent.TriggerTarget = triggertype.Push
-	opscomments.SetEventTypeAndTargetPR(runevent, event.GetComment().GetBody())
 	v.userType = event.GetSender().GetType()
+
+	repo, err := MatchEventURLRepo(ctx, v.Run, runevent, "")
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("no repository found matching URL: %s", runevent.URL)
+	}
+
+	gitOpsCommentPrefix := provider.GetGitOpsCommentPrefix(repo)
+
+	opscomments.SetEventTypeAndTargetPR(runevent, event.GetComment().GetBody(), gitOpsCommentPrefix)
 
 	defaultBranch := event.GetRepo().GetDefaultBranch()
 	// Set Event.Repository.DefaultBranch as default branch to runevent.HeadBranch, runevent.BaseBranch
@@ -656,17 +680,17 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	)
 
 	// If it is a /test or /retest comment with pipelinerun name figure out the pipelinerun name
-	if provider.IsTestRetestComment(event.GetComment().GetBody()) {
-		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromTestComment(event.GetComment().GetBody())
+	if opscomments.IsTestRetestComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
+		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromTestComment(event.GetComment().GetBody(), gitOpsCommentPrefix)
 		if err != nil {
 			return runevent, err
 		}
 		runevent.TargetTestPipelineRun = prName
 	}
 	// Check for /cancel comment
-	if provider.IsCancelComment(event.GetComment().GetBody()) {
+	if opscomments.IsCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
 		action = "cancellation"
-		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromCancelComment(event.GetComment().GetBody())
+		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix)
 		if err != nil {
 			return runevent, err
 		}
@@ -720,7 +744,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 
 	// Check if the specified branch contains the commit
 	if err = v.isHeadCommitOfBranch(ctx, runevent, branchName); err != nil {
-		if provider.IsCancelComment(event.GetComment().GetBody()) {
+		if opscomments.IsCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
 			runevent.CancelPipelineRuns = false
 		}
 		return runevent, err
@@ -731,4 +755,21 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 
 	v.Logger.Infof("github commit_comment: pipelinerun %s on %s/%s#%s has been requested", action, runevent.Organization, runevent.Repository, runevent.SHA)
 	return runevent, nil
+}
+
+func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*v1alpha1.Repository, error) {
+	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
+		ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	sort.RepositorySortByCreationOldestTime(repositories.Items)
+	for _, repo := range repositories.Items {
+		repo.Spec.URL = strings.TrimSuffix(repo.Spec.URL, "/")
+		if repo.Spec.URL == event.URL {
+			return &repo, nil
+		}
+	}
+
+	return nil, nil
 }

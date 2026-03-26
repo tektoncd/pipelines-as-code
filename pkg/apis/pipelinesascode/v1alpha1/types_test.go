@@ -58,6 +58,7 @@ func TestMergeSpecs(t *testing.T) {
 					Policy: &Policy{
 						OkToTest: []string{"ok1", "ok2"},
 					},
+					GitOpsCommandPrefix: "pac",
 				}, // Initialize as needed
 				GitProvider:      gp, // Initialize as needed
 				Incomings:        incomings,
@@ -71,6 +72,7 @@ func TestMergeSpecs(t *testing.T) {
 					Policy: &Policy{
 						OkToTest: []string{"ok1", "ok2"},
 					},
+					GitOpsCommandPrefix: "pac",
 				},
 				Incomings:        incomings,
 				GitProvider:      gp,
@@ -87,6 +89,7 @@ func TestMergeSpecs(t *testing.T) {
 					Policy: &Policy{
 						OkToTest: []string{"ok1", "ok2"},
 					},
+					GitOpsCommandPrefix: "pac",
 				}, // Initialize as needed
 				GitProvider: &GitProvider{}, // Initialize as needed
 			},
@@ -110,6 +113,7 @@ func TestMergeSpecs(t *testing.T) {
 					Policy: &Policy{
 						OkToTest: []string{"ok1", "ok2"},
 					},
+					GitOpsCommandPrefix: "pac",
 				},
 				Incomings:        incomings,
 				GitProvider:      gp,

@@ -133,11 +133,9 @@ func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
 	assert.NilError(t, err)
 	g.Logger = runcnx.Clients.Log
 	g.Cnx = runcnx
-	preSettings := g.Options.Settings
+	settings := g.Options.Settings
 	g.Options = opts
-	if preSettings.Github != nil {
-		g.Options.Settings = preSettings
-	}
+	g.Options.Settings = settings
 	g.Provider = ghcnx
 	g.TargetNamespace = targetNS
 	g.CommitTitle = fmt.Sprintf("Testing %s with Github APPS integration on %s", g.Label, targetNS)
@@ -168,7 +166,7 @@ func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
 		}
 	}
 
-	if g.Options.Settings.Github != nil {
+	if g.Options.Settings != nil {
 		opts.Settings = g.Options.Settings
 	}
 	err = CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)
@@ -265,9 +263,7 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 	g.Cnx = runcnx
 	preSettings := g.Options.Settings
 	g.Options = opts
-	if preSettings.Github != nil {
-		g.Options.Settings = preSettings
-	}
+	g.Options.Settings = preSettings
 	g.Provider = ghcnx
 	g.TargetNamespace = targetNS
 	g.PRNumber = -1
@@ -306,7 +302,7 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 		}
 	}
 
-	if g.Options.Settings.Github != nil {
+	if g.Options.Settings != nil && g.Options.Settings.Github != nil {
 		opts.Settings = g.Options.Settings
 	}
 	err = CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)

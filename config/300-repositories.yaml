@@ -507,6 +507,11 @@ spec:
                             - update
                           type: string
                       type: object
+                    gitops_command_prefix:
+                      description: |-
+                        GitOpsCommandPrefix configures the prefix for the GitOps command.
+                        This is used to identify the GitOps command in the PipelineRun.
+                      type: string
                     pipelinerun_provenance:
                       description: |-
                         PipelineRunProvenance configures how PipelineRun definitions are fetched.

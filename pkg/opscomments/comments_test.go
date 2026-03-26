@@ -17,6 +17,12 @@ import (
 	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
 )
 
+const (
+	testComment   = "/test"
+	retestComment = "/retest"
+	cancelComment = "/cancel"
+)
+
 func TestLabelsBackwardCompat(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -171,6 +177,7 @@ func TestCommentEventTypeTest(t *testing.T) {
 	tests := []struct {
 		name    string
 		comment string
+		prefix  string
 		want    EventType
 	}{
 		{
@@ -213,11 +220,50 @@ func TestCommentEventTypeTest(t *testing.T) {
 			comment: "/cancel prname",
 			want:    CancelCommentSingleEventType,
 		},
+		{
+			name:    "test all with prefix",
+			comment: "/pac test",
+			prefix:  "/pac ",
+			want:    TestAllCommentEventType,
+		},
+		{
+			name:    "test single with prefix",
+			comment: "/pac test prname",
+			prefix:  "/pac ",
+			want:    TestSingleCommentEventType,
+		},
+		{
+			name:    "retest all with prefix",
+			comment: "/pac retest",
+			prefix:  "/pac ",
+			want:    RetestAllCommentEventType,
+		},
+		{
+			name:    "retest single with prefix",
+			comment: "/pac retest prname",
+			prefix:  "/pac ",
+			want:    RetestSingleCommentEventType,
+		},
+		{
+			name:    "cancel all with prefix",
+			comment: "/pac cancel",
+			prefix:  "/pac ",
+			want:    CancelCommentAllEventType,
+		},
+		{
+			name:    "cancel single with prefix",
+			comment: "/pac cancel prname",
+			prefix:  "/pac ",
+			want:    CancelCommentSingleEventType,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CommentEventType(tt.comment)
+			if tt.prefix == "" {
+				tt.prefix = "/"
+			}
+			got := CommentEventType(tt.comment, tt.prefix)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -230,7 +276,7 @@ func TestSetEventTypeTestPipelineRun(t *testing.T) {
 		wantType     string
 		wantTestPr   string
 		wantCancelPr string
-		wantCancel   bool
+		prefix       string
 	}{
 		{
 			name:     "no event type",
@@ -254,20 +300,60 @@ func TestSetEventTypeTestPipelineRun(t *testing.T) {
 			comment:      "/cancel prname",
 			wantType:     CancelCommentSingleEventType.String(),
 			wantCancelPr: "prname",
-			wantCancel:   true,
 		},
 		{
-			name:       "cancel all pr",
-			comment:    "/cancel",
-			wantType:   CancelCommentAllEventType.String(),
-			wantCancel: true,
+			name:     "cancel all pr",
+			comment:  "/cancel",
+			wantType: CancelCommentAllEventType.String(),
+		},
+		{
+			name:       "test single pr with prefix",
+			comment:    "/pac test prname",
+			wantType:   TestSingleCommentEventType.String(),
+			wantTestPr: "prname",
+			prefix:     "/pac ",
+		},
+		{
+			name:     "test all with prefix",
+			comment:  "/pac test",
+			wantType: TestAllCommentEventType.String(),
+			prefix:   "/pac ",
+		},
+		{
+			name:       "retest single pr with prefix",
+			comment:    "/pac retest prname",
+			wantType:   RetestSingleCommentEventType.String(),
+			wantTestPr: "prname",
+			prefix:     "/pac ",
+		},
+		{
+			name:     "retest all with prefix",
+			comment:  "/pac retest",
+			wantType: RetestAllCommentEventType.String(),
+			prefix:   "/pac ",
+		},
+		{
+			name:         "cancel single pr with prefix",
+			comment:      "/pac cancel prname",
+			wantType:     CancelCommentSingleEventType.String(),
+			wantCancelPr: "prname",
+			prefix:       "/pac ",
+		},
+		{
+			name:     "cancel all with prefix",
+			comment:  "/pac cancel",
+			wantType: CancelCommentAllEventType.String(),
+			prefix:   "/pac ",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.prefix == "" {
+				tt.prefix = "/"
+			}
 			event := &info.Event{}
-			SetEventTypeAndTargetPR(event, tt.comment)
+			SetEventTypeAndTargetPR(event, tt.comment, tt.prefix)
 			assert.Equal(t, tt.wantType, event.EventType)
 			assert.Equal(t, tt.wantTestPr, event.TargetTestPipelineRun)
 		})
@@ -278,6 +364,7 @@ func TestIsOkToTestComment(t *testing.T) {
 	tests := []struct {
 		name    string
 		comment string
+		prefix  string
 		want    bool
 	}{
 		{
@@ -310,11 +397,20 @@ func TestIsOkToTestComment(t *testing.T) {
 			comment: "/ok-to-test 1234567",
 			want:    true,
 		},
+		{
+			name:    "valid comment with sha with prefix",
+			comment: "/pac ok-to-test 1234567",
+			prefix:  "/pac ",
+			want:    true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsOkToTestComment(tt.comment)
+			if tt.prefix == "" {
+				tt.prefix = "/"
+			}
+			got := IsOkToTestComment(tt.comment, tt.prefix)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -324,6 +420,7 @@ func TestIsTestRetestComment(t *testing.T) {
 	tests := []struct {
 		name    string
 		comment string
+		prefix  string
 		want    EventType
 	}{
 		{
@@ -386,295 +483,27 @@ func TestIsTestRetestComment(t *testing.T) {
 			comment: "/ok",
 			want:    NoOpsCommentEventType,
 		},
+		{
+			name:    "valid retest with prefix",
+			comment: "/pac retest",
+			prefix:  "/pac ",
+			want:    RetestAllCommentEventType,
+		},
+		{
+			name:    "valid test with prefix",
+			comment: "/pac test",
+			prefix:  "/pac ",
+			want:    TestAllCommentEventType,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CommentEventType(tt.comment)
+			if tt.prefix == "" {
+				tt.prefix = "/"
+			}
+			got := CommentEventType(tt.comment, tt.prefix)
 			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestGetPipelineRunFromComment(t *testing.T) {
-	tests := []struct {
-		name    string
-		comment string
-		want    string
-	}{
-		{
-			name:    "test no pipelinerun",
-			comment: "/test",
-			want:    "",
-		},
-		{
-			name:    "retest no pipelinerun",
-			comment: "/retest",
-			want:    "",
-		},
-		{
-			name:    "test a pipeline",
-			comment: "/test abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before test command",
-			comment: "abc \n /test abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string after test command",
-			comment: "/test abc-01-pr \n abc",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before and after test command",
-			comment: "before \n /test abc-01-pr \n after",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "retest a pipeline",
-			comment: "/retest abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before retest command",
-			comment: "abc \n /retest abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string after retest command",
-			comment: "/retest abc-01-pr \n abc",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before and after retest command",
-			comment: "before \n /retest abc-01-pr \n after",
-			want:    "abc-01-pr",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetPipelineRunFromTestComment(tt.comment)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestGetPipelineRunFromCancelComment(t *testing.T) {
-	tests := []struct {
-		name    string
-		comment string
-		want    string
-	}{
-		{
-			name:    "cancel all",
-			comment: "/cancel",
-			want:    "",
-		},
-		{
-			name:    "cancel a pipeline",
-			comment: "/cancel abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before cancel command",
-			comment: "abc \n /cancel abc-01-pr",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string after cancel command",
-			comment: "/cancel abc-01-pr \n abc",
-			want:    "abc-01-pr",
-		},
-		{
-			name:    "string before and after cancel command",
-			comment: "before \n /cancel abc-01-pr \n after",
-			want:    "abc-01-pr",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetPipelineRunFromCancelComment(tt.comment)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestGetPipelineRunAndBranchNameFromTestComment(t *testing.T) {
-	tests := []struct {
-		name       string
-		comment    string
-		branchName string
-		prName     string
-		wantError  bool
-	}{
-		{
-			name:       "retest all on test branch",
-			comment:    "/retest branch:test",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "test a pipeline on test branch",
-			comment:    "/test abc-01-pr branch:test",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for test command before branch name test",
-			comment:    "/test abc-01-pr abc \n branch:test",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for retest command after branch name test",
-			comment:    "/retest abc-01-pr branch:test \n abc",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for test command before and after branch name test",
-			comment:    "/test abc-01-pr \n before branch:test \n after",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:      "different word other than branch for retest command",
-			comment:   "/retest invalidname:nightly",
-			wantError: true,
-		},
-		{
-			name:      "test all",
-			comment:   "/test",
-			wantError: false,
-		},
-		{
-			name:      "test a pipeline",
-			comment:   "/test abc-01-pr",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "string before retest command",
-			comment:   "abc \n /retest abc-01-pr",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "string after retest command",
-			comment:   "/retest abc-01-pr \n abc",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "string before and after test command",
-			comment:   "before \n /test abc-01-pr \n after",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			prName, branchName, err := GetPipelineRunAndBranchNameFromTestComment(tt.comment)
-			assert.Equal(t, tt.wantError, err != nil)
-			assert.Equal(t, tt.branchName, branchName)
-			assert.Equal(t, tt.prName, prName)
-		})
-	}
-}
-
-func TestGetPipelineRunAndBranchNameFromCancelComment(t *testing.T) {
-	tests := []struct {
-		name       string
-		comment    string
-		branchName string
-		prName     string
-		wantError  bool
-	}{
-		{
-			name:      "cancel all pipeline",
-			comment:   "/cancel",
-			wantError: false,
-		},
-		{
-			name:      "cancel a particular pipeline",
-			comment:   "/cancel abc-01-pr",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "add string before cancel command",
-			comment:   "abc \n /cancel abc-01-pr",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "add string after cancel command",
-			comment:   "/cancel abc-01-pr \n abc",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:      "add string before and after cancel command",
-			comment:   "before \n /cancel abc-01-pr \n after",
-			prName:    "abc-01-pr",
-			wantError: false,
-		},
-		{
-			name:       "cancel all on test branch",
-			comment:    "/cancel branch:test",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "cancel a pipeline on test branch",
-			comment:    "/cancel abc-01-pr branch:test",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for cancel command before branch name test",
-			comment:    "/cancel abc-01-pr abc \n branch:test",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for cancel command after branch name test",
-			comment:    "/cancel abc-01-pr branch:test \n abc",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:       "string for cancel command before and after branch name test",
-			comment:    "/cancel abc-01-pr \n before branch:test \n after",
-			prName:     "abc-01-pr",
-			branchName: "test",
-			wantError:  false,
-		},
-		{
-			name:      "different word other than branch for cancel command",
-			comment:   "/cancel invalidname:nightly",
-			wantError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			prName, branchName, err := GetPipelineRunAndBranchNameFromCancelComment(tt.comment)
-			assert.Equal(t, tt.wantError, err != nil)
-			assert.Equal(t, tt.branchName, branchName)
-			assert.Equal(t, tt.prName, prName)
 		})
 	}
 }
@@ -683,6 +512,7 @@ func TestGetSHAFromOkToTestComment(t *testing.T) {
 	tests := []struct {
 		name    string
 		comment string
+		prefix  string
 		want    string
 	}{
 		{
@@ -705,10 +535,25 @@ func TestGetSHAFromOkToTestComment(t *testing.T) {
 			comment: "lgtm\n/ok-to-test 1234567\napproved",
 			want:    "1234567",
 		},
+		{
+			name:    "no sha with prefix",
+			comment: "/pac ok-to-test",
+			prefix:  "/pac ",
+			want:    "",
+		},
+		{
+			name:    "sha with prefix",
+			comment: "/pac ok-to-test 1234567",
+			prefix:  "/pac ",
+			want:    "1234567",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetSHAFromOkToTestComment(tt.comment)
+			if tt.prefix == "" {
+				tt.prefix = "/"
+			}
+			got := GetSHAFromOkToTestComment(tt.comment, tt.prefix)
 			assert.Equal(t, tt.want, got)
 		})
 	}

@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -73,6 +74,10 @@ var samplePRevent = github.PullRequestEvent{
 var samplePR = github.PullRequest{
 	Number: github.Ptr(54321),
 	Head: &github.PullRequestBranch{
+		SHA:  github.Ptr("samplePRsha"),
+		Repo: sampleRepo,
+	},
+	Base: &github.PullRequestBranch{
 		SHA:  github.Ptr("samplePRsha"),
 		Repo: sampleRepo,
 	},
@@ -412,6 +417,8 @@ func TestParsePayLoad(t *testing.T) {
 		isMergeCommit              bool
 		skipPushEventForPRCommits  bool
 		objectType                 string
+		gitopscommentprefix        string
+		wantRepoCRError            bool
 	}{
 		{
 			name:          "bad/unknown event",
@@ -453,14 +460,14 @@ func TestParsePayLoad(t *testing.T) {
 			wantErrString:      "no github client has been initialized",
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
-			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created")},
+			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Repo: sampleRepo},
 		},
 		{
 			name:               "bad/issue comment not coming from pull request",
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
 			githubClient:       true,
-			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Issue: &github.Issue{}},
+			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Issue: &github.Issue{}, Repo: sampleRepo},
 			wantErrString:      "issue comment is not coming from a pull_request",
 		},
 		{
@@ -475,6 +482,7 @@ func TestParsePayLoad(t *testing.T) {
 						HTMLURL: github.Ptr("/bad"),
 					},
 				},
+				Repo: sampleRepo,
 			},
 			wantErrString: "bad pull request number",
 		},
@@ -646,6 +654,72 @@ func TestParsePayLoad(t *testing.T) {
 			targetPipelinerun: "dummy",
 		},
 		{
+			name:          "good/issue comment for retest with prefix",
+			eventType:     "issue_comment",
+			triggerTarget: triggertype.PullRequest.String(),
+			githubClient:  true,
+			payloadEventStruct: github.IssueCommentEvent{
+				Action: github.Ptr("created"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						HTMLURL: github.Ptr("/777"),
+					},
+				},
+				Repo: sampleRepo,
+				Comment: &github.IssueComment{
+					Body: github.Ptr("/pac retest dummy"),
+				},
+			},
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			targetPipelinerun:   "dummy",
+			gitopscommentprefix: "pac",
+		},
+		{
+			name:          "good/issue comment for test with prefix",
+			eventType:     "issue_comment",
+			triggerTarget: triggertype.PullRequest.String(),
+			githubClient:  true,
+			payloadEventStruct: github.IssueCommentEvent{
+				Action: github.Ptr("created"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						HTMLURL: github.Ptr("/777"),
+					},
+				},
+				Repo: sampleRepo,
+				Comment: &github.IssueComment{
+					Body: github.Ptr("/pac test dummy"),
+				},
+			},
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			targetPipelinerun:   "dummy",
+			gitopscommentprefix: "pac",
+		},
+		{
+			name:          "good/issue comment for cancel with prefix",
+			eventType:     "issue_comment",
+			triggerTarget: triggertype.PullRequest.String(),
+			githubClient:  true,
+			payloadEventStruct: github.IssueCommentEvent{
+				Action: github.Ptr("created"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						HTMLURL: github.Ptr("/777"),
+					},
+				},
+				Repo: sampleRepo,
+				Comment: &github.IssueComment{
+					Body: github.Ptr("/pac cancel dummy"),
+				},
+			},
+			muxReplies:              map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:                  "samplePRsha",
+			targetCancelPipelinerun: "dummy",
+			gitopscommentprefix:     "pac",
+		},
+		{
 			name:          "good/issue comment for cancel all",
 			eventType:     "issue_comment",
 			triggerTarget: triggertype.PullRequest.String(),
@@ -691,7 +765,7 @@ func TestParsePayLoad(t *testing.T) {
 			wantErrString:      "no github client has been initialized",
 			eventType:          "commit_comment",
 			triggerTarget:      "push",
-			payloadEventStruct: github.CommitCommentEvent{Action: github.Ptr("created")},
+			payloadEventStruct: github.CommitCommentEvent{Action: github.Ptr("created"), Repo: sampleRepo},
 		},
 		{
 			name:               "bad/commit comment for event has no repository reference",
@@ -737,6 +811,83 @@ func TestParsePayLoad(t *testing.T) {
 			shaRet:            "samplePRsha",
 			targetPipelinerun: "dummy",
 			wantedBranchName:  "main",
+		},
+		{
+			name:          "good/commit comment for retest a pr with prefix",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: github.Ptr("samplePRsha"),
+					HTMLURL:  github.Ptr("/777"),
+					Body:     github.Ptr("/pac retest dummy"),
+				},
+			},
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			targetPipelinerun:   "dummy",
+			wantedBranchName:    "main",
+			gitopscommentprefix: "pac",
+		},
+		{
+			name:          "good/commit comment for test a pr with prefix",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: github.Ptr("samplePRsha"),
+					HTMLURL:  github.Ptr("/777"),
+					Body:     github.Ptr("/pac test dummy"),
+				},
+			},
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			targetPipelinerun:   "dummy",
+			wantedBranchName:    "main",
+			gitopscommentprefix: "pac",
+		},
+		{
+			name:          "good/commit comment for cancel a pr with prefix",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: github.Ptr("samplePRsha"),
+					HTMLURL:  github.Ptr("/777"),
+					Body:     github.Ptr("/pac cancel dummy"),
+				},
+			},
+			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:                     "samplePRsha",
+			targetCancelPipelinerun:    "dummy",
+			isCancelPipelineRunEnabled: true,
+			wantedBranchName:           "main",
+			gitopscommentprefix:        "pac",
+		},
+		{
+			name:          "bad/no repository cr matched",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: github.Ptr("samplePRsha"),
+					HTMLURL:  github.Ptr("/777"),
+					Body:     github.Ptr("/pac test dummy"),
+				},
+			},
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			gitopscommentprefix: "pac",
+			wantRepoCRError:     true,
+			wantErrString:       "no repository found matching URL: https://github.com/owner/repo",
 		},
 		{
 			name:          "good/commit comment for retest all",
@@ -1063,6 +1214,35 @@ func TestParsePayLoad(t *testing.T) {
 				ghClient = nil
 			}
 
+			tdata := testclient.Data{}
+			repo := v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "reponame",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://github.com/owner/repo",
+				},
+			}
+			if !tt.wantRepoCRError {
+				tdata.Repositories = []*v1alpha1.Repository{&repo}
+			}
+
+			if len(tdata.Repositories) > 0 && tt.gitopscommentprefix != "" {
+				tdata.Repositories[0].Spec.Settings = &v1alpha1.Settings{
+					GitOpsCommandPrefix: tt.gitopscommentprefix,
+				}
+			}
+
+			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+			logger, _ := logger.GetLogger()
+			run := &params.Run{
+				Clients: clients.Clients{
+					PipelineAsCode: stdata.PipelineAsCode,
+					Log:            logger,
+					Kube:           stdata.Kube,
+				},
+			}
+
 			for key, value := range tt.muxReplies {
 				mux.HandleFunc(key, func(rw http.ResponseWriter, _ *http.Request) {
 					bjeez, _ := json.Marshal(value)
@@ -1139,7 +1319,6 @@ func TestParsePayLoad(t *testing.T) {
 				})
 			}
 
-			logger, _ := logger.GetLogger()
 			gprovider := Provider{
 				ghClient: ghClient,
 				Logger:   logger,
@@ -1150,7 +1329,6 @@ func TestParsePayLoad(t *testing.T) {
 			request := &http.Request{Header: map[string][]string{}}
 			request.Header.Set("X-GitHub-Event", tt.eventType)
 
-			run := &params.Run{}
 			bjeez, _ := json.Marshal(tt.payloadEventStruct)
 			jeez := string(bjeez)
 			if tt.jeez != "" {

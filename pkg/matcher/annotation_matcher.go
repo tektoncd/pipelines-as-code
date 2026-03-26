@@ -2,7 +2,6 @@ package matcher
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -37,9 +36,20 @@ const (
 	maxCommentLogLength = 160
 )
 
-// ErrNoFailedPipelineToRetest is returned when /retest or /ok-to-test is used
-// but all matching pipelines have already succeeded for this commit.
-var ErrNoFailedPipelineToRetest = errors.New("All PipelineRuns for this commit have already succeeded. Use `/retest <pipeline-name>` to re-run a specific pipeline or `/test` to re-run all pipelines.") // nolint:revive,staticcheck
+// NoFailedPipelineToRetestError is an error type returned when /retest or
+// /ok-to-test is used but all matching pipelines have already succeeded for
+// this commit. The underlying string value is the gitops comment prefix used
+// to construct the user-facing error message with the correct command syntax.
+type NoFailedPipelineToRetestError string
+
+func (e NoFailedPipelineToRetestError) Error() string {
+	return fmt.Sprintf("All PipelineRuns for this commit have already succeeded. Use `%sretest <pipeline-name>` to re-run a specific pipeline or `%stest` to re-run all pipelines.", string(e), string(e))
+}
+
+func (e NoFailedPipelineToRetestError) Is(target error) bool {
+	_, ok := target.(NoFailedPipelineToRetestError)
+	return ok
+}
 
 // prunBranch is value from annotations and baseBranch is event.Base value from event.
 func branchMatch(prunBranch, baseBranch string) bool {
@@ -426,7 +436,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			logger.Debugf("MatchPipelinerunByAnnotation: filtering successful templates for event_type=%s", event.EventType)
 			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, vcx, matchedPRs)
 			if len(filtered) == 0 {
-				return nil, ErrNoFailedPipelineToRetest
+				return nil, NoFailedPipelineToRetestError(provider.GetGitOpsCommentPrefix(repo))
 			}
 			return filtered, nil
 		}

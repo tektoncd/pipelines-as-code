@@ -149,7 +149,7 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		processedEvent.BaseURL = gitEvent.MergeRequest.Target.WebURL
 		processedEvent.HeadURL = gitEvent.MergeRequest.Source.WebURL
 
-		opscomments.SetEventTypeAndTargetPR(processedEvent, gitEvent.ObjectAttributes.Note)
+		opscomments.SetEventTypeAndTargetPR(processedEvent, gitEvent.ObjectAttributes.Note, "/")
 		v.pathWithNamespace = gitEvent.Project.PathWithNamespace
 		processedEvent.Organization, processedEvent.Repository = getOrgRepo(v.pathWithNamespace)
 		processedEvent.TriggerTarget = triggertype.PullRequest
@@ -246,7 +246,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *gitlab.C
 	processedEvent.HeadURL = processedEvent.URL
 	processedEvent.BaseURL = processedEvent.URL
 	processedEvent.TriggerTarget = triggertype.Push
-	opscomments.SetEventTypeAndTargetPR(processedEvent, event.ObjectAttributes.Note)
+	opscomments.SetEventTypeAndTargetPR(processedEvent, event.ObjectAttributes.Note, "/")
 	// Set Head and Base branch to default_branch of the repo as this comment is made on
 	// a pushed commit.
 	defaultBranch := event.Project.DefaultBranch
@@ -269,7 +269,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *gitlab.C
 
 	// get PipelineRun name from comment if it does contain e.g. `/test pr7`
 	if provider.IsTestRetestComment(event.ObjectAttributes.Note) {
-		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromTestComment(event.ObjectAttributes.Note)
+		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromTestComment(event.ObjectAttributes.Note, "/")
 		if err != nil {
 			return processedEvent, err
 		}
@@ -278,7 +278,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *gitlab.C
 
 	if provider.IsCancelComment(event.ObjectAttributes.Note) {
 		action = "cancellation"
-		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromCancelComment(event.ObjectAttributes.Note)
+		prName, branchName, tagName, err = provider.GetPipelineRunAndBranchOrTagNameFromCancelComment(event.ObjectAttributes.Note, "/")
 		if err != nil {
 			return processedEvent, err
 		}
