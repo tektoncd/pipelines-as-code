@@ -17,7 +17,7 @@ import (
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	testprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"

@@ -111,7 +111,7 @@ func MuxListDirFiles(t *testing.T, mux *http.ServeMux, event *info.Event, dirs m
 	}
 
 	for key, value := range dirs {
-		urlp := "/repositories/" + event.Organization + "/" + event.Repository + "/src/" + sha + "/" + key + "/"
+		urlp := "/repositories/" + event.Organization + "/" + event.Repository + "/src/" + sha + "/" + key
 		mux.HandleFunc(urlp, func(rw http.ResponseWriter, _ *http.Request) {
 			dircontents := map[string][]bitbucket.RepositoryFile{
 				"values": value,
