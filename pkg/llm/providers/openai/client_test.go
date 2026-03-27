@@ -580,7 +580,7 @@ func TestRequestMarshaling(t *testing.T) {
 			assert.Equal(t, reqBody.Model, "gpt-4")
 			assert.Equal(t, len(reqBody.Messages), 1)
 			assert.Equal(t, reqBody.Messages[0].Role, "user")
-			assert.Equal(t, reqBody.MaxTokens, 100)
+			assert.Equal(t, reqBody.MaxCompletionTokens, 100)
 
 			resp := openaiResponse{
 				Choices: []openaiChoice{

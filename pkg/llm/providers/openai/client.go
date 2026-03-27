@@ -99,8 +99,8 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 	}
 
 	apiRequest := &openaiRequest{
-		Model:     c.config.Model,
-		MaxTokens: request.MaxTokens,
+		Model:               c.config.Model,
+		MaxCompletionTokens: request.MaxTokens,
 		Messages: []openaiMessage{
 			{
 				Role:    "user",
@@ -231,9 +231,9 @@ func (c *Client) ValidateConfig() error {
 // OpenAI API request/response structures
 
 type openaiRequest struct {
-	Model     string          `json:"model"`
-	Messages  []openaiMessage `json:"messages"`
-	MaxTokens int             `json:"max_tokens,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []openaiMessage `json:"messages"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
 }
 
 type openaiMessage struct {
