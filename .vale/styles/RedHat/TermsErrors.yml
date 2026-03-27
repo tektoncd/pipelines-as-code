@@ -20,8 +20,8 @@ swap:
   "(?<!Mozilla )Thunderbird": Mozilla Thunderbird
   "(?<!pseudo-)ops": operations
   "(?<!self-)hosted engine|hosted-engine": self-hosted engine
-  "bare metal( clusters?| compute| configuration| controls?| environments?| equipment| events?| hardware| hosts?| infrastructure| installations?| installers?| instances?| machines?| media| nodes?| provisioning| servers?| workers?| networks?)": bare-metal$1
-  "bare-metal(?! clusters?| compute| configuration| controls?| environments?| equipment| events?| hardware| hosts?| infrastructure| installations?| installers?| instances?| machines?| media| nodes?| provisioning| servers?| workers?)": bare metal
+  "bare metal( clusters?| compute| configuration| controls?| environments?| equipment| events?| hardware| hosts?| infrastructure| installations?| installers?| instances?| machines?| media| nodes?| provisioning| servers?| systems?| workers?| networks?)": bare-metal$1
+  "bare-metal(?! clusters?| compute| configuration| controls?| environments?| equipment| events?| hardware| hosts?| infrastructure| installations?| installers?| instances?| machines?| media| nodes?| provisioning| servers?| systems?| workers?)": bare metal
   "[bB]asic [aA]uth": Basic HTTP authentication|Basic authentication
   "a lot(?: of)?": many|much
   "best of breed|best-of-breed": best in class
@@ -436,7 +436,7 @@ swap:
   virtual diskette drive: virtual floppy drive
   virtual diskette(?! drive): virtual floppy disk
   virtual DOS machine: DOS session
-  versus: compared to
+  vs: versus|compared to
   virtual hard disk: virtual hard drive
   virtual-equals-real: nonpageable
   virtual-equals-virtual: pageable

@@ -57,7 +57,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: unittest
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
@@ -94,7 +94,7 @@ spec:
                 exit "${test_status}"
             - name: codecov
               # Has everything we need in there and we already fetched it!
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: CODECOV_TOKEN
@@ -112,7 +112,7 @@ spec:
                 chmod +x ./codecov
                 ./codecov -C {{revision}} -v
             - name: upload-release
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: HUB_TOKEN

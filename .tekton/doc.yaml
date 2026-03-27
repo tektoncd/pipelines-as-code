@@ -63,7 +63,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: hugo-build
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               script: |
                 #!/usr/bin/env bash

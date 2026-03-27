@@ -14,7 +14,7 @@ spec:
         taskSpec:
           stepsos:
             - name: step
-              image: registry.access.redhat.com/ubi9/ubi-micro
+              image: registry.access.redhat.com/ubi10/ubi-micro
               script: |
                 echo "HELLOMOTO"
                 exit 0

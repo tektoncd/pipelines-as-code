@@ -1,0 +1,10 @@
+---
+extends: existence
+level: error
+ignorecase: true
+scope: raw
+action:
+  name: remove
+message: "Do not publish URLs that contain session identifiers. Exposed session IDs enable session hijacking and unauthorized account access."
+tokens:
+  - '[&?](sessionId|seSessionId)=[0-9a-zA-Z-]{8,}'
