@@ -237,7 +237,7 @@ func (g *PRTest) outputTestResultToFile(outputDir string, apiCalls []string, las
 	timestamp := time.Now().Format("2006-01-02T15-04-05")
 	sanitizedTestName := sanitizeFilename(g.Label)
 	filename := fmt.Sprintf("%s_%s.json", timestamp, sanitizedTestName)
-	filepath := filepath.Join(outputDir, filename)
+	filePath := filepath.Join(outputDir, filename)
 
 	// Write JSON file
 	jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -246,10 +246,10 @@ func (g *PRTest) outputTestResultToFile(outputDir string, apiCalls []string, las
 		return
 	}
 
-	if err := os.WriteFile(filepath, jsonData, 0o600); err != nil {
-		g.Logger.Warnf("Failed to write test result to file %s: %v", filepath, err)
+	if err := os.WriteFile(filePath, jsonData, 0o600); err != nil {
+		g.Logger.Warnf("Failed to write test result to file %s: %v", filePath, err)
 		return
 	}
 
-	g.Logger.Infof("Test result written to: %s", filepath)
+	g.Logger.Infof("Test result written to: %s", filePath)
 }
