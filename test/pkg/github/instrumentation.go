@@ -41,7 +41,7 @@ type TestResult struct {
 
 // collectGitHubAPICalls collects GitHub API calls from the controller logs.
 // It retrieves logs from the controller pod, searches for the last OAuth2 initialization marker,
-// the Oauth2 marker shows even if the controller is not using github app, so
+// the OAuth2 marker shows even if the controller is not using github app, so
 // we can use it to find the start of the API calls.
 // TODO(chmouel): Fix Oauth2 marker to be more specific to GitHub App usage and
 // not github webhook. use another marker for github webhook.
