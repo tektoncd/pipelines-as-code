@@ -158,28 +158,6 @@ To clean up stale test projects (older than 7 days) left from previous runs:
 
 If you need to update the golden files in the end-to-end test, add the `-update` flag to the [go test](https://pkg.go.dev/cmd/go#hdr-Test_packages) command to refresh those files. First, run it if you expect the test output to change (or for a new test), then run it again without the flag to ensure everything is correct.
 
-## Running nightly tests
-
-Some tests are set as nightly which mean not run on every PR, because exposing rate limitation often.
-We run those as nightly via github action on kind.
-
-You can use `make test-e2e-nightly` if you want to run those manually as long
-as you have all the env variables set.
-
-If you are writing a test targeting a nightly test you need to check for the env variable:
-
-```go
-    if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-        t.Skip("Skipping test since only enabled for nightly")
-    }
-```
-
-and maybe add to the test-e2e-nightly Makefile target to the -run argument :
-
-```bash
--run '(TestGithub|TestOtherPrefixOfTest)'
-```
-
 ## Continuous Integration (CI) with GitHub Actions
 
 Our E2E tests are automatically run as part of our CI pipeline using GitHub Actions. This section explains how the CI process works, the components involved, and how to troubleshoot or extend it.
@@ -369,7 +347,6 @@ To add new provider tests:
 1. Create test files following the existing patterns
 2. Ensure proper naming convention to match the test category filters
 3. Update environment variables if needed
-4. For nightly-only tests, include the check for `NIGHTLY_E2E_TEST`
 
 For infrastructure changes:
 

@@ -57,20 +57,44 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: unittest
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
+                - name: TESTRR_URL
+                  value: "https://testrr.pipelinesascode.com"
+                - name: TESTRR_PROJECT
+                  value: "pipelinesascode"
+                - name: TESTRR_USERNAME
+                  value: "pac"
+                - name: TESTRR_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: testrr-secret
+                      key: password
+                      optional: true
+                - name: TESTRR_COMMIT_SHA
+                  value: "{{revision}}"
+                - name: TESTRR_BUILD_ID
+                  value: "$(context.pipelineRun.name)"
+                - name: TESTRR_RUN_LABEL
+                  value: "tekton-coverage-release"
               script: |
                 #!/usr/bin/env bash
-                make test \
-                    GO_TEST_FLAGS="-v -coverprofile=coverage.txt -covermode=atomic"
+                set -euo pipefail
+                test_status=0
+                make test GO_TEST_FLAGS="-json -coverprofile=coverage.txt -covermode=atomic" \
+                  2>&1 | tee /tmp/testrr-coverage-go.json || test_status=$?
+                if ! ./hack/upload-testrr.sh /tmp/testrr-coverage-go.json; then
+                  echo "WARNING: testrr upload failed; continuing without failing Tekton"
+                fi
+                exit "${test_status}"
             - name: codecov
               # Has everything we need in there and we already fetched it!
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: CODECOV_TOKEN
@@ -88,7 +112,7 @@ spec:
                 chmod +x ./codecov
                 ./codecov -C {{revision}} -v
             - name: upload-release
-              image: docker.io/golang:1.25
+              image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
                 - name: HUB_TOKEN

@@ -85,6 +85,7 @@ func setupEnvVars(onGHE, viaDirectWebhook bool) (*envConfig, error) {
 			"TEST_GITHUB_SECOND_API_URL",
 			"TEST_GITHUB_SECOND_EL_URL",
 			"TEST_GITHUB_SECOND_WEBHOOK_TOKEN",
+			"TEST_GITHUB_SECOND_WEBHOOK_SECRET",
 		)
 		if err := setup.RequireEnvs(requiredEnvs...); err != nil {
 			return nil, err
@@ -104,6 +105,7 @@ func setupEnvVars(onGHE, viaDirectWebhook bool) (*envConfig, error) {
 			"TEST_GITHUB_SECOND_TOKEN",
 			"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP",
 			"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID",
+			"TEST_GITHUB_SECOND_WEBHOOK_SECRET",
 		)
 		if err := setup.RequireEnvs(requiredEnvs...); err != nil {
 			return nil, err

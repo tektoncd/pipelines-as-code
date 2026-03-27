@@ -46,6 +46,49 @@ This ensures the comment is correctly formatted when processed.
 
 For a practical example, see the [pac-boussole](https://github.com/openshift-pipelines/pac-boussole) project, which uses the `on-comment` annotation to create a PipelineRun experience similar to [Prow](https://docs.prow.k8s.io/).
 
+## GitOps Command Prefix
+
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="false" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
+
+You can configure a custom prefix for GitOps commands in the Repository CR. This allows you to use commands like `/pac test` instead of the standard `/test`. This is useful when both [prow](https://docs.prow.k8s.io/) CI and Pipelines-as-Code are configured on a Repository and making comments causes issues and confusion.
+
+Please note that custom GitOps commands are excluded from this prefix settings.
+
+To configure a custom GitOps command prefix, set the `gitops_command_prefix` field in your Repository CR's `settings` section:
+
+```yaml
+apiVersion: "pipelinesascode.tekton.dev/v1alpha1"
+kind: Repository
+metadata:
+  name: my-repository
+  namespace: pipelines-as-code
+spec:
+  url: "https://github.com/organization/repository"
+  settings:
+    gitops_command_prefix: "pac"
+```
+
+Note: Set the prefix as a plain word (e.g. `pac`). The Forward slash (`/`) is added automatically by Pipelines-as-Code.
+
+With this configuration, you can use the following prefixed commands:
+
+- `/pac test` - Trigger all matching PipelineRuns
+- `/pac test <pipelinerun-name>` - Trigger a specific PipelineRun
+- `/pac retest` - Retest failed PipelineRuns
+- `/pac retest <pipelinerun-name>` - Retest specific PipelineRun
+- `/pac cancel` - Cancel all running PipelineRuns
+- `/pac cancel <pipelinerun-name>` - Cancel Specific PipelineRun
+- `/pac ok-to-test` - Approve CI for external contributors
+- `/pac ok-to-test SHA` - Approve CI for external contributors for a specific SHA
+
+Example:
+
+```text
+/pac test
+```
+
+You can also configure GitOps command prefix in [Global Repository CR]({{< relref "/docs/operations/global-repository-settings" >}}) so that it will be applied to all Repository CRs those are not defining their own prefix.
+
 ## Cancelling a PipelineRun
 
 **What it does:** The `/cancel` command stops running PipelineRuns by commenting on the pull request.

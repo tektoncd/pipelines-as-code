@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
@@ -21,9 +21,6 @@ import (
 )
 
 func TestGithubGHEPullRequestOkToTest(t *testing.T) {
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 	ctx := context.TODO()
 	g := &tgithub.PRTest{
 		Label:     "Github OkToTest comment",

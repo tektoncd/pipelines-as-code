@@ -5,11 +5,10 @@ package test
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
@@ -21,9 +20,6 @@ import (
 // TestGithubGHEPullRequestGitopsCommentRetest will test the retest
 // functionality of a GitHub pull request.
 func TestGithubGHEPullRequestGitopsCommentRetest(t *testing.T) {
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 	ctx := context.Background()
 	g := &tgithub.PRTest{
 		Label:         "Github retest comment",

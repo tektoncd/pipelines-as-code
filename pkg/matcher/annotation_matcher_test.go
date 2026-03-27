@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -2282,7 +2282,12 @@ func TestMatchPipelinerunByAnnotation(t *testing.T) {
 			wantErrNoFailedPipelineToRetest: true,
 			repo: &v1alpha1.Repository{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
-				Spec:       v1alpha1.RepositorySpec{URL: "https://github.com/org/repo"},
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://github.com/org/repo",
+					Settings: &v1alpha1.Settings{
+						GitOpsCommandPrefix: "pac",
+					},
+				},
 			},
 			seedData: &testclient.Data{
 				PipelineRuns: []*tektonv1.PipelineRun{
@@ -2336,7 +2341,7 @@ func TestMatchPipelinerunByAnnotation(t *testing.T) {
 			matches, err := MatchPipelinerunByAnnotation(ctx, logger, tt.args.pruns, cs, &tt.args.runevent, &ghprovider.Provider{}, eventEmitter, repo, true)
 			if tt.wantErrNoFailedPipelineToRetest {
 				assert.Assert(t, err != nil, "expected ErrNoFailedPipelineToRetest")
-				assert.Assert(t, errors.Is(err, ErrNoFailedPipelineToRetest), "expected ErrNoFailedPipelineToRetest, got: %v", err)
+				assert.Assert(t, errors.Is(err, NoFailedPipelineToRetestError("/pac ")), "expected ErrNoFailedPipelineToRetest, got: %v", err)
 				assert.Equal(t, len(matches), 0, "expected no matches when all pipelines already succeeded")
 				return
 			}

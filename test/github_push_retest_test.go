@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
@@ -243,7 +243,7 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 		t.Errorf("Repository %s not found in %s", opts.Organization, opts.Repo)
 	}
 
-	if g.Options.Settings.Github != nil {
+	if g.Options.Settings != nil && g.Options.Settings.Github != nil {
 		opts.Settings = g.Options.Settings
 	}
 	err = tgithub.CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)

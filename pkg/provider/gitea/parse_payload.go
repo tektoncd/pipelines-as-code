@@ -132,7 +132,7 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 		}
 		processedEvent.TriggerTarget = triggertype.PullRequest
 		if gitEvent.Comment != nil {
-			opscomments.SetEventTypeAndTargetPR(processedEvent, gitEvent.Comment.Body)
+			opscomments.SetEventTypeAndTargetPR(processedEvent, gitEvent.Comment.Body, "/")
 		}
 		populateEventFromGiteaPullRequest(processedEvent, gitEvent.PullRequest)
 		if gitEvent.Issue.URL != "" {

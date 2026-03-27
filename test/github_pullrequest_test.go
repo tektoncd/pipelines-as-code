@@ -5,7 +5,6 @@ package test
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,7 +22,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
@@ -55,9 +54,6 @@ func TestGithubGHEPullRequest(t *testing.T) {
 }
 
 func TestGithubGHEPullRequestMultiples(t *testing.T) {
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 	ctx := context.Background()
 	g := &tgithub.PRTest{
 		Label:     "Github multiple PullRequest",
@@ -69,9 +65,6 @@ func TestGithubGHEPullRequestMultiples(t *testing.T) {
 }
 
 func TestGithubGHEPullRequestMatchOnCEL(t *testing.T) {
-	if os.Getenv("NIGHTLY_E2E_TEST") != "true" {
-		t.Skip("Skipping test since only enabled for nightly")
-	}
 	ctx := context.Background()
 	g := &tgithub.PRTest{
 		Label:     "Github CEL Match",
@@ -669,7 +662,7 @@ func TestGithubGHEWebhookDisableCommentsOnPR(t *testing.T) {
 		Webhook:   true,
 	}
 
-	commentStrategy := v1alpha1.Settings{
+	commentStrategy := &v1alpha1.Settings{
 		Github: &v1alpha1.GithubSettings{
 			CommentStrategy: "disable_all",
 		},

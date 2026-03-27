@@ -180,6 +180,30 @@ go test ./pkg/... -run TestMyFunction
 go test -v ./pkg/provider/github/...
 ```
 
+### CI Test Reporting
+
+PAC uploads raw `go test -json` output to testrr from both Tekton and GitHub
+Actions.
+
+Tekton CI uses these fixed values in the pipeline definitions:
+
+- URL: `https://testrr.pipelinesascode.com`
+- Project: `pipelinesascode`
+- Username: `pac`
+
+Only the password is stored in the cluster secret. Create it with:
+
+```bash
+kubectl -n <namespace> create secret generic testrr-secret \
+  --from-literal=password='YOUR_PASSWORD'
+```
+
+GitHub Actions E2E uploads use the same URL, project, and username. Only the
+`TESTRR_PASSWORD` repository secret must be configured in GitHub.
+
+Upload failures are non-fatal in both systems. Test execution still determines
+the final CI status.
+
 ### Test Timeout
 
 The default timeout for unit tests is **20 minutes**. For E2E tests, it’s **45 minutes**.

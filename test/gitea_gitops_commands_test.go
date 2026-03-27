@@ -180,7 +180,14 @@ func TestGiteaTestPipelineRunExplicitlyWithTestComment(t *testing.T) {
 	assert.NilError(t, err)
 }
 
-func TestGiteaRetestAll(t *testing.T) {
+// TestGiteaTestAll creates a PR with two pipeline definitions (one matching,
+// one non-matching), then posts a /test comment to re-trigger all matching
+// pipelines. It verifies that the repository ends up with exactly 2 statuses:
+// one from the initial push and one from the /test comment.
+// NOTE: We use /test rather than /retest because /retest skips pipelines that
+// already succeeded (via filterSuccessfulTemplates), which causes a race when
+// the initial PipelineRun finishes before the retest filter runs.
+func TestGiteaTestAll(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	topts := &tgitea.TestOpts{
@@ -200,7 +207,7 @@ func TestGiteaRetestAll(t *testing.T) {
 	}
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
-	tgitea.PostCommentOnPullRequest(t, topts, "/retest")
+	tgitea.PostCommentOnPullRequest(t, topts, "/test")
 	waitOpts := twait.Opts{
 		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
@@ -210,14 +217,18 @@ func TestGiteaRetestAll(t *testing.T) {
 
 	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
-	var rt bool
+	var hasPullRequest bool
+	var hasTestAll bool
 	for _, status := range repo.Status {
-		// TODO(chmouel): Revert back to opscomments.RetestAllCommentEventType.String(), as pull_request now due of https://issues.redhat.com/browse/SRVKP-5775
 		if *status.EventType == triggertype.PullRequest.String() {
-			rt = true
+			hasPullRequest = true
+		}
+		if *status.EventType == opscomments.TestAllCommentEventType.String() {
+			hasTestAll = true
 		}
 	}
-	assert.Assert(t, rt, "should have a retest all comment event in status")
+	assert.Assert(t, hasPullRequest, "should have the initial pull request event in status")
+	assert.Assert(t, hasTestAll, "should have a test all comment event in status")
 	assert.Equal(t, len(repo.Status), 2, "should have only 2 status")
 }
 

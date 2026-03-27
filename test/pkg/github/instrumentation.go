@@ -58,23 +58,34 @@ func (g *PRTest) collectGitHubAPICalls(ctx context.Context, _ *testing.T) {
 	if g.GHE {
 		controllerName = "ghe-controller"
 	}
-	ns := g.TargetNamespace
-	if ns == "" {
-		ns = info.GetNS(ctx)
+
+	var logContent string
+	var source tlogs.ControllerLogSource
+	var err error
+	var foundNS string
+
+	for _, installNS := range info.InstallNamespaces {
+		g.Logger.Infof(
+			"Attempting to collect GitHub API calls from controller: %s in namespace: %s",
+			controllerName, installNS,
+		)
+
+		logContent, source, err = tlogs.GetControllerLogByName(
+			ctx, g.Cnx.Clients.Kube.CoreV1(), installNS, controllerName, &numLines, nil,
+		)
+		if err == nil {
+			foundNS = installNS
+			break
+		}
+		g.Logger.Debugf("Controller not found in namespace %s: %v", installNS, err)
 	}
 
-	g.Logger.Infof(
-		"Attempting to collect GitHub API calls from controller: %s in namespace: %s",
-		controllerName, ns,
-	)
-
-	logContent, source, err := tlogs.GetControllerLogByName(
-		ctx, g.Cnx.Clients.Kube.CoreV1(), ns, controllerName, &numLines, nil,
-	)
 	if err != nil {
-		g.Logger.Warnf("Failed to get controller logs: %v", err)
+		g.Logger.Warnf("Failed to get controller logs from any installation namespace: %v", err)
 		return
 	}
+
+	g.Logger.Infof("Found controller in namespace: %s", foundNS)
 
 	g.Logger.Infof(
 		"Collected controller logs using label selector %q and container %q",
@@ -149,7 +160,7 @@ func parseAPICallLog(logLine string) *InstrumentationAPICall {
 	jsonStr := logLine[jsonStart:]
 
 	// Parse the JSON object
-	var logEntry map[string]interface{}
+	var logEntry map[string]any
 	if err := json.Unmarshal([]byte(jsonStr), &logEntry); err != nil {
 		return nil
 	}
