@@ -219,7 +219,10 @@ run_e2e_tests() {
 
   # shellcheck disable=SC2001
   test_pattern="$(echo "${tests[*]}" | sed 's/ /|/g')"
-  make test-e2e GO_TEST_FLAGS="-json -run \"${test_pattern}\"" 2>&1 | tee "${raw_output}" || test_status=$?
+  ./hack/install-gotestsum.sh 1.13.0 "${HOME}/go/bin"
+  env GODEBUG=asynctimerchan=1 \
+    gotestsum --format standard-verbose --jsonfile "${raw_output}" -- \
+    -race -failfast -timeout 45m -count=1 -tags=e2e -run "${test_pattern}" ./test || test_status=$?
   if ! TESTRR_RUN_LABEL="${TESTRR_RUN_LABEL:-gha-e2e-${target}}" ./hack/upload-testrr.sh "${raw_output}"; then
     echo "::warning::testrr upload failed; continuing without failing GitHub Actions"
   fi
