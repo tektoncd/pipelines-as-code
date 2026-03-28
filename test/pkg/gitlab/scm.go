@@ -3,6 +3,7 @@ package gitlab
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"go.uber.org/zap"
@@ -49,11 +50,6 @@ func CreateGitLabProject(client *gitlab.Client, groupPath, projectName, hookURL,
 }
 
 func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath string, logger *zap.SugaredLogger) (*gitlab.Project, error) {
-	options := &gitlab.ForkProjectOptions{}
-	if namespacePath != "" {
-		options.NamespacePath = gitlab.Ptr(namespacePath)
-	}
-
 	currentUser, _, err := client.Users.CurrentUser()
 	if err != nil {
 		logger.Warnf("could not fetch current GitLab user: %v", err)
@@ -62,13 +58,37 @@ func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath strin
 		logger.Infof("Forking GitLab project %d as user %s (ID %d) into namespace %q",
 			projectID, currentUser.Username, currentUser.ID, namespacePath)
 	}
-	project, resp, err := client.Projects.ForkProject(projectID, options)
-	if err != nil && namespacePath != "" && resp != nil && resp.StatusCode == http.StatusNotFound {
-		logger.Warnf("Fork into namespace %q failed (404) — second user may not be a member of that group; retrying into personal namespace", namespacePath)
-		project, _, err = client.Projects.ForkProject(projectID, &gitlab.ForkProjectOptions{})
+
+	var project *gitlab.Project
+	var lastErr error
+	deadline := time.Now().Add(30 * time.Second)
+	for attempt := 1; time.Now().Before(deadline); attempt++ {
+		options := &gitlab.ForkProjectOptions{}
+		if namespacePath != "" {
+			options.NamespacePath = gitlab.Ptr(namespacePath)
+		}
+		var resp *gitlab.Response
+		project, resp, lastErr = client.Projects.ForkProject(projectID, options)
+		if lastErr == nil {
+			break
+		}
+		if resp != nil && resp.StatusCode == http.StatusNotFound && namespacePath != "" {
+			logger.Warnf("Fork into namespace %q failed (404) — second user may not be a member of that group; retrying into personal namespace", namespacePath)
+			project, resp, lastErr = client.Projects.ForkProject(projectID, &gitlab.ForkProjectOptions{})
+			if lastErr == nil {
+				break
+			}
+		}
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			logger.Warnf("Fork attempt %d failed with 404 (project %d not yet visible to forking user, possible membership propagation lag) — retrying in 5s", attempt, projectID)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		// Non-retryable error
+		break
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to fork project %d: %w", projectID, err)
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to fork project %d: %w", projectID, lastErr)
 	}
 
 	logger.Infof("Forked GitLab project into %s (ID %d)", project.PathWithNamespace, project.ID)
