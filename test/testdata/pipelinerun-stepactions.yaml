@@ -18,7 +18,7 @@ spec:
                 resolver: http
                 params:
                   - name: url
-                    value: https://raw.githubusercontent.com/pipelines-as-code/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                    value: https://raw.githubusercontent.com/tektoncd/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
               params:
                 - name: output-path
                   value: "/tmp/output"
