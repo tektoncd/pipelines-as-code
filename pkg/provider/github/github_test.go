@@ -1409,6 +1409,164 @@ func TestCreateToken(t *testing.T) {
 	}
 }
 
+func TestGetPullRequest(t *testing.T) {
+	const (
+		org   = "owner"
+		repo  = "repo"
+		prNum = 42
+	)
+	prJSON := `{
+		"number": 42,
+		"title": "very cool feature pr",
+		"html_url": "https://github.com/owner/repo/pull/42",
+		"user": {"login": "author"},
+		"head": {
+			"sha": "headsha123",
+			"ref": "feature-branch",
+			"repo": {"html_url": "https://github.com/author/repo"}
+		},
+		"base": {
+			"ref": "main",
+			"repo": {
+				"html_url": "https://github.com/owner/repo",
+				"default_branch": "main",
+				"id": 9876
+			}
+		},
+		"labels": [{"name": "bug"}, {"name": "enhancement"}]
+	}`
+
+	tests := []struct {
+		name              string
+		event             *info.Event
+		apiReturn         string
+		wantErr           bool
+		wantErrStr        string
+		wantSHA           string
+		wantSHAURL        string
+		wantURL           string
+		wantDefaultBranch string
+		wantHeadBranch    string
+		wantBaseBranch    string
+		wantHeadURL       string
+		wantBaseURL       string
+		wantTitle         string
+		wantSender        string
+		wantEventType     string
+		wantLabels        []string
+		wantRepoID        int64
+	}{
+		{
+			name: "populates all event fields from PR response",
+			event: &info.Event{
+				Organization:      org,
+				Repository:        repo,
+				PullRequestNumber: prNum,
+			},
+			apiReturn:         prJSON,
+			wantSHA:           "headsha123",
+			wantSHAURL:        "https://github.com/owner/repo/pull/42/commit/headsha123",
+			wantURL:           "https://github.com/owner/repo",
+			wantDefaultBranch: "main",
+			wantHeadBranch:    "feature-branch",
+			wantBaseBranch:    "main",
+			wantHeadURL:       "https://github.com/author/repo",
+			wantBaseURL:       "https://github.com/owner/repo",
+			wantTitle:         "very cool feature pr",
+			wantSender:        "author",
+			wantEventType:     triggertype.PullRequest.String(),
+			wantLabels:        []string{"bug", "enhancement"},
+			wantRepoID:        9876,
+		},
+		{
+			name: "returns error on API failure",
+			event: &info.Event{
+				Organization:      org,
+				Repository:        repo,
+				PullRequestNumber: prNum,
+			},
+			wantErr:    true,
+			wantErrStr: "404",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			if tt.apiReturn != "" {
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/pulls/%d", org, repo, prNum),
+					func(rw http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(rw, tt.apiReturn)
+					})
+			}
+
+			provider := &Provider{ghClient: fakeclient}
+			got, err := provider.getPullRequest(ctx, tt.event)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				if tt.wantErrStr != "" {
+					assert.ErrorContains(t, err, tt.wantErrStr)
+				}
+				return
+			}
+			assert.NilError(t, err)
+
+			assert.Equal(t, tt.wantSHA, got.SHA)
+			assert.Equal(t, tt.wantSHAURL, got.SHAURL)
+			assert.Equal(t, tt.wantURL, got.URL)
+			assert.Equal(t, tt.wantDefaultBranch, got.DefaultBranch)
+			assert.Equal(t, tt.wantHeadBranch, got.HeadBranch)
+			assert.Equal(t, tt.wantBaseBranch, got.BaseBranch)
+			assert.Equal(t, tt.wantHeadURL, got.HeadURL)
+			assert.Equal(t, tt.wantBaseURL, got.BaseURL)
+			assert.Equal(t, tt.wantTitle, got.PullRequestTitle)
+			assert.Equal(t, tt.wantSender, got.Sender)
+			assert.Equal(t, tt.wantEventType, got.EventType)
+			assert.DeepEqual(t, tt.wantLabels, got.PullRequestLabel)
+			assert.Equal(t, 1, len(provider.RepositoryIDs))
+			assert.Equal(t, tt.wantRepoID, provider.RepositoryIDs[0])
+		})
+	}
+}
+
+func TestGetPullRequestCaching(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	callCount := 0
+	mux.HandleFunc("/repos/owner/repo/pulls/1", func(rw http.ResponseWriter, _ *http.Request) {
+		callCount++
+		fmt.Fprint(rw, `{
+			"number": 1,
+			"title": "cached pr",
+			"html_url": "https://github.com/owner/repo/pull/1",
+			"user": {"login": "author"},
+			"head": {"sha": "abc", "ref": "head", "repo": {"html_url": "https://github.com/author/repo"}},
+			"base": {"ref": "main", "repo": {"html_url": "https://github.com/owner/repo", "default_branch": "main", "id": 1}},
+			"labels": [{"name": "bug"}, {"name": "enhancement"}]
+		}`)
+	})
+
+	event := &info.Event{
+		Organization:      "owner",
+		Repository:        "repo",
+		PullRequestNumber: 1,
+	}
+	provider := &Provider{ghClient: fakeclient}
+
+	_, err := provider.getPullRequest(ctx, event)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, callCount, "expected exactly one API call on first invocation")
+
+	_, err = provider.getPullRequest(ctx, event)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, callCount, "expected no additional API call on second invocation (cache hit)")
+}
+
 func TestIsHeadCommitOfBranch(t *testing.T) {
 	tests := []struct {
 		name       string

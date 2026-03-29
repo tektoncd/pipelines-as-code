@@ -209,11 +209,8 @@ func (v *Provider) aclCheckAll(ctx context.Context, rev *info.Event) (bool, erro
 	// This can only happen with GithubApp and Bots.
 	// Ex: dependabot, bots
 	if rev.PullRequestNumber != 0 {
-		isSameCloneURL, err := v.checkPullRequestForSameURL(ctx, rev)
-		if err != nil {
-			return false, err
-		}
-		if isSameCloneURL {
+		isFromSameRepo := v.checkPullRequestForSameURL(ctx, rev)
+		if isFromSameRepo {
 			return true, nil
 		}
 	}
@@ -241,26 +238,18 @@ func (v *Provider) aclCheckAll(ctx context.Context, rev *info.Event) (bool, erro
 	return v.IsAllowedOwnersFile(ctx, rev)
 }
 
-// checkPullRequestForSameURL checks If PullRequests are for same clone URL and different branches
-// means if the user has access to create a branch in the repository without forking or having any permissions then PAC should allow to run CI.
+// checkPullRequestForSameURL checks if a pull request's head and base branches are from the same repository.
+// means if the user has access to create a branch in the repository without forking or having any
+// permissions then PAC should allow to run CI.
 //
 //	ex: dependabot, *[bot] etc...
-func (v *Provider) checkPullRequestForSameURL(ctx context.Context, runevent *info.Event) (bool, error) {
-	pr, resp, err := wrapAPI(v, "get_pull_request", func() (*github.PullRequest, *github.Response, error) {
-		return v.Client().PullRequests.Get(ctx, runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
-	})
-	if err != nil {
-		return false, err
+//
+// HeadURL is set by getPullRequest() before aclCheckAll; if missing, fall through to other ACL checks.
+func (v *Provider) checkPullRequestForSameURL(_ context.Context, runevent *info.Event) bool {
+	if runevent.HeadURL == "" {
+		return false
 	}
-	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-
-	if pr.GetHead().GetRepo().GetCloneURL() == pr.GetBase().GetRepo().GetCloneURL() && pr.GetHead().GetRef() != pr.GetBase().GetRef() {
-		return true, nil
-	}
-
-	return false, nil
+	return runevent.HeadURL == runevent.BaseURL && runevent.HeadBranch != runevent.BaseBranch
 }
 
 // checkSenderOrgMembership Get sender user's organization. We can
