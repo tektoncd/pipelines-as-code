@@ -82,12 +82,18 @@ spec:
                   value: "$(context.pipelineRun.name)"
                 - name: TESTRR_RUN_LABEL
                   value: "tekton-coverage-release"
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "nightly-ci-github-hub-token"
+                      key: "hub-token"
               script: |
                 #!/usr/bin/env bash
                 set -euo pipefail
+                ./hack/install-gotestsum.sh 1.13.0 "$(go env GOPATH)/bin"
                 test_status=0
-                make test GO_TEST_FLAGS="-json -coverprofile=coverage.txt -covermode=atomic" \
-                  2>&1 | tee /tmp/testrr-coverage-go.json || test_status=$?
+                gotestsum --format standard-verbose --jsonfile /tmp/testrr-coverage-go.json -- \
+                  -coverprofile=coverage.txt -covermode=atomic ./pkg/... || test_status=$?
                 if ! ./hack/upload-testrr.sh /tmp/testrr-coverage-go.json; then
                   echo "WARNING: testrr upload failed; continuing without failing Tekton"
                 fi

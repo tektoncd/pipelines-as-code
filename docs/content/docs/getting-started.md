@@ -107,7 +107,7 @@ Before you can create a Repository CR, you need a Git repository for Pipelines-a
 
 Create a repository using this template:
 
-<https://github.com/openshift-pipelines/pac-demo/generate>
+<https://github.com/pipelines-as-code/pac-demo/generate>
 
 Choose your username (e.g., `chmouel`) and a repository name (e.g., `pac-demo`), then click the "Create repository from template" button.
 

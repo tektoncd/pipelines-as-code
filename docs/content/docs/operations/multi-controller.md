@@ -42,7 +42,7 @@ status reconciler ("watcher") component is needed cluster-wide.
 
 ## Automated CI Setup with startpaac
 
-For automated testing environments, [startpaac](https://github.com/openshift-pipelines/startpaac) can install and configure second controllers automatically.
+For automated testing environments, [startpaac](https://github.com/pipelines-as-code/startpaac) can install and configure second controllers automatically.
 
 ### Prerequisites
 

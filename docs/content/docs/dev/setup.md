@@ -24,7 +24,7 @@ Before you begin, ensure you have the following installed:
 
 ## Local Development with startpaac
 
-The recommended way to set up a local development environment is using [startpaac](https://github.com/openshift-pipelines/startpaac), which provides an interactive, modular setup.
+The recommended way to set up a local development environment is using [startpaac](https://github.com/pipelines-as-code/startpaac), which provides an interactive, modular setup.
 
 ### What startpaac Provides
 
@@ -41,7 +41,7 @@ The recommended way to set up a local development environment is using [startpaa
 Clone startpaac
 
 ```bash
-git clone https://github.com/openshift-pipelines/startpaac
+git clone https://github.com/pipelines-as-code/startpaac
 cd startpaac
 ```
 
@@ -73,7 +73,7 @@ kubectl get pods -n pipelines-as-code
 
 You should see the controller, watcher, and webhook pods running.
 
-See the [startpaac README](https://github.com/openshift-pipelines/startpaac) for detailed configuration options and environment variables.
+See the [startpaac README](https://github.com/pipelines-as-code/startpaac) for detailed configuration options and environment variables.
 
 ## Manual Development Setup
 

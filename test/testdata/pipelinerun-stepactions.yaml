@@ -18,11 +18,11 @@ spec:
                 resolver: http
                 params:
                   - name: url
-                    value: https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                    value: https://raw.githubusercontent.com/tektoncd/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
               params:
                 - name: output-path
                   value: "/tmp/output"
                 - name: url
-                  value: "https://github.com/openshift-pipelines/pac-demo"
+                  value: "https://github.com/pipelines-as-code/pac-demo"
                 - name: revision
                   value: "main"
