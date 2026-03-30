@@ -25,6 +25,7 @@ on:
       - ".github/workflows/**"
       - "test/testdata/**"
       - "vendor/**"
+      - ".github/scripts/**"
 
 jobs:
   e2e-tests:
