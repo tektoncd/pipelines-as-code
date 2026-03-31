@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v84/github"
+	"github.com/jonboulle/clockwork"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
 	corev1 "k8s.io/api/core/v1"
@@ -266,6 +268,18 @@ func TestGetPullRequestsWithCommit(t *testing.T) {
 				provider = &Provider{
 					Logger: logger,
 				}
+			}
+
+			// Inject a fake clock for merge commit tests to avoid real backoff delays
+			if tt.isMergeCommit {
+				fc := clockwork.NewFakeClock()
+				provider.clock = fc
+				go func() {
+					for i := range maxRetriesForMergeCommit {
+						fc.BlockUntilContext(ctx, 1) //nolint:errcheck
+						fc.Advance(time.Duration(1<<uint(i)) * time.Second)
+					}
+				}()
 			}
 
 			prs, err := provider.getPullRequestsWithCommit(ctx, tt.sha, tt.org, tt.repo, tt.isMergeCommit)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
@@ -68,6 +69,7 @@ type Provider struct {
 	triggerEvent       string
 	pacUserID          int64 // user login used by PAC
 	cachedChangedFiles *changedfiles.ChangedFiles
+	clock              clockwork.Clock
 }
 
 func (v *Provider) Client() *forgejo.Client {
@@ -80,6 +82,13 @@ func (v *Provider) Client() *forgejo.Client {
 		v.repo,
 	)
 	return v.giteaClient
+}
+
+func (v *Provider) getClock() clockwork.Clock {
+	if v.clock == nil {
+		return clockwork.NewRealClock()
+	}
+	return v.clock
 }
 
 func (v *Provider) SetGiteaClient(client *forgejo.Client) {
@@ -300,7 +309,7 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 			// Only retry on transient "user does not exist" errors
 			if strings.Contains(err.Error(), "user does not exist") {
 				v.Logger.Warnf("CreateStatus failed with transient error, retrying %d/%d: %v", i+1, maxRetries, err)
-				time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
+				v.getClock().Sleep(time.Duration(i+1) * 500 * time.Millisecond)
 				continue
 			}
 			return err

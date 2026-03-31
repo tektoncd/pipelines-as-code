@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
@@ -679,9 +680,11 @@ func TestProviderCreateStatusCommitRetryOnTransientError(t *testing.T) {
 				_, _ = rw.Write([]byte(`{"state":"success"}`))
 			})
 
+			fc := clockwork.NewFakeClock()
 			v := &Provider{
 				giteaClient: fakeclient,
 				Logger:      logger,
+				clock:       fc,
 			}
 
 			event := &info.Event{
@@ -696,7 +699,18 @@ func TestProviderCreateStatusCommitRetryOnTransientError(t *testing.T) {
 				Conclusion: "success",
 			}
 
-			err := v.createStatusCommit(context.Background(), event, pacopts, status)
+			ctx := context.Background()
+			if strings.Contains(tt.errorMessage, "user does not exist") && tt.failCount > 0 {
+				// Drive the fake clock only for retryable cases that actually sleep.
+				go func() {
+					for i := range 3 {
+						fc.BlockUntilContext(ctx, 1) //nolint:errcheck
+						fc.Advance(time.Duration(i+1) * 500 * time.Millisecond)
+					}
+				}()
+			}
+
+			err := v.createStatusCommit(ctx, event, pacopts, status)
 
 			if tt.wantErr {
 				assert.Assert(t, err != nil, "expected an error but got none")

@@ -463,7 +463,7 @@ func TestAnalyzeTimeout(t *testing.T) {
 
 	client.httpClient = &http.Client{
 		Transport: httptesting.RoundTripFunc(func(_ *http.Request) *http.Response {
-			time.Sleep(2 * time.Second)
+			time.Sleep(200 * time.Millisecond)
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader("")),

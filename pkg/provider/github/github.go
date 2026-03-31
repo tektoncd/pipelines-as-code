@@ -64,6 +64,7 @@ type Provider struct {
 	cachedChangedFiles *changedfiles.ChangedFiles
 	commitInfo         *github.Commit
 	pacUserLogin       string // user/bot login used by PAC
+	clock              clockwork.Clock
 }
 
 type skippedRun struct {
@@ -78,7 +79,15 @@ func New() *Provider {
 		skippedRun: skippedRun{
 			mutex: &sync.Mutex{},
 		},
+		clock: clockwork.NewRealClock(),
 	}
+}
+
+func (v *Provider) getClock() clockwork.Clock {
+	if v.clock == nil {
+		return clockwork.NewRealClock()
+	}
+	return v.clock
 }
 
 func (v *Provider) Client() *github.Client {
