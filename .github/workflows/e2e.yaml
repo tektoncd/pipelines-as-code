@@ -25,7 +25,6 @@ on:
       - ".github/workflows/**"
       - "test/testdata/**"
       - "vendor/**"
-      - ".github/scripts/**"
 
 jobs:
   e2e-tests:
@@ -127,15 +126,11 @@ jobs:
         with:
           ref: ${{ inputs.target_ref || github.event.pull_request.head.sha || github.sha }}
 
-      # Step to check PR author's org membership and repo permissions.
-      # This step will fail the job if checks do not pass, skipping subsequent steps.
       - name: Check user permissions on PRs
         if: github.event_name == 'pull_request_target'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: pipelines-as-code/ok-to-test@2cca1416bd08e56bbef05b063bc22a0329b0c4a2 # v1
         with:
-          script: |
-            const script = require('./.github/scripts/check-pr-permissions.js')
-            await script({github, context, core})
+          team-slugs: ${{ env.TARGET_TEAM_SLUGS }}
 
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
