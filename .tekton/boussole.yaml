@@ -3,7 +3,7 @@ kind: PipelineRun
 metadata:
   name: boussole
   annotations:
-    pipelinesascode.tekton.dev/pipeline: "https://raw.githubusercontent.com/openshift-pipelines/pac-boussole/main/pipeline-boussole.yaml"
+    pipelinesascode.tekton.dev/pipeline: "https://raw.githubusercontent.com/pipelines-as-code/pac-boussole/main/pipeline-boussole.yaml"
     pipelinesascode.tekton.dev/on-comment: "^/(help|rebase|lgtm|cherry-pick|assign|merge|unassign|label|unlabel)"
     pipelinesascode.tekton.dev/max-keep-runs: "2"
 spec:
