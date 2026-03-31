@@ -74,7 +74,8 @@ module.exports = async ({ github, context, core }) => {
           if (
             membership &&
             membership.data &&
-            membership.data.state === "active"
+            membership.data.state === "active" &&
+            (membership.data.role === "maintainer" || membership.data.role === "member")
           ) {
             core.info(
               `✅ Condition met: User @${actor} is a member of team '${team_slug}' in '${targetOrg}'. Proceeding.`,

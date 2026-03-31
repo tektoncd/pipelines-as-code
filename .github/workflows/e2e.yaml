@@ -64,7 +64,7 @@ jobs:
       KOCACHE: /tmp/ko-cache
       KO_DOCKER_REPO: registry.paac-127-0-0-1.nip.io
       KUBECONFIG: /home/runner/.kube/config.local
-      TARGET_TEAM_SLUGS: "pipelines-as-code.maintainers"
+      TARGET_TEAM_SLUGS: "pipelines-as-code-maintainers,pipelines-as-code-collaborators"
       TEST_EL_URL: https://paac.paac-127-0-0-1.nip.io
       TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 
