@@ -103,6 +103,25 @@ func TestGiteaPullRequestPipelineAnnotations(t *testing.T) {
 	defer f()
 }
 
+// TestGiteaPullRequestRemotePipelineRelativeTask verifies that relative task paths
+// in a Pipeline's annotations are resolved correctly when the pipeline is
+// fetched from a repository path.
+func TestGiteaPullRequestRemotePipelineRelativeTask(t *testing.T) {
+	topts := &tgitea.TestOpts{
+		Regexp:      successRegexp,
+		TargetEvent: triggertype.PullRequest.String(),
+		YAMLFiles: map[string]string{
+			".tekton/pr.yaml":                        "testdata/pipelinerun_remote_pipeline_repo_path.yaml",
+			".pipelines/pipeline.yaml":               "testdata/pipeline_relative_task.yaml",
+			".tasks/task-referenced-internally.yaml": "testdata/task_referenced_internally.yaml",
+		},
+		ExpectEvents:   false,
+		CheckForStatus: "success",
+	}
+	_, f := tgitea.TestPR(t, topts)
+	defer f()
+}
+
 func TestGiteaPullRequestResolvePipelineOnlyAssociatedWithPipelineRunFilterted(t *testing.T) {
 	topts := &tgitea.TestOpts{
 		Regexp:      successRegexp,

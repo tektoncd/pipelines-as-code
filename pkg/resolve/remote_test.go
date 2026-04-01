@@ -562,10 +562,10 @@ func TestAssembleTaskFQDNs(t *testing.T) {
 			expected:    []string{"https://example.com/repo/task.yaml"},
 		},
 		{
-			name:        "repository file path URL returns tasks unchanged",
+			name:        "repository file path URL resolves relative tasks",
 			pipelineURL: "share/pipelines/build.yaml",
 			tasks:       []string{"../tasks/t.yaml", "tasks/other-task.yaml"},
-			expected:    []string{"../tasks/t.yaml", "tasks/other-task.yaml"},
+			expected:    []string{"share/tasks/t.yaml", "share/pipelines/tasks/other-task.yaml"},
 		},
 	}
 	for _, tt := range tests {
