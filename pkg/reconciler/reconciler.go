@@ -10,6 +10,7 @@ import (
 	pipelinerunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/pipelinerun"
 	tektonv1lister "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/logging"
 	pkgreconciler "knative.dev/pkg/reconciler"
@@ -32,6 +33,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	queuepkg "github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 )
 
 // Reconciler implements controller.Reconciler for PipelineRun resources.
@@ -76,6 +78,46 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		return nil
 	}
 
+	repoName := pr.GetAnnotations()[keys.Repository]
+	repo, err := r.repoLister.Repositories(pr.Namespace).Get(repoName)
+	if err != nil {
+		return fmt.Errorf("failed to get repository CR: %w", err)
+	}
+
+	// use same pac opts across the reconciliation
+	pacInfo := r.run.Info.GetPacOpts()
+
+	// If we have a controllerInfo annotation, then we need to get the
+	// configmap configuration for it
+	//
+	// The annotation is a json string with a label, the pac controller
+	// configmap and the GitHub app secret .
+	//
+	// We always assume the controller is in the same namespace as the original
+	// controller but that may changes
+	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
+		var parsedControllerInfo *info.ControllerInfo
+		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
+			return fmt.Errorf("failed to parse controllerInfo: %w", err)
+		}
+		r.run.Info.Controller = parsedControllerInfo
+	} else {
+		r.run.Info.Controller = info.GetControllerInfoFromEnvOrDefault()
+	}
+
+	if secretCreated, ok := pr.GetAnnotations()[keys.SecretCreated]; ok && secretCreated == "false" && pacInfo.SecretAutoCreation {
+		// if secret creation is true then return anyway from createSecretForPipelineRun function
+		// because it patches the PipelineRun with the secretCreated annotation so after the
+		// patch success we will get another reconciliation call for the same pipelineRun.
+		// Note: only return error if the error is not related to secret creation otherwise we would interrupt other operations.
+		err := r.createSecretForPipelineRun(ctx, logger, pr, repo)
+		if err != nil && strings.Contains(err.Error(), "creating basic auth secret") {
+			return fmt.Errorf("failed to create secret for pipelineRun %s/%s: %w", pr.GetNamespace(), pr.GetName(), err)
+		}
+
+		logger.Errorf("failed to create secret for pipelineRun %s/%s: %v", pr.GetNamespace(), pr.GetName(), err)
+	}
+
 	reason := ""
 	if len(pr.Status.GetConditions()) > 0 {
 		reason = pr.Status.GetConditions()[0].GetReason()
@@ -91,11 +133,6 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 
 	if reason == string(tektonv1.PipelineRunReasonRunning) && !startReported {
 		logger.Infof("pipelineRun %s/%s is running but not yet reported to provider, updating status", pr.GetNamespace(), pr.GetName())
-		repoName := pr.GetAnnotations()[keys.Repository]
-		repo, err := r.repoLister.Repositories(pr.Namespace).Get(repoName)
-		if err != nil {
-			return fmt.Errorf("failed to get repository CR: %w", err)
-		}
 		return r.updatePipelineRunToInProgress(ctx, logger, repo, pr)
 	}
 	logger.Debugf("pipelineRun %s/%s condition not met: reason='%s', startReported=%v", pr.GetNamespace(), pr.GetName(), reason, startReported)
@@ -115,24 +152,6 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 
 	if !pr.IsDone() && !pr.IsCancelled() {
 		return nil
-	}
-
-	// If we have a controllerInfo annotation, then we need to get the
-	// configmap configuration for it
-	//
-	// The annotation is a json string with a label, the pac controller
-	// configmap and the GitHub app secret .
-	//
-	// We always assume the controller is in the same namespace as the original
-	// controller but that may changes
-	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
-		var parsedControllerInfo *info.ControllerInfo
-		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
-			return fmt.Errorf("failed to parse controllerInfo: %w", err)
-		}
-		r.run.Info.Controller = parsedControllerInfo
-	} else {
-		r.run.Info.Controller = info.GetControllerInfoFromEnvOrDefault()
 	}
 
 	ctx = info.StoreCurrentControllerName(ctx, r.run.Info.Controller.Name)
@@ -164,9 +183,6 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	logger.Infof("pipelineRun %v/%v is done, reconciling to report status!  ", pr.GetNamespace(), pr.GetName())
 	r.eventEmitter.SetLogger(logger)
 
-	// use same pac opts across the reconciliation
-	pacInfo := r.run.Info.GetPacOpts()
-
 	detectedProvider, event, err := r.detectProvider(ctx, logger, pr)
 	if err != nil {
 		msg := fmt.Sprintf("detectProvider: %v", err)
@@ -180,6 +196,67 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		r.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryReportFinalStatus", msg)
 		return err
 	}
+	return nil
+}
+
+func (r *Reconciler) createSecretForPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, repo *v1alpha1.Repository) error {
+	var gitAuthSecretName string
+	// as GitAuthSecret annotation is added to the PipelineRun in getPipelineRunsFromRepo function
+	// we expect the name here otherwise error out
+	if annotation, ok := pr.GetAnnotations()[keys.GitAuthSecret]; ok {
+		gitAuthSecretName = annotation
+		logger.Debugf("using git auth secret from annotation=%s for pipelineRun %s/%s", gitAuthSecretName, pr.GetNamespace(), pr.GetName())
+	} else {
+		return fmt.Errorf("cannot get annotation %s as set on pipelineRun %s/%s", keys.GitAuthSecret, pr.GetNamespace(), pr.GetName())
+	}
+
+	// here we don't need provider but we need to call initGitProviderClient because we need event
+	// built with user and token so secret can be built upon user and token
+	_, event, err := r.initGitProviderClient(ctx, logger, repo, pr)
+	if err != nil {
+		return fmt.Errorf("cannot initialize git provider client: %w", err)
+	}
+
+	authSecret, err := secrets.MakeBasicAuthSecret(event, gitAuthSecretName)
+	if err != nil {
+		return fmt.Errorf("making basic auth secret: %s has failed: %w ", gitAuthSecretName, err)
+	}
+
+	if err = r.kinteract.CreateSecret(ctx, repo.GetNamespace(), authSecret); err != nil {
+		// NOTE: Handle AlreadyExists errors due to etcd/API server timing issues.
+		// Investigation found: slow etcd response causes API server retry, resulting in
+		// duplicate secret creation attempts for the same PR. This is a workaround, not
+		// designed behavior - reuse existing secret to prevent PipelineRun failure.
+		if errors.IsAlreadyExists(err) {
+			msg := fmt.Sprintf("Secret %s already exists in namespace %s, reusing existing secret",
+				authSecret.GetName(), repo.GetNamespace())
+			r.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositorySecretReused", msg)
+		} else {
+			return fmt.Errorf("creating basic auth secret: %s has failed: %w ", authSecret.GetName(), err)
+		}
+	} else {
+		logger.Debugf("created git auth secret %s in namespace %s for pipelineRun %s/%s", authSecret.GetName(), pr.GetNamespace(), pr.GetName())
+	}
+
+	if err = r.kinteract.UpdateSecretWithOwnerRef(ctx, logger, pr.Namespace, gitAuthSecretName, pr); err != nil {
+		return fmt.Errorf("cannot update secret %s with ownerRef to pipelinerun %s: %w", gitAuthSecretName, pr.GetName(), err)
+	}
+	logger.Debugf("updated secret ownerRef for pipelinerun=%s secret=%s", pr.GetName(), gitAuthSecretName)
+
+	patchAnnotations := map[string]any{
+		"metadata": map[string]any{
+			"annotations": map[string]string{
+				keys.SecretCreated: "true",
+			},
+		},
+	}
+
+	_, err = action.PatchPipelineRun(ctx, logger, "patching annotations.secretCreated", r.run.Clients.Tekton, pr, patchAnnotations)
+	if err != nil {
+		return fmt.Errorf("failed to patch pipelinerun %s annotations.secretCreated: %w", pr.GetName(), err)
+	}
+
+	logger.Debugf("patched annotations.secretCreated for pipelinerun=%s", pr.GetName())
 	return nil
 }
 
@@ -347,8 +424,11 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 	} else {
 		// secretNS is needed when git provider is other than Github App.
 		secretNS := repo.GetNamespace()
-		if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && r.globalRepo != nil && r.globalRepo.Spec.GitProvider != nil && r.globalRepo.Spec.GitProvider.Secret != nil {
-			secretNS = r.globalRepo.GetNamespace()
+		if r.globalRepo, err = r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && r.globalRepo != nil {
+			if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && r.globalRepo.Spec.GitProvider != nil && r.globalRepo.Spec.GitProvider.Secret != nil {
+				r.secretNS = r.globalRepo.GetNamespace()
+			}
+			repo.Spec.Merge(r.globalRepo.Spec)
 		}
 
 		secretFromRepo := pac.SecretFromRepository{

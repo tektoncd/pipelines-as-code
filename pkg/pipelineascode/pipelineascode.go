@@ -20,10 +20,8 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -206,7 +204,6 @@ func (p *PacRun) Run(ctx context.Context) error {
 }
 
 func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.PipelineRun, error) {
-	var gitAuthSecretName string
 	prName := match.PipelineRun.GetName()
 	if prName == "" {
 		prName = match.PipelineRun.GetGenerateName()
@@ -217,37 +214,6 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 		p.event.SHA,
 		p.event.BaseBranch,
 	)
-
-	// Automatically create a secret with the token to be reused by git-clone task
-	if p.pacInfo.SecretAutoCreation {
-		if annotation, ok := match.PipelineRun.GetAnnotations()[keys.GitAuthSecret]; ok {
-			gitAuthSecretName = annotation
-			p.debugf("startPR: using git auth secret from annotation=%s", gitAuthSecretName)
-		} else {
-			return nil, fmt.Errorf("cannot get annotation %s as set on PR", keys.GitAuthSecret)
-		}
-
-		authSecret, err := secrets.MakeBasicAuthSecret(p.event, gitAuthSecretName)
-		if err != nil {
-			return nil, fmt.Errorf("making basic auth secret: %s has failed: %w ", gitAuthSecretName, err)
-		}
-
-		if err = p.k8int.CreateSecret(ctx, match.Repo.GetNamespace(), authSecret); err != nil {
-			// NOTE: Handle AlreadyExists errors due to etcd/API server timing issues.
-			// Investigation found: slow etcd response causes API server retry, resulting in
-			// duplicate secret creation attempts for the same PR. This is a workaround, not
-			// designed behavior - reuse existing secret to prevent PipelineRun failure.
-			if errors.IsAlreadyExists(err) {
-				msg := fmt.Sprintf("Secret %s already exists in namespace %s, reusing existing secret",
-					authSecret.GetName(), match.Repo.GetNamespace())
-				p.eventEmitter.EmitMessage(match.Repo, zap.WarnLevel, "RepositorySecretReused", msg)
-			} else {
-				return nil, fmt.Errorf("creating basic auth secret: %s has failed: %w ", authSecret.GetName(), err)
-			}
-		} else {
-			p.debugf("startPR: created git auth secret %s in namespace %s", authSecret.GetName(), match.Repo.GetNamespace())
-		}
-	}
 
 	// Add labels and annotations to pipelinerun
 	err := kubeinteraction.AddLabelsAndAnnotations(p.event, match.PipelineRun, match.Repo, p.vcx.GetConfig(), p.run)
@@ -269,27 +235,9 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	pr, err := p.run.Clients.Tekton.TektonV1().PipelineRuns(match.Repo.GetNamespace()).Create(ctx,
 		match.PipelineRun, metav1.CreateOptions{})
 	if err != nil {
-		// cleanup the gitauth secret because ownerRef isn't set when the pipelineRun creation failed
-		if p.pacInfo.SecretAutoCreation {
-			if errDelSec := p.k8int.DeleteSecret(ctx, p.logger, match.Repo.GetNamespace(), gitAuthSecretName); errDelSec != nil {
-				// don't overshadow the pipelineRun creation error, just log
-				p.logger.Errorf("removing auto created secret: %s in namespace %s has failed: %w ", gitAuthSecretName, match.Repo.GetNamespace(), errDelSec)
-			}
-		}
 		// we need to make difference between markdown error and normal error that goes to namespace/controller stream
 		return nil, fmt.Errorf("creating pipelinerun %s in namespace %s has failed.\n\nTekton Controller has reported this error: ```%w``` ", match.PipelineRun.GetGenerateName(),
 			match.Repo.GetNamespace(), err)
-	}
-
-	// update ownerRef of secret with pipelineRun, so that it gets cleanedUp with pipelineRun
-	if p.pacInfo.SecretAutoCreation {
-		err := p.k8int.UpdateSecretWithOwnerRef(ctx, p.logger, pr.Namespace, gitAuthSecretName, pr)
-		if err != nil {
-			// we still return the created PR with error, and allow caller to decide what to do with the PR, and avoid
-			// unneeded SIGSEGV's
-			return pr, fmt.Errorf("cannot update pipelinerun %s with ownerRef: %w", pr.GetGenerateName(), err)
-		}
-		p.debugf("startPR: updated secret ownerRef for pipelinerun=%s secret=%s", pr.GetName(), gitAuthSecretName)
 	}
 
 	// Create status with the log url

@@ -199,7 +199,10 @@ func TestPR(t *testing.T, topts *TestOpts) (context.Context, func()) {
 	if topts.GlobalRepoCRParams == nil {
 		spec.GitProvider = gp
 	} else {
-		spec.GitProvider = &v1alpha1.GitProvider{Type: providerType}
+		spec.GitProvider = &v1alpha1.GitProvider{
+			Type:   providerType,
+			Secret: &v1alpha1.Secret{Name: topts.TargetNS, Key: "token"},
+		}
 	}
 	assert.NilError(t, CreateCRD(ctx, topts, spec, false))
 
