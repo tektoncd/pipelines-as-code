@@ -1,0 +1,12 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: pipeline-relative-task
+  annotations:
+    pipelinesascode.tekton.dev/task: "[../.tasks/task-referenced-internally.yaml]"
+spec:
+  tasks:
+    - name: task-referenced-internally
+      taskRef:
+        name: task-referenced-internally
