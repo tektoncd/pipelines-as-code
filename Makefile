@@ -67,7 +67,11 @@ test-no-cache: test-clean test-unit ## Run test-unit without caching
 test-unit: ## Run unit tests
 	@mkdir -p tmp/
 	@echo "Running unit tests..."
-	$(GO) test $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...
+	@if command -v gotestsum >/dev/null 2>&1; then \
+		gotestsum --format testdox -- $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...; \
+	else \
+		$(GO) test $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...; \
+	fi
 
 .PHONY: test-e2e-cleanup
 test-e2e-cleanup: ## cleanup test e2e namespace/pr left open
