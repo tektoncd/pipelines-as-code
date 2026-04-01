@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/jonboulle/clockwork"
@@ -54,6 +53,7 @@ type logOption struct {
 	limit      int
 	webBrowser bool
 	useLastPR  bool
+	execFunc   func(string, []string, []string) error
 }
 
 func Command(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
@@ -124,6 +124,7 @@ func Command(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 				webBrowser: webBrowser,
 				tknPath:    tknPath,
 				useLastPR:  useLastPR,
+				execFunc:   defaultExecFunc,
 			}
 			return log(ctx, lopts)
 		},
@@ -240,7 +241,7 @@ func log(ctx context.Context, lo *logOption) error {
 	if lo.webBrowser {
 		return showLogsWithWebConsole(ctx, lo, replyName)
 	}
-	return showlogswithtkn(lo.tknPath, replyName, lo.cs.Info.Kube.Namespace)
+	return showlogswithtkn(lo.execFunc, lo.tknPath, replyName, lo.cs.Info.Kube.Namespace)
 }
 
 func showLogsWithWebConsole(ctx context.Context, lo *logOption, pr string) error {
@@ -257,11 +258,9 @@ func showLogsWithWebConsole(ctx context.Context, lo *logOption, pr string) error
 	return browser.OpenWebBrowser(ctx, lo.cs.Clients.ConsoleUI().DetailURL(prObj))
 }
 
-func showlogswithtkn(tknPath, pr, ns string) error {
-	//nolint: gosec
-	if err := syscall.Exec(tknPath, []string{tknPath, "pr", "logs", "-f", "-n", ns, pr}, os.Environ()); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Command finished with error: %v", err)
-		os.Exit(127)
+func showlogswithtkn(execFn func(string, []string, []string) error, tknPath, pr, ns string) error {
+	if err := execFn(tknPath, []string{tknPath, "pr", "logs", "-f", "-n", ns, pr}, os.Environ()); err != nil {
+		return fmt.Errorf("failed to exec tkn: %w", err)
 	}
 	return nil
 }

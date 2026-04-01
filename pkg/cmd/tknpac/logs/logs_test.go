@@ -1,7 +1,6 @@
 package logs
 
 import (
-	"os/exec"
 	"testing"
 
 	"github.com/jonboulle/clockwork"
@@ -33,7 +32,6 @@ func TestLogs(t *testing.T) {
 		wantErr          bool
 		repoName         string
 		currentNamespace string
-		shift            int
 		pruns            []*tektonv1.PipelineRun
 		useLastPR        bool
 	}{
@@ -42,7 +40,6 @@ func TestLogs(t *testing.T) {
 			wantErr:          false,
 			repoName:         "test",
 			currentNamespace: ns,
-			shift:            0,
 			pruns: []*tektonv1.PipelineRun{
 				tektontest.MakePRCompletion(cw, "test-pipeline", ns, completed, nil, map[string]string{
 					keys.Repository: "test",
@@ -50,7 +47,7 @@ func TestLogs(t *testing.T) {
 			},
 		},
 		{
-			name:             "good/show logs",
+			name:             "good/show logs with useLastPR",
 			wantErr:          false,
 			repoName:         "test",
 			currentNamespace: ns,
@@ -60,18 +57,6 @@ func TestLogs(t *testing.T) {
 					keys.Repository: "test",
 				}, 30),
 				tektontest.MakePRCompletion(cw, "test-pipeline2", ns, completed, nil, map[string]string{
-					keys.Repository: "test",
-				}, 30),
-			},
-		},
-		{
-			name:             "bad/shift",
-			wantErr:          true,
-			repoName:         "test",
-			currentNamespace: ns,
-			shift:            2,
-			pruns: []*tektonv1.PipelineRun{
-				tektontest.MakePRCompletion(cw, "test-pipeline", ns, completed, nil, map[string]string{
 					keys.Repository: "test",
 				}, 30),
 			},
@@ -119,8 +104,6 @@ func TestLogs(t *testing.T) {
 			}
 			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
 
-			tknPath, err := exec.LookPath("true")
-			assert.NilError(t, err)
 			io, _ := tcli.NewIOStream()
 			lopts := &logOption{
 				cs: cs,
@@ -130,16 +113,19 @@ func TestLogs(t *testing.T) {
 				},
 				repoName:  tt.repoName,
 				limit:     1,
-				tknPath:   tknPath,
+				tknPath:   "/fake/tkn",
 				ioStreams: io,
 				useLastPR: tt.useLastPR,
+				execFunc: func(_ string, _, _ []string) error {
+					return nil
+				},
 			}
 
-			err = log(ctx, lopts)
+			err := log(ctx, lopts)
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("log() wantError is true but no error has been set")
-				}
+				assert.Assert(t, err != nil, "expected an error but got none")
+			} else {
+				assert.NilError(t, err)
 			}
 		})
 	}
