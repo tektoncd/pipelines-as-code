@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
@@ -50,13 +52,13 @@ jobs:
         run: |
           set -x
           releaseBranchFormat='release-v'
-          if [[ ${{ github.ref_name }} == ${releaseBranchFormat}* ]]; then
-            tag=v$(echo ${{ github.ref_name }}|sed "s,${releaseBranchFormat},,")
-          elif [[ ${{ github.ref }} == refs/pull/* ]]; then
-            tag=pr-$(echo ${{ github.ref }} | cut -c11-|sed 's,/merge,,')
+          if [[ ${GITHUB_REF_NAME} == ${releaseBranchFormat}* ]]; then
+            tag=v$(echo ${GITHUB_REF_NAME}|sed "s,${releaseBranchFormat},,")
+          elif [[ ${GITHUB_REF} == refs/pull/* ]]; then
+            tag=pr-$(echo ${GITHUB_REF} | cut -c11-|sed 's,/merge,,')
           else
             # Sanitize the tag by replacing invalid characters with hyphens
-            tag=$(echo ${{ github.ref_name }}|sed 's,/merge,,' | sed 's,[/.],-,g')
+            tag=$(echo ${GITHUB_REF_NAME}|sed 's,/merge,,' | sed 's,[/.],-,g')
           fi
           for image in ./cmd/*;do
             ko build -B -t "${tag}" --platform="${{ env.PLATFORMS }}" "${image}"

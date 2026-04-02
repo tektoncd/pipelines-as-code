@@ -41,6 +41,10 @@ jobs:
 
     name: e2e tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +129,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ inputs.target_ref || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Check user permissions on PRs
         if: github.event_name == 'pull_request_target'
@@ -164,7 +169,7 @@ jobs:
           repo: chmouel/snazy
 
       - name: Install minica
-        run: |
+        run: | # zizmor: ignore[github-env]
           go install github.com/jsha/minica@latest
           echo "${HOME}/go/bin" >> "$GITHUB_PATH"
 
@@ -173,10 +178,13 @@ jobs:
         with:
           repository: openshift-pipelines/startpaac
           path: startpaac
+          persist-credentials: false
 
       - name: Run gosmee for main controller
+        env:
+          PYSMEE_URL: ${{ secrets.PYSMEE_URL }}
         run: |
-          nohup gosmee client --saveDir /tmp/gosmee-replay ${{ secrets.PYSMEE_URL }} "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
+          nohup gosmee client --saveDir /tmp/gosmee-replay "${PYSMEE_URL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
 
       - name: Generate unique gosmee URL for Gitea tests
         if: startsWith(matrix.provider, 'gitea') || matrix.provider == 'concurrency'
@@ -185,10 +193,11 @@ jobs:
           SMEE_URL=$(curl -s https://hook.pipelinesascode.com -o /dev/null -w '%{redirect_url}')
           echo "Generated unique smee URL: ${SMEE_URL}"
           echo "url=${SMEE_URL}" >> "$GITHUB_OUTPUT"
-          echo "TEST_GITEA_SMEEURL=${SMEE_URL}" >> "$GITHUB_ENV"
 
       - name: Run gosmee for main controller (Gitea)
         if: startsWith(matrix.provider, 'gitea') || matrix.provider == 'concurrency'
+        env:
+          TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
         run: |
           nohup gosmee client --saveDir /tmp/gosmee-replay "${TEST_GITEA_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" >> /tmp/gosmee-main.log 2>&1 &
 
@@ -199,10 +208,11 @@ jobs:
           SMEE_URL=$(curl -s https://hook.pipelinesascode.com -o /dev/null -w '%{redirect_url}')
           echo "Generated unique GitLab smee URL: ${SMEE_URL}"
           echo "url=${SMEE_URL}" >> "$GITHUB_OUTPUT"
-          echo "TEST_GITLAB_SMEEURL=${SMEE_URL}" >> "$GITHUB_ENV"
 
       - name: Run gosmee for GitLab tests
         if: matrix.provider == 'gitlab_bitbucket'
+        env:
+          TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
         run: |
           nohup gosmee client --saveDir /tmp/gosmee-replay-gitlab "${TEST_GITLAB_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" >> /tmp/gosmee-gitlab.log 2>&1 &
 
@@ -218,10 +228,11 @@ jobs:
           SMEE_URL=$(curl -s https://hook.pipelinesascode.com -o /dev/null -w '%{redirect_url}')
           echo "Generated unique GHE webhook smee URL: ${SMEE_URL}"
           echo "url=${SMEE_URL}" >> "$GITHUB_OUTPUT"
-          echo "TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL=${SMEE_URL}" >> "$GITHUB_ENV"
 
       - name: Run gosmee for second controller GHE webhook
         if: startsWith(matrix.provider, 'github_ghe') || matrix.provider == 'concurrency'
+        env:
+          TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
         run: |
           nohup gosmee client --saveDir /tmp/gosmee-replay-ghe-webhook "${TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" >> /tmp/gosmee-ghe-webhook.log 2>&1 &
 
@@ -267,7 +278,7 @@ jobs:
           TEST_GITLAB_API_URL: https://gitlab.com
           TEST_GITLAB_GROUP: pac-e2e-tests
           TEST_GITLAB_SECOND_GROUP: ${{ vars.TEST_GITLAB_SECOND_GROUP }}
-          TEST_GITLAB_SMEEURL: ${{ env.TEST_GITLAB_SMEEURL }}
+          TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
           TEST_GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           TEST_GITLAB_SECOND_TOKEN: ${{ secrets.TEST_GITLAB_SECOND_TOKEN }}
 
@@ -298,16 +309,18 @@ jobs:
       - name: Start installing cluster with startpaac
         env:
           PAC_DIR: ${{ github.workspace }}
+          VARS_APPLICATION_ID: ${{ vars.APPLICATION_ID }}
+          VARS_TEST_GITHUB_SECOND_APPLICATION_ID: ${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}
         run: |
           mkdir -p ~/secrets
-          echo "${{ vars.APPLICATION_ID }}" > ~/secrets/github-application-id
+          echo "${VARS_APPLICATION_ID}" > ~/secrets/github-application-id
           echo "${{ secrets.APP_PRIVATE_KEY }}" > ~/secrets/github-private-key
           echo "${{ secrets.WEBHOOK_SECRET }}" > ~/secrets/webhook.secret
           echo "${{ secrets.PYSMEE_URL }}" > ~/secrets/smee
 
 
           mkdir -p ~/secrets-second
-          echo "${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}" > ~/secrets-second/github-application-id
+          echo "${VARS_TEST_GITHUB_SECOND_APPLICATION_ID}" > ~/secrets-second/github-application-id
           echo "${{ secrets.TEST_GITHUB_SECOND_PRIVATE_KEY }}" > ~/secrets-second/github-private-key
           echo "${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_SECRET }}" > ~/secrets-second/webhook.secret
           echo "${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}" > ~/secrets-second/smee
@@ -393,10 +406,15 @@ jobs:
   notify-slack:
     name: Notify Slack on Failures
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     needs: [e2e-tests]
     if: ${{ always() && github.ref_name == 'main' && github.event_name == 'schedule' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

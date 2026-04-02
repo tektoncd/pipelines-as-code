@@ -1,0 +1,12 @@
+rules:
+  # Secrets are gated by the ok-to-test permission check step which runs first.
+  # Using GitHub Environments would require major workflow restructuring.
+  secrets-outside-env:
+    ignore:
+      - e2e.yaml
+
+  # pull_request_target is required to access secrets for fork PRs.
+  # The ok-to-test action runs as the first step and gates all subsequent steps.
+  dangerous-triggers:
+    ignore:
+      - e2e.yaml

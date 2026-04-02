@@ -263,6 +263,27 @@ spec:
                 set -euxo pipefail
                 yamllint -f parsable -c .yamllint $(find . -type f -regex ".*y[a]ml" -print)
 
+            - name: zizmor
+              displayName: "GitHub Actions security linter"
+              image: registry.access.redhat.com/ubi9/python-312
+              workingDir: $(workspaces.source.path)
+              env:
+                - name: HUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "nightly-ci-github-hub-token"
+                      key: "hub-token"
+              script: |
+                set -euxo pipefail
+                if uname -m | grep -q aarch64; then
+                  target=aarch64-unknown-linux-gnu
+                else
+                  target=x86_64-unknown-linux-gnu
+                fi
+                version=$(curl -H "Authorization: Bearer ${HUB_TOKEN}" -L -s https://api.github.com/repos/zizmorcore/zizmor/releases/latest | python3 -c 'import sys, json; print(json.load(sys.stdin)["tag_name"])')
+                curl -sH "Authorization: Bearer ${HUB_TOKEN}" -L "https://github.com/zizmorcore/zizmor/releases/download/${version}/zizmor-${target}.tar.gz" | tar -xz -C /tmp/ --strip-components=1 -f-
+                /tmp/zizmor .github/workflows/
+
             - name: ruff-lint
               displayName: "Python Linter (ruff)"
               image: registry.access.redhat.com/ubi9/python-312
