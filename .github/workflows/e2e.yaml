@@ -128,7 +128,7 @@ jobs:
 
       - name: Check user permissions on PRs
         if: github.event_name == 'pull_request_target'
-        uses: pipelines-as-code/ok-to-test@2cca1416bd08e56bbef05b063bc22a0329b0c4a2 # v1
+        uses: pipelines-as-code/ok-to-test@25881c6245695bd81a22df9f2ebdd9569b420581 # v1
         with:
           team-slugs: ${{ env.TARGET_TEAM_SLUGS }}
 
