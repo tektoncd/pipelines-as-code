@@ -718,3 +718,87 @@ func TestCreateSecretForPipelineRun(t *testing.T) {
 		})
 	}
 }
+
+func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
+	observer, log := zapobserver.New(zap.ErrorLevel)
+	logger := zap.New(observer).Sugar()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-ns",
+			Name:      "test-pr",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "false",
+				keys.GitAuthSecret: "pac-git-basic-auth-owner-repo",
+				keys.GitProvider:   "github",
+				keys.RepoURL:       "https://github.com/org/repo",
+				keys.URLOrg:        "org",
+				keys.URLRepository: "repo",
+				keys.SHA:           "abc123",
+			},
+		},
+	}
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			GitProvider: &v1alpha1.GitProvider{
+				Secret: &v1alpha1.Secret{
+					Name: "pac-provider-secret",
+				},
+				User: "test-user",
+			},
+		},
+	}
+
+	testData := testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testData)
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{
+						SecretAutoCreation: true,
+					},
+				},
+				Kube: &info.KubeOpts{
+					Namespace: "global",
+				},
+				Controller: &info.ControllerInfo{
+					GlobalRepository: "global-repo",
+				},
+			},
+		},
+		kinteract: &testkubernetestint.KinterfaceTest{
+			GetSecretResult: map[string]string{
+				"pac-provider-secret": "test-token",
+			},
+		},
+	}
+
+	err := r.ReconcileKind(ctx, pr)
+	assert.NilError(t, err)
+
+	updatedPR, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+	assert.NilError(t, getErr)
+	assert.Equal(t, updatedPR.Annotations[keys.SecretCreated], "true")
+
+	logEntries := log.FilterMessageSnippet("failed to create secret for pipelineRun").TakeAll()
+	assert.Equal(t, len(logEntries), 0)
+}

@@ -50,8 +50,7 @@ func (r *Run) UpdatePacConfig(ctx context.Context) error {
 	// This is the case when reverted settings for CustomConsole and TektonDashboard then URL should point to OpenshiftConsole for Openshift platform
 	if updatedPacInfo.CustomConsoleURL == "" &&
 		(updatedPacInfo.TektonDashboardURL == "" && os.Getenv("PAC_TEKTON_DASHBOARD_URL") == "") {
-		r.Clients.SetConsoleUI(&consoleui.OpenshiftConsole{})
-		_ = r.Clients.ConsoleUI().UI(ctx, r.Clients.Dynamic)
+		r.Clients.SetConsoleUI(consoleui.New(ctx, r.Clients.Dynamic, &r.Info))
 	}
 
 	return nil

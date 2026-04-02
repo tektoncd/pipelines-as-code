@@ -113,9 +113,9 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		err := r.createSecretForPipelineRun(ctx, logger, pr, repo)
 		if err != nil && strings.Contains(err.Error(), "creating basic auth secret") {
 			return fmt.Errorf("failed to create secret for pipelineRun %s/%s: %w", pr.GetNamespace(), pr.GetName(), err)
+		} else if err != nil {
+			logger.Errorf("failed to create secret for pipelineRun %s/%s: %v", pr.GetNamespace(), pr.GetName(), err)
 		}
-
-		logger.Errorf("failed to create secret for pipelineRun %s/%s: %v", pr.GetNamespace(), pr.GetName(), err)
 	}
 
 	reason := ""
