@@ -13,11 +13,16 @@ import (
 // a webhook pointing to the given hookURL (for example, a smee channel URL
 // used to forward events to the controller). The project is initialised with
 // a README on the "main" branch.
-func CreateGitLabProject(client *gitlab.Client, groupPath, projectName, hookURL, webhookSecret string, logger *zap.SugaredLogger) (*gitlab.Project, error) {
+func CreateGitLabProject(client *gitlab.Client, groupPath, projectName, hookURL, webhookSecret string, isPrivate bool, logger *zap.SugaredLogger) (*gitlab.Project, error) {
 	logger.Infof("Looking up GitLab group %s", groupPath)
 	group, _, err := client.Groups.GetGroup(groupPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to look up group %s: %w", groupPath, err)
+	}
+
+	visibility := gitlab.PublicVisibility
+	if isPrivate {
+		visibility = gitlab.PrivateVisibility
 	}
 
 	logger.Infof("Creating GitLab project %s in group %s (ID %d)", projectName, groupPath, group.ID)
@@ -26,6 +31,7 @@ func CreateGitLabProject(client *gitlab.Client, groupPath, projectName, hookURL,
 		NamespaceID:          gitlab.Ptr(group.ID),
 		InitializeWithReadme: gitlab.Ptr(true),
 		DefaultBranch:        gitlab.Ptr("main"),
+		Visibility:           gitlab.Ptr(visibility),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project %s: %w", projectName, err)
@@ -49,7 +55,7 @@ func CreateGitLabProject(client *gitlab.Client, groupPath, projectName, hookURL,
 	return project, nil
 }
 
-func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath string, logger *zap.SugaredLogger) (*gitlab.Project, error) {
+func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath string, isPrivate bool, logger *zap.SugaredLogger) (*gitlab.Project, error) {
 	currentUser, _, err := client.Users.CurrentUser()
 	if err != nil {
 		logger.Warnf("could not fetch current GitLab user: %v", err)
@@ -61,9 +67,15 @@ func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath strin
 
 	var project *gitlab.Project
 	var lastErr error
+	visibility := gitlab.PublicVisibility
+	if isPrivate {
+		visibility = gitlab.PrivateVisibility
+	}
 	deadline := time.Now().Add(30 * time.Second)
 	for attempt := 1; time.Now().Before(deadline); attempt++ {
-		options := &gitlab.ForkProjectOptions{}
+		options := &gitlab.ForkProjectOptions{
+			Visibility: gitlab.Ptr(visibility),
+		}
 		if namespacePath != "" {
 			options.NamespacePath = gitlab.Ptr(namespacePath)
 		}
