@@ -23,6 +23,11 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/eventing/pkg/adapter/v2"
@@ -191,6 +196,19 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		}
 		gitProvider.SetPacInfo(&pacInfo)
 
+		// Extract inbound trace context from request headers for distributed tracing
+		tracedCtx := otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(request.Header))
+
+		// Start a span for webhook handling
+		tracer := otel.Tracer(tracing.TracerName)
+		tracedCtx, span := tracer.Start(tracedCtx, "PipelinesAsCode:ProcessEvent",
+			trace.WithSpanKind(trace.SpanKindServer),
+		)
+
+		span.SetAttributes(
+			semconv.VCSProviderNameKey.String(gitProvider.GetConfig().Name),
+		)
+
 		s := sinker{
 			run:        l.run,
 			vcx:        gitProvider,
@@ -206,8 +224,10 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		localRequest := request.Clone(request.Context())
 
 		go func() {
-			err := s.processEvent(ctx, localRequest)
+			defer span.End()
+			err := s.processEvent(tracedCtx, localRequest)
 			if err != nil {
+				span.RecordError(err)
 				logger.Errorf("an error occurred: %v", err)
 			}
 		}()
@@ -235,12 +255,6 @@ func (l listener) processRes(processEvent bool, provider provider.Interface, log
 
 func (l listener) detectProvider(req *http.Request, reqBody string) (provider.Interface, *zap.SugaredLogger, error) {
 	log := *l.logger
-
-	// payload validation
-	var event map[string]any
-	if err := json.Unmarshal([]byte(reqBody), &event); err != nil {
-		return nil, &log, fmt.Errorf("invalid event body format: %w", err)
-	}
 
 	gitHub := github.New()
 	gitHub.Run = l.run

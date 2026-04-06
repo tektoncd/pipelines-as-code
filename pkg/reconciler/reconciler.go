@@ -309,7 +309,7 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	}
 
 	finalState := kubeinteraction.StateCompleted
-	newPr, err := r.postFinalStatus(ctx, logger, pacInfo, provider, event, pr)
+	newPr, trStatus, err := r.postFinalStatus(ctx, logger, pacInfo, provider, event, pr)
 	if err != nil {
 		logger.Errorf("failed to post final status, moving on: %v", err)
 		finalState = kubeinteraction.StateFailed
@@ -335,6 +335,8 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	if err := r.emitMetrics(ctx, pr); err != nil {
 		logger.Error("failed to emit metrics: ", err)
 	}
+
+	emitTimingSpans(logger, pr, &pacInfo.Settings, trStatus)
 
 	// remove pipelineRun from Queue and start the next one
 	for {

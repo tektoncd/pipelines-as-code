@@ -68,6 +68,9 @@ const (
 	GithubApplicationID  = "github-application-id"
 	GithubPrivateKey     = "github-private-key"
 	ResultsRecordSummary = "results.tekton.dev/recordSummaryAnnotations"
+
+	// SpanContextAnnotation is the annotation key for propagating span context to Tekton for distributed tracing.
+	SpanContextAnnotation = "tekton.dev/pipelinerunSpanContext"
 )
 
 var ParamsRe = regexp.MustCompile(`{{([^}]{2,})}}`)
