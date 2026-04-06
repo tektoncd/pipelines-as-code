@@ -12,6 +12,8 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -83,8 +85,14 @@ is that what you want? make sure you use -n when generating the secret, eg: echo
 		}
 	}
 	// Set up the authenticated client
-	if err := vcx.SetClient(ctx, run, event, repo, eventEmitter); err != nil {
-		return fmt.Errorf("failed to set client: %w", err)
+	clientErr := vcx.SetClient(ctx, run, event, repo, eventEmitter)
+	if name := vcx.GetConfig().Name; name != "" {
+		if span := trace.SpanFromContext(ctx); span.IsRecording() {
+			span.SetAttributes(semconv.VCSProviderNameKey.String(name))
+		}
+	}
+	if clientErr != nil {
+		return fmt.Errorf("failed to set client: %w", clientErr)
 	}
 	logger.Debugf("setupAuthenticatedClient: provider client initialized")
 

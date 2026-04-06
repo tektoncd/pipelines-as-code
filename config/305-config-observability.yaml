@@ -51,3 +51,17 @@ data:
     # metrics-export-interval specifies how often metrics are exported.
     # Only applicable for grpc and http/protobuf protocols.
     # metrics-export-interval: "30s"
+
+    # tracing-protocol specifies the trace export protocol.
+    # Supported values: "grpc", "http/protobuf", "none".
+    # Default is "none" (tracing disabled).
+    # tracing-protocol: "none"
+
+    # tracing-endpoint specifies the OTLP collector endpoint.
+    # Required when tracing-protocol is "grpc" or "http/protobuf".
+    # The OTEL_EXPORTER_OTLP_ENDPOINT env var takes precedence if set.
+    # tracing-endpoint: "http://otel-collector.observability.svc.cluster.local:4317"
+
+    # tracing-sampling-rate controls the fraction of traces sampled.
+    # 0.0 = none, 1.0 = all. Default is 0 (none).
+    # tracing-sampling-rate: "1.0"

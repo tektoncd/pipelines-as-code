@@ -14,6 +14,9 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -117,6 +120,10 @@ func (s *sinker) processEvent(ctx context.Context, request *http.Request) error 
 		}
 	}
 
+	// Enrich span with VCS attributes — for incoming events these are
+	// pre-populated; for webhook events ParsePayload filled them in.
+	setVCSSpanAttributes(ctx, s.event)
+
 	p := pipelineascode.NewPacs(s.event, s.vcx, s.run, s.pacInfo, s.kint, s.logger, s.globalRepo)
 	return p.Run(ctx)
 }
@@ -173,4 +180,18 @@ func (s *sinker) createSkipCIStatus(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func setVCSSpanAttributes(ctx context.Context, event *info.Event) {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(tracing.PACEventTypeKey.String(event.EventType))
+	if event.URL != "" {
+		span.SetAttributes(semconv.VCSRepositoryURLFullKey.String(event.URL))
+	}
+	if event.SHA != "" {
+		span.SetAttributes(semconv.VCSRefHeadRevisionKey.String(event.SHA))
+	}
 }

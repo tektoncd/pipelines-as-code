@@ -68,6 +68,8 @@ const (
 	GithubApplicationID  = "github-application-id"
 	GithubPrivateKey     = "github-private-key"
 	ResultsRecordSummary = "results.tekton.dev/recordSummaryAnnotations"
+
+	SpanContextAnnotation = "tekton.dev/pipelinerunSpanContext"
 )
 
 var ParamsRe = regexp.MustCompile(`{{([^}]{2,})}}`)
