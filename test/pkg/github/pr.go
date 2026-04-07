@@ -219,7 +219,7 @@ func (g *PRTest) TearDown(ctx context.Context, t *testing.T) {
 	// Collect GitHub API call information from controller logs
 	g.collectGitHubAPICalls(ctx, t)
 
-	if g.PRNumber != -1 && g.Provider != nil && g.Logger != nil {
+	if g.PRNumber > 0 && g.Provider != nil && g.Logger != nil {
 		g.Logger.Infof("Closing PR %d", g.PRNumber)
 		state := "closed"
 		_, _, err := g.Provider.Client().PullRequests.Edit(ctx,
