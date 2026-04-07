@@ -48,6 +48,7 @@ const (
 	OriginalPRName         = pipelinesascode.GroupName + "/original-prname"
 	GitAuthSecret          = pipelinesascode.GroupName + "/git-auth-secret"
 	CheckRunID             = pipelinesascode.GroupName + "/check-run-id"
+	GitLabPipelineID       = pipelinesascode.GroupName + "/gitlab-pipeline-id"
 	OnEvent                = pipelinesascode.GroupName + "/on-event"
 	OnComment              = pipelinesascode.GroupName + "/on-comment"
 	OnTargetBranch         = pipelinesascode.GroupName + "/on-target-branch"
