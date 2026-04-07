@@ -42,8 +42,8 @@ To create the GitHub App manually:
 - Subscribe to following events:
   - Check run
   - Check suite
-  - Issue comment
   - Commit comment
+  - Issue comment
   - Pull request
   - Push
 
