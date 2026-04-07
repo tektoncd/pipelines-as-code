@@ -463,6 +463,21 @@ func (v *Provider) GetCommitInfo(ctx context.Context, runevent *info.Event) erro
 		}
 	}
 
+	// For incoming webhooks, DefaultBranch is not populated from the event
+	// payload (since there is no webhook payload to parse). Fetch it from the
+	// GitHub API so that pipelinerun_provenance: default_branch works correctly.
+	// For other event types (push, pull_request), DefaultBranch is already set
+	// by ParsePayload from the webhook payload's repository.default_branch field.
+	if runevent.DefaultBranch == "" && runevent.EventType == "incoming" {
+		ghRepo, _, err := wrapAPI(v, "get_repo", func() (*github.Repository, *github.Response, error) {
+			return v.Client().Repositories.Get(ctx, runevent.Organization, runevent.Repository)
+		})
+		if err != nil {
+			return err
+		}
+		runevent.DefaultBranch = ghRepo.GetDefaultBranch()
+	}
+
 	return nil
 }
 

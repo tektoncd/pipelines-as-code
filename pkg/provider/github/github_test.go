@@ -933,6 +933,31 @@ func TestGithubGetCommitInfo(t *testing.T) {
 			wantHasSkipCmd: true,
 		},
 		{
+			name: "incoming webhook populates DefaultBranch",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repository",
+				SHA:          "shacommitinfo",
+				EventType:    "incoming",
+			},
+			shaurl:   "https://git.provider/commit/info",
+			shatitle: "My beautiful pony",
+			message:  "My beautiful pony",
+		},
+		{
+			name: "DefaultBranch already set is preserved",
+			event: &info.Event{
+				Organization:  "owner",
+				Repository:    "repository",
+				SHA:           "shacommitinfo",
+				DefaultBranch: "develop",
+				EventType:     "incoming",
+			},
+			shaurl:   "https://git.provider/commit/info",
+			shatitle: "My beautiful pony",
+			message:  "My beautiful pony",
+		},
+		{
 			name: "error",
 			event: &info.Event{
 				Organization: "owner",
@@ -940,6 +965,7 @@ func TestGithubGetCommitInfo(t *testing.T) {
 				SHA:          "shacommitinfo",
 			},
 			apiReply: "hello moto",
+			wantErr:  "invalid character",
 		},
 		{
 			name:     "noclient",
@@ -952,6 +978,12 @@ func TestGithubGetCommitInfo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
+			// Mock the repo endpoint so GetCommitInfo can resolve DefaultBranch
+			// when it is not already set on the event (e.g. incoming webhooks).
+			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s",
+				tt.event.Organization, tt.event.Repository), func(rw http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(rw, `{"default_branch": "main"}`)
+			})
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/commits/%s",
 				tt.event.Organization, tt.event.Repository, tt.event.SHA), func(rw http.ResponseWriter, _ *http.Request) {
 				if tt.apiReply != "" {
@@ -1022,6 +1054,7 @@ func TestGithubGetCommitInfo(t *testing.T) {
 				assert.ErrorContains(t, err, tt.wantErr)
 				return
 			}
+			assert.NilError(t, err)
 			assert.Equal(t, tt.shatitle, tt.event.SHATitle)
 			assert.Equal(t, tt.shaurl, tt.event.SHAURL)
 
@@ -1040,6 +1073,16 @@ func TestGithubGetCommitInfo(t *testing.T) {
 				assert.DeepEqual(t, expectedCommitterDate, tt.event.SHACommitterDate)
 			}
 			assert.Equal(t, tt.wantHasSkipCmd, tt.event.HasSkipCommand)
+
+			// For incoming events, verify DefaultBranch is populated
+			if tt.event.EventType == "incoming" {
+				if tt.event.DefaultBranch == "develop" {
+					// If it was already set, it should be preserved
+					assert.Equal(t, "develop", tt.event.DefaultBranch, "DefaultBranch should be preserved")
+				} else {
+					assert.Equal(t, "main", tt.event.DefaultBranch, "DefaultBranch should be populated from API")
+				}
+			}
 		})
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
+	repository "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"github.com/tektoncd/pipeline/pkg/names"
@@ -339,6 +340,160 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 	} else {
 		runcnx.Clients.Log.Infof("Successfully verified no PipelineRun was created for non-matching branch %s with targets %v", randomedString, targets)
 	}
+}
+
+// TestGithubGHEAppIncomingDefaultBranchProvenance tests that incoming webhooks
+// work correctly with pipelinerun_provenance set to "default_branch".
+// This verifies the fix for https://github.com/tektoncd/pipelines-as-code/issues/2646
+// where DefaultBranch was not populated for incoming events.
+func TestGithubGHEAppIncomingDefaultBranchProvenance(t *testing.T) {
+	ctx := context.Background()
+	onGHE := true
+	ctx, runcnx, opts, ghprovider, err := tgithub.Setup(ctx, onGHE, false)
+	assert.NilError(t, err)
+
+	randomedString := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
+	targetBranch := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("incoming-branch")
+
+	runcnx.Clients.Log.Infof("Testing incoming webhook with default_branch provenance on %s", randomedString)
+
+	repoinfo, resp, err := ghprovider.Client().Repositories.Get(ctx, opts.Organization, opts.Repo)
+	assert.NilError(t, err)
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
+		t.Errorf("Repository %s not found in %s", opts.Organization, opts.Repo)
+	}
+
+	incoming := &[]v1alpha1.Incoming{
+		{
+			Type: "webhook-url",
+			Secret: v1alpha1.Secret{
+				Name: incomingSecretName,
+				Key:  "incoming",
+			},
+			Targets: []string{targetBranch},
+			Params: []string{
+				"the_best_superhero_is",
+			},
+		},
+	}
+
+	// Create Repository CR with pipelinerun_provenance: default_branch
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: randomedString,
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL:       repoinfo.GetHTMLURL(),
+			Incomings: incoming,
+			Settings: &v1alpha1.Settings{
+				PipelineRunProvenance: "default_branch",
+			},
+		},
+	}
+
+	err = repository.CreateNS(ctx, randomedString, runcnx)
+	assert.NilError(t, err)
+	err = repository.CreateRepo(ctx, randomedString, runcnx, repo)
+	assert.NilError(t, err)
+
+	err = secret.Create(ctx, runcnx, map[string]string{"incoming": incomingSecreteValue}, randomedString, incomingSecretName)
+	assert.NilError(t, err)
+
+	// Push .tekton/ files to the DEFAULT branch (not the incoming target branch)
+	entries, err := payload.GetEntries(map[string]string{
+		".tekton/pipelinerun-incoming.yaml": "testdata/pipelinerun-incoming.yaml",
+	}, randomedString, targetBranch, triggertype.Incoming.String(), map[string]string{})
+	assert.NilError(t, err)
+
+	defaultBranch := repoinfo.GetDefaultBranch()
+	title := "TestGithubAppIncomingDefaultBranchProvenance - " + randomedString
+	// Push .tekton/ to default branch by creating a commit and updating the ref
+	// (PushFilesToRef with empty targetRef creates the commit without creating a new ref)
+	sha, _, err := tgithub.PushFilesToRef(ctx, ghprovider.Client(), title,
+		defaultBranch,
+		"",
+		opts.Organization,
+		opts.Repo,
+		entries)
+	assert.NilError(t, err)
+	// Update the existing default branch ref to point to the new commit
+	_, _, err = ghprovider.Client().Git.UpdateRef(ctx, opts.Organization, opts.Repo,
+		"refs/heads/"+defaultBranch, github.UpdateRef{SHA: sha})
+	assert.NilError(t, err)
+	runcnx.Clients.Log.Infof("Commit %s has been created and pushed to default branch %s", sha, defaultBranch)
+
+	// Create the target branch (the incoming webhook targets this branch)
+	targetSHA, _, err := tgithub.PushFilesToRef(ctx, ghprovider.Client(),
+		title,
+		defaultBranch,
+		fmt.Sprintf("refs/heads/%s", targetBranch),
+		opts.Organization,
+		opts.Repo,
+		map[string]string{"README.md": "# target branch"})
+	assert.NilError(t, err)
+	runcnx.Clients.Log.Infof("Target branch %s created with SHA %s", targetBranch, targetSHA)
+
+	// Trigger incoming webhook targeting the non-default branch
+	incomingURL := fmt.Sprintf("%s/incoming", opts.ControllerURL)
+	jsonBody := map[string]interface{}{
+		"repository":  randomedString,
+		"branch":      targetBranch,
+		"pipelinerun": "pipelinerun-incoming",
+		"secret":      incomingSecreteValue,
+		"params": map[string]string{
+			"the_best_superhero_is": "Superman",
+		},
+	}
+	jsonData, err := json.Marshal(jsonBody)
+	assert.NilError(t, err)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, incomingURL, strings.NewReader(string(jsonData)))
+	assert.NilError(t, err)
+	req.Header.Add("Content-Type", "application/json")
+	if onGHE {
+		urlParse, _ := url.Parse(*ghprovider.APIURL)
+		req.Header.Add("X-GitHub-Enterprise-Host", urlParse.Host)
+	}
+
+	client := &http.Client{}
+	httpResp, err := client.Do(req)
+	assert.NilError(t, err)
+	defer httpResp.Body.Close()
+	assert.Assert(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 300,
+		"HTTP status code mismatch: expected=2xx, actual=%d", httpResp.StatusCode)
+
+	runcnx.Clients.Log.Infof("Incoming webhook triggered on URL: %s for branch: %s", incomingURL, targetBranch)
+
+	g := tgithub.PRTest{
+		Cnx:             runcnx,
+		Options:         opts,
+		Provider:        ghprovider,
+		TargetNamespace: randomedString,
+		TargetRefName:   fmt.Sprintf("refs/heads/%s", targetBranch),
+		PRNumber:        -1,
+		SHA:             targetSHA,
+		Logger:          runcnx.Clients.Log,
+		GHE:             onGHE,
+	}
+	defer g.TearDown(ctx, t)
+
+	sopt := wait.SuccessOpt{
+		Title:           title,
+		OnEvent:         triggertype.Incoming.String(),
+		TargetNS:        randomedString,
+		NumberofPRMatch: 1,
+		SHA:             "",
+	}
+	wait.Succeeded(ctx, t, runcnx, opts, sopt)
+
+	// Verify the PipelineRun was created
+	prs, err := runcnx.Clients.Tekton.TektonV1().PipelineRuns(randomedString).List(ctx, metav1.ListOptions{})
+	assert.NilError(t, err)
+	assert.Assert(t, len(prs.Items) == 1, "Expected 1 PipelineRun, got %d", len(prs.Items))
+
+	err = wait.RegexpMatchingInPodLog(context.Background(), runcnx, randomedString,
+		"pipelinesascode.tekton.dev/event-type=incoming", "step-task",
+		*regexp.MustCompile(".*It's a Bird... It's a Plane... It's Superman"), "", 2, nil)
+	assert.NilError(t, err, "Error while checking the logs of the pods")
 }
 
 // Local Variables:
