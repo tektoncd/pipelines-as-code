@@ -314,13 +314,55 @@ func selectSingleOpenPullRequest(prs []*github.PullRequest) (*github.PullRequest
 	}
 }
 
+func (v *Provider) findOpenPullRequestBySHA(ctx context.Context, org, repo, sha string) (*github.PullRequest, error) {
+	const maxPages = 10
+	opts := &github.PullRequestListOptions{
+		State:       "open",
+		Sort:        "updated",
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	var matches []*github.PullRequest
+
+	for page := 0; page < maxPages; page++ {
+		prs, resp, err := wrapAPI(v, "list_pull_requests", func() ([]*github.PullRequest, *github.Response, error) {
+			return v.Client().PullRequests.List(ctx, org, repo, opts)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list open pull requests in %s/%s: %w", org, repo, err)
+		}
+
+		for _, pr := range prs {
+			if pr.GetHead().GetSHA() == sha {
+				matches = append(matches, pr)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return selectSingleOpenPullRequest(matches)
+}
+
 func (v *Provider) resolveReRequestPullRequest(ctx context.Context, runevent *info.Event) (*github.PullRequest, error) {
 	prs, err := v.getPullRequestsWithCommit(ctx, runevent.SHA, runevent.Organization, runevent.Repository, false)
 	if err != nil {
 		return nil, err
 	}
 
-	return selectSingleOpenPullRequest(prs)
+	pr, err := selectSingleOpenPullRequest(prs)
+	if err != nil {
+		return nil, err
+	}
+	if pr != nil {
+		return pr, nil
+	}
+
+	// ListPullRequestsWithCommit may return no matches for fork PR commits.
+	v.Logger.Infof("No PR found via commits API for SHA %s, falling back to open PR listing", runevent.SHA)
+	return v.findOpenPullRequestBySHA(ctx, runevent.Organization, runevent.Repository, runevent.SHA)
 }
 
 func (v *Provider) processEvent(ctx context.Context, event *info.Event, eventInt any) (*info.Event, error) {
@@ -503,6 +545,12 @@ func (v *Provider) handleReRequestEvent(ctx context.Context, event *github.Check
 	runevent.HeadURL = event.GetCheckRun().GetCheckSuite().GetRepository().GetHTMLURL()
 	// If we don't have a pull_request in this it probably mean a push
 	if len(event.GetCheckRun().GetCheckSuite().PullRequests) == 0 {
+		if len(event.GetCheckRun().PullRequests) > 0 {
+			runevent.PullRequestNumber = event.GetCheckRun().PullRequests[0].GetNumber()
+			runevent.TriggerTarget = triggertype.PullRequest
+			v.Logger.Infof("Recheck of PR %s/%s#%d has been requested (from check_run)", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
+			return v.getPullRequest(ctx, runevent)
+		}
 		// If head_branch is null, try to find a PR by SHA before assuming push
 		if runevent.HeadBranch == "" && runevent.SHA != "" {
 			pr, err := v.resolveReRequestPullRequest(ctx, runevent)
