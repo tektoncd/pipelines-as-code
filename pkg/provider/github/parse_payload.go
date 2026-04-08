@@ -354,7 +354,8 @@ func (v *Provider) processEvent(ctx context.Context, event *info.Event, eventInt
 				"exiting... (hint: did you forget setting a secret on your repo?)")
 		}
 		if gitEvent.GetAction() != "created" {
-			return nil, fmt.Errorf("only newly created comment is supported, received: %s", gitEvent.GetAction())
+			v.Logger.Debugf("only newly created comment is supported, received: %s, skipping", gitEvent.GetAction())
+			return nil, nil
 		}
 		processedEvent, err = v.handleIssueCommentEvent(ctx, gitEvent)
 		if err != nil {

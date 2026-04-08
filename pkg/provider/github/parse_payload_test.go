@@ -745,8 +745,7 @@ func TestParsePayLoad(t *testing.T) {
 			},
 		},
 		{
-			name:               "bad/issue_comment_not_from_created",
-			wantErrString:      "only newly created comment is supported, received: deleted",
+			name:               "good/issue_comment_not_from_created_skip",
 			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("deleted")},
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
