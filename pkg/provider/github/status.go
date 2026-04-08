@@ -42,7 +42,9 @@ const taskStatusTemplate = `
 {{- end }}
 </table>`
 
-func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts) (*int64, error) {
+// fetchAllCheckRunPages retrieves every page of check runs for the event SHA.
+func (v *Provider) fetchAllCheckRunPages(ctx context.Context, runevent *info.Event) ([]*github.CheckRun, error) {
+	var all []*github.CheckRun
 	opt := github.ListOptions{PerPage: v.PaginedNumber}
 	for {
 		res, resp, err := wrapAPI(v, "list_check_runs_for_ref", func() (*github.ListCheckRunsResults, *github.Response, error) {
@@ -55,25 +57,37 @@ func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Eve
 		if err != nil {
 			return nil, err
 		}
-
-		for _, checkrun := range res.CheckRuns {
-			// if it is a Pending approval CheckRun then overwrite it
-			if isPendingApprovalCheckrun(checkrun) || isFailedCheckrun(checkrun) {
-				if v.canIUseCheckrunID(checkrun.ID) {
-					return checkrun.ID, nil
-				}
-			}
-			if *checkrun.ExternalID == status.PipelineRunName {
-				return checkrun.ID, nil
-			}
-		}
+		all = append(all, res.CheckRuns...)
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
 	}
+	return all, nil
+}
 
-	return nil, nil
+func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts) (*int64, error) {
+	v.checkRunsCache.once.Do(func() {
+		v.checkRunsCache.runs, v.checkRunsCache.err = v.fetchAllCheckRunPages(ctx, runevent)
+	})
+	if v.checkRunsCache.err != nil {
+		return nil, v.checkRunsCache.err
+	}
+	return searchCheckRuns(v.checkRunsCache.runs, status, v), nil
+}
+
+func searchCheckRuns(runs []*github.CheckRun, status providerstatus.StatusOpts, v *Provider) *int64 {
+	for _, checkrun := range runs {
+		if isPendingApprovalCheckrun(checkrun) || isFailedCheckrun(checkrun) {
+			if v.canIUseCheckrunID(checkrun.ID) {
+				return checkrun.ID
+			}
+		}
+		if checkrun.ExternalID != nil && *checkrun.ExternalID == status.PipelineRunName {
+			return checkrun.ID
+		}
+	}
+	return nil
 }
 
 func isPendingApprovalCheckrun(run *github.CheckRun) bool {
