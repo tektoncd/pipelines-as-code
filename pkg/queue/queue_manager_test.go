@@ -2,7 +2,6 @@ package queue
 
 import (
 	"fmt"
-	"runtime"
 	"testing"
 	"time"
 
@@ -24,16 +23,7 @@ import (
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
-func skipOnOSX64(t *testing.T) {
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("Skipping test on OSX arm64")
-	}
-}
-
 func TestSomeoneElseSetPendingWithNoConcurrencyLimit(t *testing.T) {
-	// Skip if we are running on OSX, there is a problem with ordering only happening on arm64
-	skipOnOSX64(t)
-
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 
@@ -80,8 +70,6 @@ func TestAddToPendingQueueDirectly(t *testing.T) {
 }
 
 func TestNewManagerForList(t *testing.T) {
-	// Skip if we are running on OSX, there is a problem with ordering only happening on arm64
-	skipOnOSX64(t)
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 

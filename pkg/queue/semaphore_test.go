@@ -109,6 +109,25 @@ func TestNewSemaphore(t *testing.T) {
 	assert.Equal(t, repo.acquireLatest(), "")
 }
 
+func TestNewSemaphorePreservesInsertionOrderForEqualPriority(t *testing.T) {
+	repo := newSemaphore("test", 1)
+	now := time.Unix(123, 0)
+
+	assert.Equal(t, repo.addToQueue("A", now), true)
+	assert.Equal(t, repo.addToQueue("B", now), true)
+	assert.Equal(t, repo.addToQueue("C", now), true)
+
+	assert.Equal(t, repo.acquireLatest(), "A")
+	repo.release("A")
+	repo.removeFromQueue("A")
+
+	assert.Equal(t, repo.acquireLatest(), "B")
+	repo.release("B")
+	repo.removeFromQueue("B")
+
+	assert.Equal(t, repo.acquireLatest(), "C")
+}
+
 func TestTryAcquireDeadlockScenario(t *testing.T) {
 	// This test ensures concurrent access to tryAcquire works without deadlocks
 	repo := newSemaphore("deadlock-test", 1)
