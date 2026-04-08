@@ -379,6 +379,9 @@ jobs:
           TEST_BITBUCKET_SERVER_TOKEN: ${{ secrets.BITBUCKET_SERVER_TOKEN }}
           TEST_BITBUCKET_SERVER_API_URL: ${{ secrets.BITBUCKET_SERVER_API_URL }}
           TEST_BITBUCKET_SERVER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_SERVER_WEBHOOK_SECRET }}
+          TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
+          TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
+          TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
         run: |
           ./hack/gh-workflow-ci.sh run_e2e_tests
 
