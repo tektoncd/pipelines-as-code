@@ -5,7 +5,7 @@ weight: 1
 
 This page explains how to trigger GitOps commands on pushed commits. Use these commands when you want to retest or cancel PipelineRuns triggered by push events rather than pull requests.
 
-{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_server="false" >}}
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
 
 You can trigger GitOps commands on a pushed commit by including them in your commit messages. Pipelines-as-Code supports two scopes:
 
@@ -80,7 +80,7 @@ The following sections show how to add a GitOps comment on a pushed commit in ea
 
 ## Triggering PipelineRuns on Git Tags
 
-{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_server="false" >}}
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
 
 **What it does:** You can retrigger a PipelineRun against a specific Git tag by commenting on the tagged commit. Pipelines-as-Code resolves the tag to its commit SHA and runs the matching PipelineRun against that commit.
 

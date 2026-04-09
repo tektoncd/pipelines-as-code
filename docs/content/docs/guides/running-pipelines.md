@@ -123,7 +123,7 @@ the pull request describing the error. Pipelines-as-Code also logs the error in 
 Despite validation errors, Pipelines-as-Code continues to run other correctly parsed and matched PipelineRuns.
 However, a YAML syntax error in any PipelineRun halts the execution of all PipelineRuns, even those that are syntactically correct.
 
-{{< support_matrix github_app="true" github_webhook="true" forgejo="true" gitlab="true" bitbucket_cloud="false" bitbucket_server="false" >}}
+{{< support_matrix github_app="true" github_webhook="true" forgejo="true" gitlab="true" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
 
 When an event triggers from a pull request, Pipelines-as-Code creates a new comment on
 the pull request detailing the error.
