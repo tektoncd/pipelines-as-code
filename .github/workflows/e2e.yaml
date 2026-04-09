@@ -110,7 +110,7 @@ jobs:
       TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
       TEST_BITBUCKET_CLOUD_USER: cboudjna
 
-      # Bitbucket Server
+      # Bitbucket Data Center
       TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
       TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY: PAC/pac-e2e-tests
       TEST_BITBUCKET_DATA_CENTER_TOKEN: ${{ secrets.BITBUCKET_DATA_CENTER_TOKEN }}
@@ -296,7 +296,7 @@ jobs:
           TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
           TEST_BITBUCKET_CLOUD_USER: cboudjna
 
-          # Bitbucket Server
+          # Bitbucket Data Center
           TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
           TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY: PAC/pac-e2e-tests
           TEST_BITBUCKET_DATA_CENTER_TOKEN: ${{ secrets.BITBUCKET_DATA_CENTER_TOKEN }}

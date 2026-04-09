@@ -605,16 +605,16 @@ func TestSetupAuthenticatedClientProviderSpecificEvents(t *testing.T) {
 			description: "Bitbucket Cloud PR events should work",
 		},
 		{
-			name:        "Bitbucket Server PR opened",
+			name:        "Bitbucket Data Center PR opened",
 			eventType:   "pr:opened",
 			wantErr:     false,
-			description: "Bitbucket Server PR opened events should work",
+			description: "Bitbucket Data Center PR opened events should work",
 		},
 		{
-			name:        "Bitbucket Server push",
+			name:        "Bitbucket Data Center push",
 			eventType:   "repo:refs_changed",
 			wantErr:     false,
-			description: "Bitbucket Server push events should work",
+			description: "Bitbucket Data Center push events should work",
 		},
 	}
 

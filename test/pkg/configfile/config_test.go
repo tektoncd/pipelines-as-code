@@ -152,12 +152,12 @@ bitbucket_cloud:
   user: "bbuser"
   token: "bb-token"
   e2e_repository: "workspace/repo"
-bitbucket_server:
+bitbucket_datacenter:
   api_url: "https://bitbucket.example.com"
   user: "bbsuser"
   token: "bbs-token"
   e2e_repository: "project/repo"
-  webhook_secret: "bbs-secret"
+  webhook_secret: "bds-secret"
 `
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	assert.NilError(t, os.WriteFile(configPath, []byte(content), 0o600))
@@ -225,7 +225,7 @@ bitbucket_server:
 		"TEST_BITBUCKET_DATA_CENTER_USER":           "bbsuser",
 		"TEST_BITBUCKET_DATA_CENTER_TOKEN":          "bbs-token",
 		"TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY": "project/repo",
-		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET": "bbs-secret",
+		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET": "bds-secret",
 	}
 
 	for envVar, expectedVal := range expected {

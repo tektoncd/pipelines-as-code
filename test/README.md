@@ -83,7 +83,7 @@ cp test/e2e-config.yaml.example test/e2e-config.yaml
 
 The YAML file groups settings by provider section (`common`, `github`,
 `github_enterprise`, `gitlab`, `gitea`, `bitbucket_cloud`,
-`bitbucket_server`). See `test/e2e-config.yaml.example` for the full list of
+`bitbucket_datacenter`). See `test/e2e-config.yaml.example` for the full list of
 fields.
 
 Environment variables always take precedence over YAML values, so you can use

@@ -9,13 +9,13 @@ import (
 )
 
 type E2EConfig struct {
-	Common           CommonConfig           `json:"common"            yaml:"common"`
-	GitHub           GitHubConfig           `json:"github"            yaml:"github"`
-	GitHubEnterprise GitHubEnterpriseConfig `json:"github_enterprise" yaml:"github_enterprise"`
-	GitLab           GitLabConfig           `json:"gitlab"            yaml:"gitlab"`
-	Gitea            GiteaConfig            `json:"gitea"             yaml:"gitea"`
-	BitbucketCloud   BitbucketCloudConfig   `json:"bitbucket_cloud"   yaml:"bitbucket_cloud"`
-	BitbucketServer  BitbucketServerConfig  `json:"bitbucket_server"  yaml:"bitbucket_server"`
+	Common              CommonConfig              `json:"common"               yaml:"common"`
+	GitHub              GitHubConfig              `json:"github"               yaml:"github"`
+	GitHubEnterprise    GitHubEnterpriseConfig    `json:"github_enterprise"    yaml:"github_enterprise"`
+	GitLab              GitLabConfig              `json:"gitlab"               yaml:"gitlab"`
+	Gitea               GiteaConfig               `json:"gitea"                yaml:"gitea"`
+	BitbucketCloud      BitbucketCloudConfig      `json:"bitbucket_cloud"      yaml:"bitbucket_cloud"`
+	BitbucketDataCenter BitbucketDataCenterConfig `json:"bitbucket_datacenter" yaml:"bitbucket_datacenter"`
 }
 
 type CommonConfig struct {
@@ -70,7 +70,7 @@ type BitbucketCloudConfig struct {
 	E2ERepository string `env:"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
 }
 
-type BitbucketServerConfig struct {
+type BitbucketDataCenterConfig struct {
 	APIURL        string `env:"TEST_BITBUCKET_DATA_CENTER_API_URL"        json:"api_url"        yaml:"api_url"`
 	User          string `env:"TEST_BITBUCKET_DATA_CENTER_USER"           json:"user"           yaml:"user"`
 	Token         string `env:"TEST_BITBUCKET_DATA_CENTER_TOKEN"          json:"token"          yaml:"token"`
