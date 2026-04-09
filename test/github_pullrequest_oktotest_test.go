@@ -7,16 +7,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v84/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -41,60 +44,80 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 		Organization:  g.Options.Organization,
 		Repository:    g.Options.Repo,
 		URL:           repoinfo.GetHTMLURL(),
-		Sender:        g.Options.Organization,
 	}
 
-	installID, err := strconv.ParseInt(os.Getenv("TEST_GITHUB_SECOND_APPLICATION_ID"), 10, 64)
-	assert.NilError(t, err)
-	event := github.IssueCommentEvent{
-		Comment: &github.IssueComment{
-			Body: github.Ptr(`/ok-to-test`),
-		},
-		Installation: &github.Installation{
-			ID: &installID,
-		},
-		Action: github.Ptr("created"),
-		Issue: &github.Issue{
-			State: github.Ptr("open"),
-			PullRequestLinks: &github.PullRequestLinks{
-				HTMLURL: github.Ptr(fmt.Sprintf("%s/pull/%d", runevent.URL, g.PRNumber)),
-			},
-		},
-		Repo: &github.Repository{
-			DefaultBranch: &runevent.DefaultBranch,
-			HTMLURL:       &runevent.URL,
-			Name:          &runevent.Repository,
-			Owner:         &github.User{Login: &runevent.Organization},
-		},
-		Sender: &github.User{
-			Login: &runevent.Sender,
-		},
-	}
-
-	err = payload.Send(ctx,
-		g.Cnx,
-		os.Getenv("TEST_GITHUB_SECOND_EL_URL"),
-		os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SECRET"),
-		os.Getenv("TEST_GITHUB_SECOND_API_URL"),
-		os.Getenv("TEST_GITHUB_SECOND_APPLICATION_ID"),
-		event,
-		"issue_comment",
-	)
-	assert.NilError(t, err)
-
-	g.Cnx.Clients.Log.Infof("Wait for the second repository update to be updated")
-	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
-		Namespace:       g.TargetNamespace,
-		MinNumberStatus: 1,
-		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
-	}
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
-	assert.NilError(t, err)
-
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
 	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
 	assert.NilError(t, err)
-	assert.Assert(t, repo.Status[len(repo.Status)-1].Conditions[0].Status == corev1.ConditionTrue)
+	initialStatusCount := len(repo.Status)
+
+	pruns, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
+	})
+	assert.NilError(t, err)
+	initialPipelineRunCount := len(pruns.Items)
+
+	installID, err := strconv.ParseInt(os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"), 10, 64)
+	assert.NilError(t, err)
+
+	sendIssueComment := func(t *testing.T, sender string) {
+		t.Helper()
+
+		event := github.IssueCommentEvent{
+			Comment: &github.IssueComment{
+				Body: github.Ptr(`/ok-to-test`),
+			},
+			Installation: &github.Installation{
+				ID: &installID,
+			},
+			Action: github.Ptr("created"),
+			Issue: &github.Issue{
+				State: github.Ptr("open"),
+				PullRequestLinks: &github.PullRequestLinks{
+					HTMLURL: github.Ptr(fmt.Sprintf("%s/pull/%d", runevent.URL, g.PRNumber)),
+				},
+			},
+			Repo: &github.Repository{
+				DefaultBranch: &runevent.DefaultBranch,
+				HTMLURL:       &runevent.URL,
+				Name:          &runevent.Repository,
+				Owner:         &github.User{Login: &runevent.Organization},
+			},
+			Sender: &github.User{
+				Login: github.Ptr(sender),
+			},
+		}
+
+		err = payload.Send(ctx,
+			g.Cnx,
+			os.Getenv("TEST_GITHUB_SECOND_EL_URL"),
+			os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SECRET"),
+			os.Getenv("TEST_GITHUB_SECOND_API_URL"),
+			os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"),
+			event,
+			"issue_comment",
+		)
+		assert.NilError(t, err)
+	}
+
+	g.Cnx.Clients.Log.Infof("Sending /ok-to-test from untrusted sender on same-repo pull request")
+	sendIssueComment(t, "nonowner")
+
+	time.Sleep(10 * time.Second)
+
+	pruns, err = g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
+	})
+	assert.NilError(t, err)
+	assert.Equal(t, initialPipelineRunCount, len(pruns.Items), "untrusted issue_comment must not create a new PipelineRun")
+
+	repo, err = g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
+	assert.NilError(t, err)
+	assert.Equal(t, initialStatusCount, len(repo.Status), "untrusted issue_comment must not add a new Repository status")
+
+	ctx, err = cctx.GetControllerCtxInfo(ctx, g.Cnx)
+	assert.NilError(t, err)
+	numLines := int64(1000)
+	logRegex := regexp.MustCompile(`Skipping same-repo pull request shortcut for untrusted event \*github\.IssueCommentEvent`)
+	err = twait.RegexpMatchingInControllerLog(ctx, g.Cnx, *logRegex, 10, "ghe-controller", &numLines, nil)
+	assert.NilError(t, err)
 }
