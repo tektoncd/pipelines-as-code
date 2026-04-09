@@ -8,6 +8,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/informer/transform"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/metrics"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
@@ -43,7 +44,16 @@ func NewController() func(context.Context, configmap.Watcher) *controller.Impl {
 		// Start pac config syncer
 		go params.StartConfigSync(ctx, run)
 
+		repoInformer := repository.Get(ctx)
+		if err := repoInformer.Informer().SetTransform(transform.RepositoryForCache); err != nil {
+			log.Fatal("failed to set transform on repository informer: ", err)
+		}
+
 		pipelineRunInformer := tektonPipelineRunInformerv1.Get(ctx)
+		if err := pipelineRunInformer.Informer().SetTransform(transform.PipelineRunForCache); err != nil {
+			log.Fatal("failed to set transform on pipelinerun informer: ", err)
+		}
+
 		metrics, err := metrics.NewRecorder()
 		if err != nil {
 			log.Fatalf("Failed to create pipeline as code metrics recorder %v", err)
@@ -53,8 +63,8 @@ func NewController() func(context.Context, configmap.Watcher) *controller.Impl {
 			run:               run,
 			kinteract:         kinteract,
 			pipelineRunLister: pipelineRunInformer.Lister(),
-			repoLister:        repository.Get(ctx).Lister(),
 			qm:                sync.NewQueueManager(run.Clients.Log),
+			repoLister:        repoInformer.Lister(),
 			metrics:           metrics,
 			eventEmitter:      events.NewEventEmitter(run.Clients.Kube, run.Clients.Log),
 		}
