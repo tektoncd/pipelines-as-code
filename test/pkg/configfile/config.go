@@ -71,11 +71,11 @@ type BitbucketCloudConfig struct {
 }
 
 type BitbucketServerConfig struct {
-	APIURL        string `env:"TEST_BITBUCKET_SERVER_API_URL"        json:"api_url"        yaml:"api_url"`
-	User          string `env:"TEST_BITBUCKET_SERVER_USER"           json:"user"           yaml:"user"`
-	Token         string `env:"TEST_BITBUCKET_SERVER_TOKEN"          json:"token"          yaml:"token"`
-	E2ERepository string `env:"TEST_BITBUCKET_SERVER_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
-	WebhookSecret string `env:"TEST_BITBUCKET_SERVER_WEBHOOK_SECRET" json:"webhook_secret" yaml:"webhook_secret"`
+	APIURL        string `env:"TEST_BITBUCKET_DATA_CENTER_API_URL"        json:"api_url"        yaml:"api_url"`
+	User          string `env:"TEST_BITBUCKET_DATA_CENTER_USER"           json:"user"           yaml:"user"`
+	Token         string `env:"TEST_BITBUCKET_DATA_CENTER_TOKEN"          json:"token"          yaml:"token"`
+	E2ERepository string `env:"TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
+	WebhookSecret string `env:"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET" json:"webhook_secret" yaml:"webhook_secret"`
 }
 
 // LoadConfig reads a YAML config file and sets environment variables for any

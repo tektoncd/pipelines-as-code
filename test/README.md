@@ -55,11 +55,11 @@ this repo should differ from the one which is configured as part of `TEST_GITHUB
 - `TEST_GITEA_PASSWORD` - set password as **pac**
 - `TEST_GITEA_USERNAME` - set username as **pac**
 - `TEST_GITEA_REPO_OWNER` - set repo owner as **pac/pac**
-- `TEST_BITBUCKET_SERVER_USER` - Bitbucket Data Center Username
-- `TEST_BITBUCKET_SERVER_TOKEN` - Bitbucket Data Center token
-- `TEST_BITBUCKET_SERVER_E2E_REPOSITORY` - Bitbucket Data Center repository (i.e. `project/repo`)
-- `TEST_BITBUCKET_SERVER_API_URL` - URL where your Bitbucket Data Center instance is running.
-- `TEST_BITBUCKET_SERVER_WEBHOOK_SECRET` - Webhook secret
+- `TEST_BITBUCKET_DATA_CENTER_USER` - Bitbucket Data Center Username
+- `TEST_BITBUCKET_DATA_CENTER_TOKEN` - Bitbucket Data Center token
+- `TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY` - Bitbucket Data Center repository (i.e. `project/repo`)
+- `TEST_BITBUCKET_DATA_CENTER_API_URL` - URL where your Bitbucket Data Center instance is running.
+- `TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET` - Webhook secret
 
 - `PAC_API_INSTRUMENTATION_DIR` - Optional. When set, E2E tests write per-test JSON reports of GitHub API calls parsed from controller logs to this directory. Useful for analyzing API usage and rate limits. Example: `export PAC_API_INSTRUMENTATION_DIR=/tmp/api-instrumentation`.
 
