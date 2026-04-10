@@ -5,6 +5,7 @@ GOLANGCI_LINT=golangci-lint
 GOFUMPT=gofumpt
 TKN_BINARY_NAME := tkn
 TKN_BINARY_URL := https://tekton.dev/docs/cli/\#installation
+DEFAULT_GOTESTSUM_FORMAT ?= testdox
 LDFLAGS=
 OUTPUT_DIR=bin
 GO           = go
@@ -68,7 +69,7 @@ test-unit: ## Run unit tests
 	@mkdir -p tmp/
 	@echo "Running unit tests..."
 	@if command -v gotestsum >/dev/null 2>&1; then \
-		gotestsum --format testdox -- $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...; \
+		gotestsum --format ${DEFAULT_GOTESTSUM_FORMAT} -- $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...; \
 	else \
 		$(GO) test $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_UNIT) ./pkg/...; \
 	fi
