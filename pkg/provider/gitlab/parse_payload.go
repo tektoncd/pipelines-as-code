@@ -83,7 +83,7 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		// GitLab sends same event for both Tag creation and deletion i.e. "Tag Push Hook".
 		// if gitEvent.After is containing all zeros and gitEvent.CheckoutSHA is empty
 		// it is Delete "Tag Push Hook".
-		if isZeroSHA(gitEvent.After) && gitEvent.CheckoutSHA == "" {
+		if provider.IsZeroSHA(gitEvent.After) && gitEvent.CheckoutSHA == "" {
 			return nil, fmt.Errorf("event Delete %s is not supported", event)
 		}
 
@@ -318,8 +318,4 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *gitlab.C
 	processedEvent.BaseBranch = branchName
 	v.Logger.Infof("gitlab commit_comment: pipelinerun %s has been requested on %s/%s#%s", action, processedEvent.Organization, processedEvent.Repository, processedEvent.SHA)
 	return processedEvent, nil
-}
-
-func isZeroSHA(sha string) bool {
-	return sha == "0000000000000000000000000000000000000000"
 }
