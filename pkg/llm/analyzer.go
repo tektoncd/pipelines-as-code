@@ -9,7 +9,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cel"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	llmcontext "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/context"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm/ltypes"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
@@ -22,97 +21,126 @@ import (
 // AnalysisResult represents the result of an LLM analysis.
 type AnalysisResult struct {
 	Role     string
-	Response *ltypes.AnalysisResponse
+	Response *AnalysisResponse
 	Error    error
 }
 
-// Analyzer coordinates the LLM analysis process.
-type Analyzer struct {
-	run       *params.Run
-	kinteract kubeinteraction.Interface
-	factory   *Factory
-	assembler *llmcontext.Assembler
-	logger    *zap.SugaredLogger
-}
-
-// NewAnalyzer creates a new LLM analyzer.
-func NewAnalyzer(run *params.Run, kinteract kubeinteraction.Interface, logger *zap.SugaredLogger) *Analyzer {
-	return &Analyzer{
-		run:       run,
-		kinteract: kinteract,
-		factory:   NewFactory(run, kinteract),
-		assembler: llmcontext.NewAssembler(run, kinteract, logger),
-		logger:    logger,
+// ExecuteAnalysis performs the complete LLM analysis workflow.
+// This is the single entry point called by the reconciler.
+func ExecuteAnalysis(
+	ctx context.Context,
+	run *params.Run,
+	kinteract kubeinteraction.Interface,
+	logger *zap.SugaredLogger,
+	repo *v1alpha1.Repository,
+	pr *tektonv1.PipelineRun,
+	event *info.Event,
+	prov provider.Interface,
+) error {
+	if repo.Spec.Settings == nil || repo.Spec.Settings.AIAnalysis == nil || !repo.Spec.Settings.AIAnalysis.Enabled {
+		logger.Debug("AI analysis not configured or disabled, skipping")
+		return nil
 	}
-}
 
-// AnalyzeRequest represents a request for LLM analysis.
-type AnalyzeRequest struct {
-	PipelineRun *tektonv1.PipelineRun
-	Event       *info.Event
-	Repository  *v1alpha1.Repository
-	Provider    provider.Interface
-}
+	logger.Infof("Starting LLM analysis for pipeline %s/%s", pr.Namespace, pr.Name)
 
-// Analyze performs LLM analysis based on the repository configuration.
-func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]AnalysisResult, error) {
-	if request == nil {
-		return nil, fmt.Errorf("analysis request is required")
+	results, err := analyze(ctx, run, kinteract, logger, repo, pr, event, prov)
+	if err != nil {
+		return fmt.Errorf("LLM analysis failed: %w", err)
 	}
-	if request.Repository == nil {
+
+	if len(results) == 0 {
+		logger.Debug("No analysis results generated")
+		return nil
+	}
+
+	for _, result := range results {
+		if result.Error != nil {
+			logger.Warnf("Analysis failed for role %s: %v", result.Role, result.Error)
+			continue
+		}
+		if result.Response == nil {
+			logger.Warnf("No response for role %s", result.Role)
+			continue
+		}
+
+		logger.Infof("Processing LLM analysis result for role %s, tokens used: %d", result.Role, result.Response.TokensUsed)
+
+		// Find the role config and validate output destination
+		var roleConfig *v1alpha1.AnalysisRole
+		for i := range repo.Spec.Settings.AIAnalysis.Roles {
+			if repo.Spec.Settings.AIAnalysis.Roles[i].Name == result.Role {
+				roleConfig = &repo.Spec.Settings.AIAnalysis.Roles[i]
+				break
+			}
+		}
+		if roleConfig != nil {
+			output := roleConfig.GetOutput()
+			if output != "pr-comment" {
+				logger.Warnf("Unsupported output destination %q for role %s, skipping (only 'pr-comment' is supported)", output, result.Role)
+				continue
+			}
+		}
+
+		if err := postPRComment(ctx, result, event, prov, logger); err != nil {
+			logger.Warnf("Failed to handle output for role %s: %v", result.Role, err)
+		}
+	}
+
+	return nil
+}
+
+// analyze performs LLM analysis based on the repository configuration.
+func analyze(
+	ctx context.Context,
+	run *params.Run,
+	kinteract kubeinteraction.Interface,
+	logger *zap.SugaredLogger,
+	repo *v1alpha1.Repository,
+	pr *tektonv1.PipelineRun,
+	event *info.Event,
+	prov provider.Interface,
+) ([]AnalysisResult, error) {
+	if repo == nil || repo.Spec.Settings == nil || repo.Spec.Settings.AIAnalysis == nil {
 		return nil, nil
 	}
 
-	if request.Repository.Spec.Settings == nil || request.Repository.Spec.Settings.AIAnalysis == nil {
-		a.logger.With(
-			"repository", request.Repository.Name,
-			"namespace", request.Repository.Namespace,
-		).Debug("No AI analysis configuration found, skipping analysis")
-		return nil, nil
-	}
-
-	config := request.Repository.Spec.Settings.AIAnalysis
+	config := repo.Spec.Settings.AIAnalysis
 	if !config.Enabled {
-		a.logger.With(
-			"repository", request.Repository.Name,
-			"namespace", request.Repository.Namespace,
-		).Debug("AI analysis is disabled, skipping analysis")
 		return nil, nil
 	}
 
-	analysisLogger := a.logger.With(
+	analysisLogger := logger.With(
 		"provider", config.Provider,
-		"pipeline_run", request.PipelineRun.Name,
-		"namespace", request.PipelineRun.Namespace,
-		"repository", request.Repository.Name,
+		"pipeline_run", pr.Name,
+		"namespace", pr.Namespace,
+		"repository", repo.Name,
 		"roles_count", len(config.Roles),
 	)
 
 	analysisLogger.Info("Starting LLM analysis")
 
-	if err := a.validateConfig(config); err != nil {
+	if err := validateAnalysisConfig(config); err != nil {
 		analysisLogger.With("error", err).Error("Invalid AI analysis configuration")
 		return nil, fmt.Errorf("invalid AI analysis configuration: %w", err)
 	}
 
-	// Secret must be in the same namespace as the Repository CR
-	namespace := request.Repository.Namespace
+	namespace := repo.Namespace
+	assembler := llmcontext.NewAssembler(run, kinteract, logger)
 
-	// Build CEL context for role filtering
-	celContext, err := a.assembler.BuildCELContext(request.PipelineRun, request.Event, request.Repository)
+	celContext, err := assembler.BuildCELContext(pr, event, repo)
 	if err != nil {
 		analysisLogger.With("error", err).Error("Failed to build CEL context")
 		return nil, fmt.Errorf("failed to build CEL context: %w", err)
 	}
 
-	// Process each role
 	results := []AnalysisResult{}
 	contextCache := make(map[string]map[string]any)
 
 	for _, role := range config.Roles {
 		roleLogger := analysisLogger.With("role", role.Name)
 
-		shouldTrigger, err := a.shouldTriggerRole(role, celContext, request.PipelineRun)
+		shouldTrigger, err := shouldTriggerRole(role, celContext, pr)
 		if err != nil {
 			roleLogger.With("error", err, "cel_expression", role.OnCEL).Warn("Failed to evaluate CEL expression")
 			results = append(results, AnalysisResult{
@@ -133,13 +161,7 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 		var roleContext map[string]any
 		var cached bool
 		if roleContext, cached = contextCache[contextKey]; !cached {
-			roleContext, err = a.assembler.BuildContext(
-				ctx,
-				request.PipelineRun,
-				request.Event,
-				role.ContextItems,
-				request.Provider,
-			)
+			roleContext, err = assembler.BuildContext(ctx, pr, event, role.ContextItems, prov)
 			if err != nil {
 				roleLogger.With("error", err).Warn("Failed to build context for role")
 				results = append(results, AnalysisResult{
@@ -151,8 +173,17 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 			contextCache[contextKey] = roleContext
 		}
 
-		// Create LLM client for this role
-		client, err := a.createClient(ctx, config, namespace, &role)
+		client, err := NewClient(
+			ctx,
+			AIProvider(config.Provider),
+			config.TokenSecretRef,
+			namespace,
+			kinteract,
+			config.GetAPIURL(),
+			role.GetModel(),
+			config.TimeoutSeconds,
+			config.MaxTokens,
+		)
 		if err != nil {
 			roleLogger.With("error", err).Warn("Failed to create LLM client for role")
 			results = append(results, AnalysisResult{
@@ -162,20 +193,18 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 			continue
 		}
 
-		// Create analysis request
-		analysisRequest := &ltypes.AnalysisRequest{
+		analysisRequest := &AnalysisRequest{
 			Prompt:         role.Prompt,
 			Context:        roleContext,
 			MaxTokens:      config.MaxTokens,
 			TimeoutSeconds: config.TimeoutSeconds,
 		}
 
-		// Apply defaults
 		if analysisRequest.MaxTokens == 0 {
-			analysisRequest.MaxTokens = ltypes.DefaultConfig.MaxTokens
+			analysisRequest.MaxTokens = DefaultMaxTokens
 		}
 		if analysisRequest.TimeoutSeconds == 0 {
-			analysisRequest.TimeoutSeconds = ltypes.DefaultConfig.TimeoutSeconds
+			analysisRequest.TimeoutSeconds = DefaultTimeoutSeconds
 		}
 
 		roleLogger.With(
@@ -184,8 +213,7 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 			"context_items", len(roleContext),
 		).Debug("Sending analysis request to LLM")
 
-		// Perform analysis
-		var response *ltypes.AnalysisResponse
+		var response *AnalysisResponse
 		var analysisErr error
 		analysisStart := time.Now()
 
@@ -195,7 +223,7 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			response, analysisErr = client.Analyze(ctx, analysisRequest)
 			if analysisErr == nil {
-				break // Success
+				break
 			}
 
 			roleLogger.With(
@@ -256,6 +284,26 @@ func (a *Analyzer) Analyze(ctx context.Context, request *AnalyzeRequest) ([]Anal
 	return results, nil
 }
 
+// postPRComment posts LLM analysis as a PR comment.
+func postPRComment(ctx context.Context, result AnalysisResult, event *info.Event, prov provider.Interface, logger *zap.SugaredLogger) error {
+	if event.PullRequestNumber == 0 {
+		logger.Debug("No pull request associated with this event, skipping PR comment")
+		return nil
+	}
+
+	comment := fmt.Sprintf("## 🤖 AI Analysis - %s\n\n%s\n\n---\n*Generated by Pipelines-as-Code LLM Analysis*",
+		result.Role, result.Response.Content)
+
+	updateMarker := fmt.Sprintf("llm-analysis-%s", result.Role)
+
+	if err := prov.CreateComment(ctx, event, comment, updateMarker); err != nil {
+		return fmt.Errorf("failed to create PR comment: %w", err)
+	}
+
+	logger.Infof("Posted LLM analysis as PR comment for role %s", result.Role)
+	return nil
+}
+
 // getContextCacheKey generates a unique key for a context configuration.
 func getContextCacheKey(config *v1alpha1.ContextConfig) string {
 	if config == nil {
@@ -275,7 +323,6 @@ func getContextCacheKey(config *v1alpha1.ContextConfig) string {
 	)
 }
 
-// countSuccessfulResults counts the number of successful analysis results.
 func countSuccessfulResults(results []AnalysisResult) int {
 	count := 0
 	for _, result := range results {
@@ -286,7 +333,6 @@ func countSuccessfulResults(results []AnalysisResult) int {
 	return count
 }
 
-// countFailedResults counts the number of failed analysis results.
 func countFailedResults(results []AnalysisResult) int {
 	count := 0
 	for _, result := range results {
@@ -299,17 +345,16 @@ func countFailedResults(results []AnalysisResult) int {
 
 // shouldTriggerRole evaluates the CEL expression to determine if a role should be triggered.
 // If no on_cel is provided, defaults to triggering only for failed PipelineRuns.
-func (a *Analyzer) shouldTriggerRole(role v1alpha1.AnalysisRole, celContext map[string]any, pr *tektonv1.PipelineRun) (bool, error) {
+func shouldTriggerRole(role v1alpha1.AnalysisRole, celContext map[string]any, pr *tektonv1.PipelineRun) (bool, error) {
 	if role.OnCEL == "" {
 		succeededCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
-
 		return succeededCondition != nil && succeededCondition.Status == corev1.ConditionFalse, nil
 	}
 
 	result, err := cel.Value(role.OnCEL, celContext["body"],
-		make(map[string]string), // headers - empty for pipeline context
-		make(map[string]string), // pac params - empty for now
-		make(map[string]any))    // files - empty for pipeline context
+		make(map[string]string),
+		make(map[string]string),
+		make(map[string]any))
 	if err != nil {
 		return false, fmt.Errorf("failed to evaluate CEL expression '%s': %w", role.OnCEL, err)
 	}
@@ -321,8 +366,8 @@ func (a *Analyzer) shouldTriggerRole(role v1alpha1.AnalysisRole, celContext map[
 	return false, fmt.Errorf("CEL expression '%s' did not return boolean value", role.OnCEL)
 }
 
-// validateConfig validates the AI analysis configuration.
-func (a *Analyzer) validateConfig(config *v1alpha1.AIAnalysisConfig) error {
+// validateAnalysisConfig validates the AI analysis configuration.
+func validateAnalysisConfig(config *v1alpha1.AIAnalysisConfig) error {
 	if config.Provider == "" {
 		return fmt.Errorf("provider is required")
 	}
@@ -351,27 +396,4 @@ func (a *Analyzer) validateConfig(config *v1alpha1.AIAnalysisConfig) error {
 	}
 
 	return nil
-}
-
-// createClient creates an LLM client based on the configuration and role.
-func (a *Analyzer) createClient(ctx context.Context, config *v1alpha1.AIAnalysisConfig, namespace string, role *v1alpha1.AnalysisRole) (ltypes.Client, error) {
-	clientConfig := &ClientConfig{
-		Provider:       ltypes.AIProvider(config.Provider),
-		APIURL:         config.GetAPIURL(),
-		Model:          role.GetModel(),
-		TokenSecretRef: config.TokenSecretRef,
-		TimeoutSeconds: config.TimeoutSeconds,
-		MaxTokens:      config.MaxTokens,
-	}
-
-	if err := a.factory.ValidateConfig(clientConfig); err != nil {
-		return nil, fmt.Errorf("invalid client configuration: %w", err)
-	}
-
-	return a.factory.CreateClient(ctx, clientConfig, namespace)
-}
-
-// GetSupportedProviders returns the list of supported LLM providers.
-func (a *Analyzer) GetSupportedProviders() []ltypes.AIProvider {
-	return a.factory.GetSupportedProviders()
 }

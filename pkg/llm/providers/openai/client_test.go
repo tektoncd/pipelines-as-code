@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm/ltypes"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
 	httptesting "github.com/openshift-pipelines/pipelines-as-code/pkg/test/http"
 	"gotest.tools/v3/assert"
 )
@@ -19,7 +19,7 @@ import (
 func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name      string
-		config    *Config
+		config    *llm.ProviderConfig
 		wantError bool
 		errMsg    string
 	}{
@@ -31,7 +31,7 @@ func TestNewClient(t *testing.T) {
 		},
 		{
 			name: "empty api key",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey: "",
 			},
 			wantError: true,
@@ -39,14 +39,14 @@ func TestNewClient(t *testing.T) {
 		},
 		{
 			name: "valid config with defaults",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey: "test-key",
 			},
 			wantError: false,
 		},
 		{
 			name: "custom config",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "test-key",
 				BaseURL:        "https://custom.url",
 				Model:          "gpt-3.5-turbo",
@@ -59,16 +59,18 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewClient(tt.config)
+			c, err := newClient(tt.config)
 
 			if tt.wantError {
 				assert.Assert(t, err != nil)
 				assert.ErrorContains(t, err, tt.errMsg)
-				assert.Assert(t, client == nil)
+				assert.Assert(t, c == nil)
 			} else {
 				assert.NilError(t, err)
-				assert.Assert(t, client != nil)
-				assert.Equal(t, client.GetProviderName(), "openai")
+				assert.Assert(t, c != nil)
+				assert.Equal(t, c.GetProviderName(), "openai")
+				client, ok := c.(*Client)
+				assert.Assert(t, ok)
 				if tt.config.BaseURL == "" {
 					assert.Equal(t, client.config.BaseURL, defaultBaseURL)
 				}
@@ -77,32 +79,16 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-func TestNewClientWithCustomHTTPClient(t *testing.T) {
-	customHTTPClient := &http.Client{
-		Timeout: 15 * time.Second,
-	}
-
-	config := &Config{
-		APIKey:     "test-key",
-		HTTPClient: customHTTPClient,
-	}
-
-	client, err := NewClient(config)
-
-	assert.NilError(t, err)
-	assert.Assert(t, client.httpClient == customHTTPClient)
-}
-
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name      string
-		config    *Config
+		config    *llm.ProviderConfig
 		wantError bool
 		errMsg    string
 	}{
 		{
 			name: "valid config",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "https://api.openai.com/v1",
 				TimeoutSeconds: 30,
@@ -112,7 +98,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "empty api key",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "",
 				TimeoutSeconds: 30,
 				MaxTokens:      1000,
@@ -122,7 +108,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "negative timeout",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "https://api.openai.com/v1",
 				TimeoutSeconds: -1,
@@ -133,7 +119,7 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "negative max tokens",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "https://api.openai.com/v1",
 				TimeoutSeconds: 30,
@@ -144,60 +130,60 @@ func TestValidateConfig(t *testing.T) {
 		},
 		{
 			name: "invalid URL - no scheme",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "api.openai.com",
 				TimeoutSeconds: 30,
 				MaxTokens:      1000,
 			},
 			wantError: true,
-			errMsg:    "base URL must use http or https scheme",
+			errMsg:    "URL scheme must be",
 		},
 		{
 			name: "invalid URL - wrong scheme",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "ftp://api.openai.com",
 				TimeoutSeconds: 30,
 				MaxTokens:      1000,
 			},
 			wantError: true,
-			errMsg:    "base URL must use http or https scheme",
+			errMsg:    "URL scheme must be",
 		},
 		{
 			name: "invalid URL - has whitespace",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "https://api.openai.com /v1",
 				TimeoutSeconds: 30,
 				MaxTokens:      1000,
 			},
 			wantError: true,
-			errMsg:    "invalid base URL",
+			errMsg:    "URL contains invalid whitespace",
 		},
 		{
 			name: "invalid URL - no host",
-			config: &Config{
+			config: &llm.ProviderConfig{
 				APIKey:         "valid-key",
 				BaseURL:        "https://",
 				TimeoutSeconds: 30,
 				MaxTokens:      1000,
 			},
 			wantError: true,
-			errMsg:    "base URL must have a valid host",
+			errMsg:    "URL must contain",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewClient(tt.config)
+			c, err := newClient(tt.config)
 			if tt.config.APIKey == "" {
 				assert.Assert(t, err != nil)
 				assert.ErrorContains(t, err, "API key is required")
 				return
 			}
 			assert.NilError(t, err)
-			err = client.ValidateConfig()
+			err = c.ValidateConfig()
 
 			if tt.wantError {
 				assert.Assert(t, err != nil)
@@ -210,20 +196,20 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestGetProviderName(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
-	assert.Equal(t, client.GetProviderName(), "openai")
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	assert.Equal(t, c.GetProviderName(), "openai")
 }
 
 func TestAnalyzeSuccess(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	mockResponse := openaiResponse{
 		ID:      "chatcmpl-123",
 		Object:  "chat.completion",
 		Created: 1234567890,
-		Model:   "gpt-4",
+		Model:   "gpt-5.4-mini",
 		Choices: []openaiChoice{
 			{
 				Index: 0,
@@ -255,7 +241,7 @@ func TestAnalyzeSuccess(t *testing.T) {
 		}),
 	}
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt:    "Analyze this",
 		MaxTokens: 100,
 	}
@@ -270,10 +256,11 @@ func TestAnalyzeSuccess(t *testing.T) {
 }
 
 func TestAnalyzePromptBuildError(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt: "Test",
 		Context: map[string]any{
 			"nested": map[string]any{
@@ -314,8 +301,9 @@ func TestAnalyzeErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{APIKey: "test-key"}
-			client, _ := NewClient(config)
+			c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+			client, ok := c.(*Client)
+			assert.Assert(t, ok)
 
 			client.httpClient = &http.Client{
 				Transport: httptesting.RoundTripFunc(func(_ *http.Request) *http.Response {
@@ -323,7 +311,7 @@ func TestAnalyzeErrors(t *testing.T) {
 				}),
 			}
 
-			request := &ltypes.AnalysisRequest{
+			request := &llm.AnalysisRequest{
 				Prompt:    "Analyze",
 				MaxTokens: 100,
 			}
@@ -332,7 +320,7 @@ func TestAnalyzeErrors(t *testing.T) {
 
 			assert.Assert(t, err != nil)
 			assert.Assert(t, response == nil)
-			var analysisErr *ltypes.AnalysisError
+			var analysisErr *llm.AnalysisError
 			assert.Assert(t, errors.As(err, &analysisErr))
 			assert.Equal(t, analysisErr.Type, tt.expectedErrType)
 		})
@@ -398,8 +386,9 @@ func TestAnalyzeAPIError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{APIKey: "test-key"}
-			client, _ := NewClient(config)
+			c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+			client, ok := c.(*Client)
+			assert.Assert(t, ok)
 
 			client.httpClient = &http.Client{
 				Transport: httptesting.RoundTripFunc(func(_ *http.Request) *http.Response {
@@ -412,7 +401,7 @@ func TestAnalyzeAPIError(t *testing.T) {
 				}),
 			}
 
-			request := &ltypes.AnalysisRequest{
+			request := &llm.AnalysisRequest{
 				Prompt:    "Analyze",
 				MaxTokens: 100,
 			}
@@ -421,7 +410,7 @@ func TestAnalyzeAPIError(t *testing.T) {
 
 			assert.Assert(t, err != nil)
 			assert.Assert(t, response == nil)
-			var analysisErr *ltypes.AnalysisError
+			var analysisErr *llm.AnalysisError
 			assert.Assert(t, errors.As(err, &analysisErr))
 
 			if tt.checkMessage {
@@ -429,7 +418,6 @@ func TestAnalyzeAPIError(t *testing.T) {
 			} else {
 				assert.Equal(t, analysisErr.Type, tt.expectedErrType)
 			}
-			// Only check retryable if not checking message since that case doesn't have a specific retryable flag
 			if !tt.checkMessage {
 				assert.Equal(t, analysisErr.Retryable, tt.retryable)
 			}
@@ -438,8 +426,9 @@ func TestAnalyzeAPIError(t *testing.T) {
 }
 
 func TestAnalyzeEmptyResponse(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	mockResponse := openaiResponse{
 		Choices: []openaiChoice{},
@@ -456,7 +445,7 @@ func TestAnalyzeEmptyResponse(t *testing.T) {
 		}),
 	}
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt:    "Analyze",
 		MaxTokens: 100,
 	}
@@ -465,17 +454,18 @@ func TestAnalyzeEmptyResponse(t *testing.T) {
 
 	assert.Assert(t, err != nil)
 	assert.Assert(t, response == nil)
-	var analysisErr *ltypes.AnalysisError
+	var analysisErr *llm.AnalysisError
 	assert.Assert(t, errors.As(err, &analysisErr))
 	assert.Equal(t, analysisErr.Type, "empty_response")
 }
 
 func TestAnalyzeTimeout(t *testing.T) {
-	config := &Config{
+	c, _ := newClient(&llm.ProviderConfig{
 		APIKey:         "test-key",
 		TimeoutSeconds: 1,
-	}
-	client, _ := NewClient(config)
+	})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	client.httpClient = &http.Client{
 		Transport: httptesting.RoundTripFunc(func(_ *http.Request) *http.Response {
@@ -490,7 +480,7 @@ func TestAnalyzeTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt:    "Analyze",
 		MaxTokens: 100,
 	}
@@ -502,14 +492,15 @@ func TestAnalyzeTimeout(t *testing.T) {
 }
 
 func TestAnalyzeWithContext(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	mockResponse := openaiResponse{
 		ID:      "chatcmpl-123",
 		Object:  "chat.completion",
 		Created: 1234567890,
-		Model:   "gpt-4",
+		Model:   "gpt-5.4-mini",
 		Choices: []openaiChoice{
 			{
 				Index: 0,
@@ -532,7 +523,7 @@ func TestAnalyzeWithContext(t *testing.T) {
 			var reqBody openaiRequest
 			err := json.NewDecoder(req.Body).Decode(&reqBody)
 			assert.NilError(t, err)
-			assert.Equal(t, reqBody.Model, "gpt-4")
+			assert.Equal(t, reqBody.Model, "gpt-5.4-mini")
 			assert.Equal(t, len(reqBody.Messages), 1)
 
 			body, err := json.Marshal(mockResponse)
@@ -544,7 +535,7 @@ func TestAnalyzeWithContext(t *testing.T) {
 		}),
 	}
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt:    "Analyze",
 		MaxTokens: 100,
 		Context: map[string]any{
@@ -559,25 +550,27 @@ func TestAnalyzeWithContext(t *testing.T) {
 }
 
 func TestConfigDefaults(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	assert.Equal(t, client.config.BaseURL, defaultBaseURL)
 	assert.Equal(t, client.config.Model, defaultModel)
-	assert.Equal(t, client.config.TimeoutSeconds, defaultTimeoutSeconds)
-	assert.Equal(t, client.config.MaxTokens, defaultMaxTokens)
+	assert.Equal(t, client.config.TimeoutSeconds, llm.DefaultTimeoutSeconds)
+	assert.Equal(t, client.config.MaxTokens, llm.DefaultMaxTokens)
 }
 
 func TestRequestMarshaling(t *testing.T) {
-	config := &Config{APIKey: "test-key"}
-	client, _ := NewClient(config)
+	c, _ := newClient(&llm.ProviderConfig{APIKey: "test-key"})
+	client, ok := c.(*Client)
+	assert.Assert(t, ok)
 
 	client.httpClient = &http.Client{
 		Transport: httptesting.RoundTripFunc(func(req *http.Request) *http.Response {
 			var reqBody openaiRequest
 			err := json.NewDecoder(req.Body).Decode(&reqBody)
 			assert.NilError(t, err)
-			assert.Equal(t, reqBody.Model, "gpt-4")
+			assert.Equal(t, reqBody.Model, "gpt-5.4-mini")
 			assert.Equal(t, len(reqBody.Messages), 1)
 			assert.Equal(t, reqBody.Messages[0].Role, "user")
 			assert.Equal(t, reqBody.MaxCompletionTokens, 100)
@@ -601,7 +594,7 @@ func TestRequestMarshaling(t *testing.T) {
 		}),
 	}
 
-	request := &ltypes.AnalysisRequest{
+	request := &llm.AnalysisRequest{
 		Prompt:    "Test prompt",
 		MaxTokens: 100,
 	}

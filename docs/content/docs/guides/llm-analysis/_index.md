@@ -26,8 +26,8 @@ Additional output destinations (`check-run` and `annotation`) and structured JSO
 
 Pipelines-as-Code supports two LLM providers:
 
-- **OpenAI** -- Default model: `gpt-5-mini`
-- **Google Gemini** -- Default model: `gemini-2.5-flash-lite`
+- **OpenAI** -- Default model: `gpt-5.4-mini`
+- **Google Gemini** -- Default model: `gemini-3.1-flash-lite-preview`
 
 You can specify any model your chosen provider supports. See [Model Selection]({{< relref "/docs/guides/llm-analysis/model-and-triggers#model-selection" >}}) for guidance on choosing the right model.
 
@@ -53,7 +53,7 @@ spec:
         key: "token"
       roles:
         - name: "failure-analysis"
-          model: "gpt-5-mini"  # Optional: specify model (uses provider default if omitted)
+          model: "gpt-5.4-mini"  # Optional: specify model (uses provider default if omitted)
           prompt: |
             You are a DevOps expert. Analyze this failed pipeline and:
             1. Identify the root cause
@@ -129,3 +129,4 @@ When you set `commit_content: true`, Pipelines-as-Code includes the following fi
 - Pipelines-as-Code **intentionally excludes email addresses** from the commit context to protect personally identifiable information (PII) when sending data to external LLM providers.
 - Fields appear only if your Git provider makes them available. Some providers supply limited information (for example, Bitbucket Cloud provides only the author name).
 - Author and committer may be the same person or different (for example, when using `git commit --amend` or rebasing).
+asing).
