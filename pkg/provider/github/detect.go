@@ -76,8 +76,11 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 		}
 		return "", fmt.Sprintf("pull_request: unsupported action \"%s\"", event.GetAction())
 	case *github.IssueCommentEvent:
-		if event.GetAction() == "created" &&
-			event.GetIssue().IsPullRequest() &&
+		if event.GetAction() != "created" {
+			return "", fmt.Sprintf("issue_comment: unsupported action \"%s\"", event.GetAction())
+		}
+
+		if event.GetIssue().IsPullRequest() &&
 			event.GetIssue().GetState() == "open" {
 			if opscomments.IsTestRetestComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
 				return triggertype.Retest, ""
@@ -101,18 +104,20 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 		}
 		return "", fmt.Sprintf("check_run: unsupported action \"%s\"", event.GetAction())
 	case *github.CommitCommentEvent:
-		if event.GetAction() == "created" {
-			if opscomments.IsTestRetestComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
-				return triggertype.Retest, ""
-			}
-			if opscomments.IsCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
-				return triggertype.Cancel, ""
-			}
-			// Here, the `/ok-to-test` command is ignored because it is intended for pull requests.
-			// For unauthorized users, it has no relevance to pushed commits, as only authorized users
-			// are allowed to run CI on pushed commits. Therefore, the `ok-to-test` command holds no significance in this context.
-			// However, it is left to be processed by the `on-comment` annotation rather than returning an error.
+		if event.GetAction() != "created" {
+			return "", fmt.Sprintf("commit_comment: unsupported action \"%s\"", event.GetAction())
 		}
+
+		if opscomments.IsTestRetestComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
+			return triggertype.Retest, ""
+		}
+		if opscomments.IsCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
+			return triggertype.Cancel, ""
+		}
+		// Here, the `/ok-to-test` command is ignored because it is intended for pull requests.
+		// For unauthorized users, it has no relevance to pushed commits, as only authorized users
+		// are allowed to run CI on pushed commits. Therefore, the `ok-to-test` command holds no significance in this context.
+		// However, it is left to be processed by the `on-comment` annotation rather than returning an error.
 		return triggertype.Comment, ""
 	}
 	return "", fmt.Sprintf("github: event \"%v\" is not supported", ghEventType)
