@@ -69,6 +69,11 @@ type Provider struct {
 	memberCache        map[int64]bool
 	cachedChangedFiles *changedfiles.ChangedFiles
 	pacUserID          int64 // user login used by PAC
+	// commitStatusPipelineIDs caches the GitLab pipeline ID returned by
+	// the first SetCommitStatus call for a given (projectID, SHA) pair so
+	// that subsequent statuses for the same commit land in the same
+	// pipeline instead of GitLab auto-creating a new one.
+	commitStatusPipelineIDs map[string]int64
 }
 
 var defaultGitlabListOptions = gitlab.ListOptions{
@@ -354,6 +359,11 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 		Context:     gitlab.Ptr(contextName),
 	}
 
+	// Reuse a previously cached pipeline ID for this (project, SHA) pair so
+	// that all commit statuses land in the same GitLab pipeline instead of
+	// GitLab potentially auto-creating a new "external" pipeline mid-stream.
+	v.setOptPipelineID(opt, event.SourceProjectID, event.SHA)
+
 	// In case we have access, set the status. Typically, on a Merge Request (MR)
 	// from a fork in an upstream repository, the token needs to have write access
 	// to the fork repository in order to create a status. However, the token set on the
@@ -361,15 +371,18 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	// a status comment on it.
 	// This would work on a push or an MR from a branch within the same repo.
 	// Ignoring errors because of the write access issues,
-	_, _, err := v.Client().Commits.SetCommitStatus(event.SourceProjectID, event.SHA, opt)
+	commitStatus, _, err := v.Client().Commits.SetCommitStatus(event.SourceProjectID, event.SHA, opt)
 	if err != nil {
 		v.Logger.Debugf("cannot set status with the GitLab token on the source project: %v", err)
 	} else {
+		v.cachePipelineID(event.SourceProjectID, event.SHA, commitStatus)
 		// we managed to set the status on the source repo, all good we are done
 		v.Logger.Debugf("created commit status on source project ID %d", event.TargetProjectID)
 		return nil
 	}
-	if _, _, err = v.Client().Commits.SetCommitStatus(event.TargetProjectID, event.SHA, opt); err == nil {
+	v.setOptPipelineID(opt, event.TargetProjectID, event.SHA)
+	if commitStatus, _, err = v.Client().Commits.SetCommitStatus(event.TargetProjectID, event.SHA, opt); err == nil {
+		v.cachePipelineID(event.TargetProjectID, event.SHA, commitStatus)
 		v.Logger.Debugf("created commit status on target project ID %d", event.TargetProjectID)
 		// we managed to set the status on the target repo, all good we are done
 		return nil
@@ -859,4 +872,33 @@ func (v *Provider) formatPipelineComment(sha string, status providerstatus.Statu
 
 	return fmt.Sprintf("%s **%s: %s/%s for %s**\n\n%s\n\n<small>Full log available [here](%s)</small>",
 		emoji, status.Title, v.pacInfo.ApplicationName, status.OriginalPipelineRunName, sha, status.Text, status.DetailsURL)
+}
+
+// pipelineIDKey builds the cache key for commitStatusPipelineIDs.
+func pipelineIDKey(projectID int64, sha string) string {
+	return fmt.Sprintf("%d:%s", projectID, sha)
+}
+
+// cachePipelineID stores the pipeline ID from a successful SetCommitStatus
+// response so that later calls for the same (project, SHA) reuse it.
+func (v *Provider) cachePipelineID(projectID int64, sha string, cs *gitlab.CommitStatus) {
+	if cs == nil || cs.PipelineID == 0 {
+		return
+	}
+	if v.commitStatusPipelineIDs == nil {
+		v.commitStatusPipelineIDs = make(map[string]int64)
+	}
+	v.commitStatusPipelineIDs[pipelineIDKey(projectID, sha)] = cs.PipelineID
+}
+
+// setOptPipelineID sets PipelineID on the options if we already have a cached
+// pipeline ID for this (project, SHA) pair.
+func (v *Provider) setOptPipelineID(opt *gitlab.SetCommitStatusOptions, projectID int64, sha string) {
+	opt.PipelineID = nil
+	if v.commitStatusPipelineIDs == nil {
+		return
+	}
+	if pid, ok := v.commitStatusPipelineIDs[pipelineIDKey(projectID, sha)]; ok {
+		opt.PipelineID = gitlab.Ptr(pid)
+	}
 }

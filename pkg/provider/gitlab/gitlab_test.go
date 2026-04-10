@@ -441,6 +441,304 @@ func TestCreateStatus(t *testing.T) {
 	}
 }
 
+func TestCreateStatusPipelineIDCaching(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	log, _ := logger.GetLogger()
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: stdata.Kube,
+			Log:  log,
+		},
+	}
+
+	client, mux, tearDown := thelp.Setup(t)
+	defer tearDown()
+
+	v := &Provider{
+		run:    params.New(),
+		Logger: log,
+		pacInfo: &info.PacOpts{
+			Settings: settings.Settings{
+				ApplicationName: settings.PACApplicationNameDefaultValue,
+			},
+		},
+		eventEmitter: events.NewEventEmitter(run.Clients.Kube, log),
+	}
+	v.SetGitLabClient(client)
+
+	event := &info.Event{
+		TriggerTarget:     "pull_request",
+		SourceProjectID:   500,
+		TargetProjectID:   500,
+		SHA:               "deadbeef",
+		PullRequestNumber: 1,
+	}
+
+	var callCount int
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", event.SourceProjectID, event.SHA),
+		func(rw http.ResponseWriter, r *http.Request) {
+			callCount++
+			var reqBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+				t.Fatalf("failed to decode request body: %v", err)
+			}
+			// First call should NOT include pipeline_id
+			if callCount == 1 {
+				_, hasPipelineID := reqBody["pipeline_id"]
+				assert.Assert(t, !hasPipelineID,
+					"first call should not have pipeline_id")
+			}
+			// Subsequent calls MUST include the cached pipeline_id
+			if callCount > 1 {
+				pid, ok := reqBody["pipeline_id"]
+				assert.Assert(t, ok, "subsequent calls must include pipeline_id")
+				pidFloat, ok := pid.(float64)
+				assert.Assert(t, ok, "pipeline_id must be a number")
+				assert.Equal(t, int64(pidFloat), int64(9999),
+					"pipeline_id must match cached value")
+			}
+			rw.WriteHeader(http.StatusCreated)
+			fmt.Fprint(rw, `{"id": 1, "pipeline_id": 9999}`)
+		})
+
+	// First call — should cache pipeline_id from response
+	statusOpts := providerstatus.StatusOpts{
+		Conclusion:              "success",
+		OriginalPipelineRunName: "pr-1",
+	}
+	err := v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+	assert.Equal(t, callCount, 1)
+
+	// Verify the pipeline ID was cached
+	key := pipelineIDKey(event.SourceProjectID, event.SHA)
+	assert.Equal(t, v.commitStatusPipelineIDs[key], int64(9999))
+
+	// Second call — should reuse the cached pipeline_id
+	statusOpts.OriginalPipelineRunName = "pr-2"
+	err = v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+	assert.Equal(t, callCount, 2)
+}
+
+func TestCreateStatusPipelineIDCachingTargetFallback(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	log, _ := logger.GetLogger()
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: stdata.Kube,
+			Log:  log,
+		},
+	}
+
+	client, mux, tearDown := thelp.Setup(t)
+	defer tearDown()
+
+	v := &Provider{
+		targetProjectID: 600,
+		run:             params.New(),
+		Logger:          log,
+		pacInfo: &info.PacOpts{
+			Settings: settings.Settings{
+				ApplicationName: settings.PACApplicationNameDefaultValue,
+			},
+		},
+		eventEmitter: events.NewEventEmitter(run.Clients.Kube, log),
+	}
+	v.SetGitLabClient(client)
+
+	event := &info.Event{
+		TriggerTarget:     "pull_request",
+		SourceProjectID:   404, // will fail
+		TargetProjectID:   600,
+		SHA:               "aabb1122",
+		PullRequestNumber: 1,
+	}
+
+	// Source returns 404
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", event.SourceProjectID, event.SHA),
+		func(rw http.ResponseWriter, _ *http.Request) {
+			rw.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(rw, `{"message": "404 Not Found"}`)
+		})
+
+	var targetCallCount int
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", event.TargetProjectID, event.SHA),
+		func(rw http.ResponseWriter, r *http.Request) {
+			targetCallCount++
+			var reqBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+				t.Fatalf("failed to decode request body: %v", err)
+			}
+			if targetCallCount == 1 {
+				_, hasPipelineID := reqBody["pipeline_id"]
+				assert.Assert(t, !hasPipelineID,
+					"first target call should not have pipeline_id")
+			}
+			if targetCallCount > 1 {
+				pid, ok := reqBody["pipeline_id"]
+				assert.Assert(t, ok, "subsequent target calls must include pipeline_id")
+				pidFloat, ok := pid.(float64)
+				assert.Assert(t, ok, "pipeline_id must be a number")
+				assert.Equal(t, int64(pidFloat), int64(7777))
+			}
+			rw.WriteHeader(http.StatusCreated)
+			fmt.Fprint(rw, `{"id": 1, "pipeline_id": 7777}`)
+		})
+
+	statusOpts := providerstatus.StatusOpts{
+		Conclusion:              "success",
+		OriginalPipelineRunName: "pr-1",
+	}
+	err := v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+
+	key := pipelineIDKey(event.TargetProjectID, event.SHA)
+	assert.Equal(t, v.commitStatusPipelineIDs[key], int64(7777))
+
+	// Second call should reuse target's cached pipeline_id
+	statusOpts.OriginalPipelineRunName = "pr-2"
+	err = v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+	assert.Equal(t, targetCallCount, 2)
+}
+
+func TestCreateStatusPipelineIDZeroNotCached(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	log, _ := logger.GetLogger()
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: stdata.Kube,
+			Log:  log,
+		},
+	}
+
+	client, mux, tearDown := thelp.Setup(t)
+	defer tearDown()
+
+	v := &Provider{
+		run:    params.New(),
+		Logger: log,
+		pacInfo: &info.PacOpts{
+			Settings: settings.Settings{
+				ApplicationName: settings.PACApplicationNameDefaultValue,
+			},
+		},
+		eventEmitter: events.NewEventEmitter(run.Clients.Kube, log),
+	}
+	v.SetGitLabClient(client)
+
+	event := &info.Event{
+		TriggerTarget:     "pull_request",
+		SourceProjectID:   700,
+		TargetProjectID:   700,
+		SHA:               "cafe0000",
+		PullRequestNumber: 1,
+	}
+
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", event.SourceProjectID, event.SHA),
+		func(rw http.ResponseWriter, r *http.Request) {
+			var reqBody map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+				t.Fatalf("failed to decode request body: %v", err)
+			}
+			// pipeline_id should never be sent since response always returns 0
+			_, hasPipelineID := reqBody["pipeline_id"]
+			assert.Assert(t, !hasPipelineID,
+				"pipeline_id should not be sent when cached value is 0")
+			rw.WriteHeader(http.StatusCreated)
+			// Response with pipeline_id 0 — should not be cached
+			fmt.Fprint(rw, `{"id": 1, "pipeline_id": 0}`)
+		})
+
+	statusOpts := providerstatus.StatusOpts{
+		Conclusion:              "success",
+		OriginalPipelineRunName: "pr-1",
+	}
+	err := v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+	assert.Assert(t, v.commitStatusPipelineIDs == nil,
+		"pipeline ID 0 should not be cached")
+
+	// Second call — still no pipeline_id
+	err = v.CreateStatus(ctx, event, statusOpts)
+	assert.NilError(t, err)
+}
+
+func TestCreateStatusPipelineIDSeparateSHAs(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	log, _ := logger.GetLogger()
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: stdata.Kube,
+			Log:  log,
+		},
+	}
+
+	client, mux, tearDown := thelp.Setup(t)
+	defer tearDown()
+
+	v := &Provider{
+		run:    params.New(),
+		Logger: log,
+		pacInfo: &info.PacOpts{
+			Settings: settings.Settings{
+				ApplicationName: settings.PACApplicationNameDefaultValue,
+			},
+		},
+		eventEmitter: events.NewEventEmitter(run.Clients.Kube, log),
+	}
+	v.SetGitLabClient(client)
+
+	sha1 := "sha1aaaa"
+	sha2 := "sha2bbbb"
+	projectID := int64(800)
+
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", projectID, sha1),
+		func(rw http.ResponseWriter, _ *http.Request) {
+			rw.WriteHeader(http.StatusCreated)
+			fmt.Fprint(rw, `{"id": 1, "pipeline_id": 1111}`)
+		})
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/statuses/%s", projectID, sha2),
+		func(rw http.ResponseWriter, _ *http.Request) {
+			rw.WriteHeader(http.StatusCreated)
+			fmt.Fprint(rw, `{"id": 2, "pipeline_id": 2222}`)
+		})
+
+	event1 := &info.Event{
+		TriggerTarget:     "pull_request",
+		SourceProjectID:   projectID,
+		TargetProjectID:   projectID,
+		SHA:               sha1,
+		PullRequestNumber: 1,
+	}
+	event2 := &info.Event{
+		TriggerTarget:     "pull_request",
+		SourceProjectID:   projectID,
+		TargetProjectID:   projectID,
+		SHA:               sha2,
+		PullRequestNumber: 2,
+	}
+
+	statusOpts := providerstatus.StatusOpts{
+		Conclusion:              "success",
+		OriginalPipelineRunName: "pr-1",
+	}
+
+	err := v.CreateStatus(ctx, event1, statusOpts)
+	assert.NilError(t, err)
+	err = v.CreateStatus(ctx, event2, statusOpts)
+	assert.NilError(t, err)
+
+	// Each SHA must have its own cached pipeline ID
+	assert.Equal(t, v.commitStatusPipelineIDs[pipelineIDKey(projectID, sha1)], int64(1111))
+	assert.Equal(t, v.commitStatusPipelineIDs[pipelineIDKey(projectID, sha2)], int64(2222))
+}
+
 func TestGetCommitInfo(t *testing.T) {
 	tests := []struct {
 		name                string
