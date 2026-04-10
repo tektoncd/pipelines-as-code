@@ -5,7 +5,7 @@
 # Each role can specify a different model. You can use any model supported by your provider.
 # - Consult OpenAI docs: https://platform.openai.com/docs/models
 # - Consult Gemini docs: https://ai.google.dev/gemini-api/docs/models/gemini
-# If no model is specified, provider defaults are used (gpt-5-mini for OpenAI, gemini-2.5-flash-lite for Gemini)
+# If no model is specified, provider defaults are used (gpt-5.4-mini for OpenAI, gemini-3.1-flash-lite-preview for Gemini)
 
 apiVersion: v1
 kind: Namespace

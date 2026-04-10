@@ -209,7 +209,7 @@ func TestAnalyzeSuccess(t *testing.T) {
 		ID:      "chatcmpl-123",
 		Object:  "chat.completion",
 		Created: 1234567890,
-		Model:   "gpt-5-mini",
+		Model:   "gpt-5.4-mini",
 		Choices: []openaiChoice{
 			{
 				Index: 0,
@@ -500,7 +500,7 @@ func TestAnalyzeWithContext(t *testing.T) {
 		ID:      "chatcmpl-123",
 		Object:  "chat.completion",
 		Created: 1234567890,
-		Model:   "gpt-5-mini",
+		Model:   "gpt-5.4-mini",
 		Choices: []openaiChoice{
 			{
 				Index: 0,
@@ -523,7 +523,7 @@ func TestAnalyzeWithContext(t *testing.T) {
 			var reqBody openaiRequest
 			err := json.NewDecoder(req.Body).Decode(&reqBody)
 			assert.NilError(t, err)
-			assert.Equal(t, reqBody.Model, "gpt-5-mini")
+			assert.Equal(t, reqBody.Model, "gpt-5.4-mini")
 			assert.Equal(t, len(reqBody.Messages), 1)
 
 			body, err := json.Marshal(mockResponse)
@@ -570,7 +570,7 @@ func TestRequestMarshaling(t *testing.T) {
 			var reqBody openaiRequest
 			err := json.NewDecoder(req.Body).Decode(&reqBody)
 			assert.NilError(t, err)
-			assert.Equal(t, reqBody.Model, "gpt-5-mini")
+			assert.Equal(t, reqBody.Model, "gpt-5.4-mini")
 			assert.Equal(t, len(reqBody.Messages), 1)
 			assert.Equal(t, reqBody.Messages[0].Role, "user")
 			assert.Equal(t, reqBody.MaxCompletionTokens, 100)

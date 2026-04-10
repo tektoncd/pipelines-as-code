@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultBaseURL = "https://api.openai.com/v1"
-	defaultModel   = "gpt-5-mini"
+	defaultModel   = "gpt-5.4-mini"
 )
 
 func init() {
