@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/go-github/v84/github"
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
 	corev1 "k8s.io/api/core/v1"
@@ -462,6 +464,7 @@ func TestParsePayLoad(t *testing.T) {
 		objectType                 string
 		gitopscommentprefix        string
 		wantRepoCRError            bool
+		wantLogSnippet             string
 	}{
 		{
 			name:          "bad/unknown event",
@@ -745,12 +748,12 @@ func TestParsePayLoad(t *testing.T) {
 			},
 		},
 		{
-			name:               "bad/issue_comment_not_from_created",
-			wantErrString:      "only newly created comment is supported, received: deleted",
+			name:               "good/issue_comment_not_from_created_skip",
 			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("deleted")},
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
 			githubClient:       true,
+			wantLogSnippet:     "only newly created comment is supported",
 		},
 		{
 			name:          "good/issue comment",
@@ -1398,11 +1401,12 @@ func TestParsePayLoad(t *testing.T) {
 			}
 
 			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
-			logger, _ := logger.GetLogger()
+			observer, logCatcher := zapobserver.New(zap.DebugLevel)
+			fakelogger := zap.New(observer).Sugar()
 			run := &params.Run{
 				Clients: clients.Clients{
 					PipelineAsCode: stdata.PipelineAsCode,
-					Log:            logger,
+					Log:            fakelogger,
 					Kube:           stdata.Kube,
 				},
 			}
@@ -1485,7 +1489,7 @@ func TestParsePayLoad(t *testing.T) {
 
 			gprovider := Provider{
 				ghClient: ghClient,
-				Logger:   logger,
+				Logger:   fakelogger,
 				pacInfo: &info.PacOpts{
 					Settings: settings.Settings{SkipPushEventForPRCommits: tt.skipPushEventForPRCommits},
 				},
@@ -1504,6 +1508,10 @@ func TestParsePayLoad(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+			if tt.wantLogSnippet != "" {
+				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantLogSnippet).Len() > 0,
+					"expected debug log containing %q but got none", tt.wantLogSnippet)
+			}
 			// If shaRet is empty, this is a skip case (push event for PR commit)
 			// In this case, ret should be nil
 			if tt.shaRet == "" {
