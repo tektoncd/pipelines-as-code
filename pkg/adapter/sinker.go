@@ -159,7 +159,7 @@ func (s *sinker) setupClient(ctx context.Context, repo *v1alpha1.Repository) err
 func (s *sinker) createSkipCIStatus(ctx context.Context) error {
 	statusOpts := status.StatusOpts{
 		Status:     "completed",
-		Conclusion: status.ConclusionNeutral,
+		Conclusion: status.ConclusionSkipped,
 		Title:      "CI Skipped",
 		Summary:    fmt.Sprintf("%s - CI has been skipped", s.pacInfo.ApplicationName),
 		Text:       "Commit contains a skip CI command. Use /test or /retest to manually trigger CI if needed.",
