@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-github/v84/github"
@@ -685,4 +687,72 @@ func TestProviderGetExistingCheckRunID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetExistingCheckRunIDCacheHit(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	client, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	event := &info.Event{
+		Organization: "owner",
+		Repository:   "repository",
+		SHA:          "sha",
+	}
+
+	apiHits := 0
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA), func(w http.ResponseWriter, _ *http.Request) {
+		apiHits++
+		fmt.Fprint(w, `{"total_count": 1, "check_runs": [{"id": 55555, "external_id": "mypr"}]}`)
+	})
+
+	cnx := New()
+	cnx.SetGithubClient(client)
+
+	// First call — should hit the API and populate the cache.
+	id, err := cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: "mypr"})
+	assert.NilError(t, err)
+	assert.Assert(t, id != nil)
+
+	// Second call — should serve from cache, no additional API call.
+	id2, err := cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: "mypr"})
+	assert.NilError(t, err)
+	assert.Assert(t, id2 != nil)
+	assert.Equal(t, *id, *id2)
+	assert.Equal(t, apiHits, 1)
+}
+
+func TestGetExistingCheckRunIDConcurrent(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	client, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	event := &info.Event{
+		Organization: "owner",
+		Repository:   "repository",
+		SHA:          "sha",
+	}
+
+	var apiHits atomic.Int64
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA), func(w http.ResponseWriter, _ *http.Request) {
+		apiHits.Add(1)
+		fmt.Fprint(w, `{"total_count": 1, "check_runs": [{"id": 55555, "external_id": "mypr"}]}`)
+	})
+
+	cnx := New()
+	cnx.SetGithubClient(client)
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			_, _ = cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: "mypr"})
+		}()
+	}
+	wg.Wait()
+
+	// Only one goroutine should have fetched from the API; the rest hit the cache.
+	assert.Equal(t, apiHits.Load(), int64(1))
 }
