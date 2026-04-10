@@ -63,8 +63,8 @@ type AnalysisRole struct {
 	// Model specifies which LLM model to use for this role (optional).
 	// You can specify any model supported by your provider.
 	// If not specified, provider-specific defaults are used:
-	// - OpenAI: gpt-5-mini
-	// - Gemini: gemini-2.5-flash-lite
+	// - OpenAI: gpt-5.4-mini
+	// - Gemini: gemini-3.1-flash-lite-preview
 	// +optional
 	Model string `json:"model,omitempty"`
 

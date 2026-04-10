@@ -264,8 +264,8 @@ Defines the base prompt template that Pipelines-as-Code sends to the LLM.
 {{< param name="roles[].model" type="string" id="param-roles-model" >}}
 Specifies the LLM model for this role. If omitted, Pipelines-as-Code uses provider-specific defaults:
 
-- OpenAI: `gpt-5-mini`
-- Gemini: `gemini-2.5-flash-lite`
+- OpenAI: `gpt-5.4-mini`
+- Gemini: `gemini-3.1-flash-lite-preview`
 {{< /param >}}
 
 {{< param name="roles[].on_cel" type="string" id="param-roles-on-cel" >}}
