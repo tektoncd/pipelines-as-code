@@ -90,6 +90,8 @@ linters:
         path: _test\.go
       - path: pkg/resolve/resolve.go
         text: don't use `init` function
+      - path: pkg/llm/providers/
+        text: don't use `init` function
       - linters:
           - revive
         path: pkg/errors/
