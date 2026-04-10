@@ -369,8 +369,36 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 	return nil
 }
 
-func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
-	return nil, nil
+func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.giteaClient == nil {
+		return nil, fmt.Errorf("no gitea client has been initialized")
+	}
+
+	statuses, _, err := v.Client().ListStatuses(
+		event.Organization, event.Repository, event.SHA,
+		forgejo.ListStatusesOption{},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		result []provider.CommitStatusInfo
+		seen   = map[string]struct{}{}
+	)
+	for _, s := range statuses {
+		key := fmt.Sprintf("%s\x00%s", s.Context, string(s.State))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, provider.CommitStatusInfo{
+			Name:   s.Context,
+			Status: string(s.State),
+		})
+	}
+
+	return result, nil
 }
 
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {

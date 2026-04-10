@@ -313,7 +313,7 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 
 	switch statusOpts.Conclusion {
 	case providerstatus.ConclusionSkipped:
-		state = gitlab.Canceled
+		state = gitlab.Skipped
 		statusOpts.Title = "skipped validating this commit"
 	case providerstatus.ConclusionNeutral:
 		state = gitlab.Canceled
