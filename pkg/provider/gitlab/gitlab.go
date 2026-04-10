@@ -286,7 +286,7 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	}
 	switch statusOpts.Conclusion {
 	case "skipped":
-		statusOpts.Conclusion = "canceled"
+		statusOpts.Conclusion = "skipped"
 		statusOpts.Title = "skipped validating this commit"
 	case "neutral":
 		statusOpts.Conclusion = "canceled"
