@@ -1,4 +1,4 @@
-package pipelineascode
+package secrets
 
 import (
 	"fmt"

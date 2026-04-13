@@ -1,4 +1,4 @@
-package pipelineascode
+package gitclient
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
@@ -49,10 +50,10 @@ func SetupAuthenticatedClient(
 	// GitHub Apps use controller secret, not Repository git_provider
 	if event.InstallationID > 0 {
 		logger.Debugf("setupAuthenticatedClient: github app installation id=%d, using controller webhook secret", event.InstallationID)
-		event.Provider.WebhookSecret, _ = GetCurrentNSWebhookSecret(ctx, kint, run)
+		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, kint, run)
 	} else {
 		// Non-GitHub App providers use git_provider section in Repository spec
-		scm := SecretFromRepository{
+		scm := secrets.SecretFromRepository{
 			K8int:       kint,
 			Config:      vcx.GetConfig(),
 			Event:       event,

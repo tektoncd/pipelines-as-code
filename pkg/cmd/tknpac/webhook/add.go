@@ -11,7 +11,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/completion"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -117,7 +117,7 @@ func add(ctx context.Context, opts *cli.PacCliOpts, run *params.Run, ioStreams *
 
 	gitProviderSecretKey := repo.Spec.GitProvider.Secret.Key
 	if gitProviderSecretKey == "" {
-		gitProviderSecretKey = pipelineascode.DefaultGitProviderSecretKey
+		gitProviderSecretKey = secrets.DefaultGitProviderSecretKey
 	}
 
 	tokenData, ok := secretData.Data[gitProviderSecretKey]

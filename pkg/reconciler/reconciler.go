@@ -30,7 +30,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	pac "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
 	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
@@ -286,9 +285,9 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	r.run.Clients.ConsoleUI().SetParams(maptemplate)
 
 	if event.InstallationID > 0 {
-		event.Provider.WebhookSecret, _ = pac.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
+		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
 	} else {
-		secretFromRepo := pac.SecretFromRepository{
+		secretFromRepo := secrets.SecretFromRepository{
 			K8int:       r.kinteract,
 			Config:      provider.GetConfig(),
 			Event:       event,
@@ -424,7 +423,7 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 
 	// installation ID indicates Github App installation
 	if event.InstallationID > 0 {
-		event.Provider.WebhookSecret, _ = pac.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
+		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
 	} else {
 		// secretNS is needed when git provider is other than Github App.
 		secretNS := repo.GetNamespace()
@@ -435,7 +434,7 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 			repo.Spec.Merge(r.globalRepo.Spec)
 		}
 
-		secretFromRepo := pac.SecretFromRepository{
+		secretFromRepo := secrets.SecretFromRepository{
 			K8int:       r.kinteract,
 			Config:      detectedProvider.GetConfig(),
 			Event:       event,

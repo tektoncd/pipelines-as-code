@@ -11,7 +11,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	"gotest.tools/v3/assert"
@@ -35,7 +35,7 @@ func TestWebHookSecret(t *testing.T) {
 					Namespace: repoNS,
 				},
 				Data: map[string][]byte{
-					pipelineascode.DefaultGitProviderSecretKey: []byte("somethingsomething"),
+					secrets.DefaultGitProviderSecretKey: []byte("somethingsomething"),
 				},
 			},
 		},

@@ -8,6 +8,7 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/gitclient"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/matcher"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -149,7 +150,7 @@ func (s *sinker) findMatchingRepository(ctx context.Context) (*v1alpha1.Reposito
 // Centralizing this here ensures consistent behavior across all events and enables early
 // optimizations like skip-CI detection before expensive processing.
 func (s *sinker) setupClient(ctx context.Context, repo *v1alpha1.Repository) error {
-	return pipelineascode.SetupAuthenticatedClient(
+	return gitclient.SetupAuthenticatedClient(
 		ctx,
 		s.vcx,
 		s.kint,

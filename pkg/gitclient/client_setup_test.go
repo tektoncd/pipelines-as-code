@@ -1,4 +1,4 @@
-package pipelineascode
+package gitclient
 
 import (
 	"context"

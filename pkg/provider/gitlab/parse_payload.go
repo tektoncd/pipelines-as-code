@@ -13,7 +13,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -205,7 +205,7 @@ func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*in
 		return event, err
 	}
 
-	scm := pipelineascode.SecretFromRepository{
+	scm := secrets.SecretFromRepository{
 		K8int:       kubeInterface,
 		Config:      v.GetConfig(),
 		Event:       event,
