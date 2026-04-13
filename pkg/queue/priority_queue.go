@@ -11,12 +11,14 @@ type (
 type item struct {
 	key      string
 	priority int64
+	sequence int64
 	index    int
 }
 
 type priorityQueue struct {
 	items     []*item
 	itemByKey map[string]*item
+	sequence  int64
 }
 
 func (pq *priorityQueue) isPending(key key) bool {
@@ -30,7 +32,8 @@ func (pq *priorityQueue) add(key key, priority int64) {
 	if _, ok := pq.itemByKey[key]; ok {
 		return
 	}
-	heap.Push(pq, &item{key: key, priority: priority})
+	heap.Push(pq, &item{key: key, priority: priority, sequence: pq.sequence})
+	pq.sequence++
 }
 
 func (pq *priorityQueue) remove(key key) {
@@ -52,6 +55,9 @@ func (pq *priorityQueue) peek() *item {
 func (pq priorityQueue) Len() int { return len(pq.items) }
 
 func (pq priorityQueue) Less(i, j int) bool {
+	if pq.items[i].priority == pq.items[j].priority {
+		return pq.items[i].sequence < pq.items[j].sequence
+	}
 	return pq.items[i].priority < pq.items[j].priority
 }
 

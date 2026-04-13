@@ -450,22 +450,46 @@ func TestPipelineV1StayV1(t *testing.T) {
 	assert.Equal(t, got.APIVersion, "tekton.dev/v1")
 }
 
-func TestPipelineRunv1Beta1InvalidConversion(t *testing.T) {
-	t.Skip("Figure out the issue where setdefault sets the SA and fail when applying on osp")
-	_, _, err := readTDfile(t, "pipelinerun-invalid-conversion", false, true)
-	assert.ErrorContains(t, err, "cannot be validated")
-}
+func TestV1Beta1ConversionFixturesAreAcceptedByReadTektonTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		filename     string
+		pipelineRuns int
+		pipelines    int
+		tasks        int
+	}{
+		{
+			name:         "pipelinerun fixture",
+			filename:     "pipelinerun-invalid-conversion",
+			pipelineRuns: 1,
+		},
+		{
+			name:         "task fixture",
+			filename:     "task-invalid-conversion",
+			pipelineRuns: 1,
+			tasks:        1,
+		},
+		{
+			name:         "pipeline fixture",
+			filename:     "pipeline-invalid-conversion",
+			pipelineRuns: 1,
+			pipelines:    1,
+		},
+	}
 
-func TestTaskv1Beta1InvalidConversion(t *testing.T) {
-	t.Skip("Figure out the issue where setdefault sets the SA and fail when applying on osp")
-	_, _, err := readTDfile(t, "task-invalid-conversion", false, true)
-	assert.ErrorContains(t, err, "cannot be validated")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile("testdata/" + tt.filename + ".yaml")
+			assert.NilError(t, err)
 
-func TestPipelinev1Beta1InvalidConversion(t *testing.T) {
-	t.Skip("Figure out the issue where setdefault sets the SA and fail when applying on osp")
-	_, _, err := readTDfile(t, "pipeline-invalid-conversion", false, true)
-	assert.ErrorContains(t, err, "cannot be validated")
+			types, err := ReadTektonTypes(context.TODO(), nil, string(data))
+			assert.NilError(t, err)
+			assert.Equal(t, len(types.PipelineRuns), tt.pipelineRuns)
+			assert.Equal(t, len(types.Pipelines), tt.pipelines)
+			assert.Equal(t, len(types.Tasks), tt.tasks)
+			assert.Equal(t, len(types.ValidationErrors), 0)
+		})
+	}
 }
 
 func TestPipelineRunsWithSameName(t *testing.T) {

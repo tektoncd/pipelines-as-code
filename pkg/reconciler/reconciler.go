@@ -25,6 +25,8 @@ import (
 	pacapi "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
+	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/gemini" // register Gemini provider via init
+	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/openai" // register OpenAI provider via init
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
@@ -495,6 +497,5 @@ func (r *Reconciler) performLLMAnalysis(
 	event *info.Event,
 	provider provider.Interface,
 ) error {
-	orchestrator := llm.NewOrchestrator(r.run, r.kinteract, logger)
-	return orchestrator.ExecuteAnalysis(ctx, repo, pr, event, provider)
+	return llm.ExecuteAnalysis(ctx, r.run, r.kinteract, logger, repo, pr, event, provider)
 }

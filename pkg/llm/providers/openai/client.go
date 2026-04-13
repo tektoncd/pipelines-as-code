@@ -9,88 +9,67 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm/ltypes"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
 )
 
 const (
 	defaultBaseURL = "https://api.openai.com/v1"
-	defaultModel   = "gpt-4"
-
-	// Default configuration values.
-	defaultTimeoutSeconds = 30
-	defaultMaxTokens      = 1000
+	defaultModel   = "gpt-5.4-mini"
 )
 
-// Config holds the configuration for OpenAI client.
-type Config struct {
-	APIKey         string
-	BaseURL        string
-	Model          string
-	TimeoutSeconds int
-	MaxTokens      int
-	HTTPClient     *http.Client
+func init() {
+	llm.RegisterProvider(llm.ProviderOpenAI, newClient)
 }
 
 // Client implements the LLM interface for OpenAI.
 type Client struct {
-	config     *Config
+	config     *llm.ProviderConfig
 	httpClient *http.Client
 }
 
-// NewClient creates a new OpenAI client.
-func NewClient(config *Config) (*Client, error) {
-	if config == nil {
+func newClient(cfg *llm.ProviderConfig) (llm.Client, error) {
+	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
-
-	if config.APIKey == "" {
+	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("API key is required")
 	}
 
-	commonCfg := &providers.CommonConfig{
-		APIKey:         config.APIKey,
-		TimeoutSeconds: config.TimeoutSeconds,
-		MaxTokens:      config.MaxTokens,
+	c := &llm.ProviderConfig{
+		APIKey:         cfg.APIKey,
+		BaseURL:        cfg.BaseURL,
+		Model:          cfg.Model,
+		TimeoutSeconds: cfg.TimeoutSeconds,
+		MaxTokens:      cfg.MaxTokens,
 	}
-	if err := providers.ApplyDefaults(commonCfg); err != nil {
-		return nil, err
+	if c.TimeoutSeconds == 0 {
+		c.TimeoutSeconds = llm.DefaultTimeoutSeconds
 	}
-
-	config.TimeoutSeconds = commonCfg.TimeoutSeconds
-	config.MaxTokens = commonCfg.MaxTokens
-
-	if config.BaseURL == "" {
-		config.BaseURL = defaultBaseURL
+	if c.MaxTokens == 0 {
+		c.MaxTokens = llm.DefaultMaxTokens
 	}
-	if config.Model == "" {
-		config.Model = defaultModel
+	if c.BaseURL == "" {
+		c.BaseURL = defaultBaseURL
 	}
-
-	httpClient := config.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{}
+	if c.Model == "" {
+		c.Model = defaultModel
 	}
 
-	if config.TimeoutSeconds > 0 && httpClient.Timeout == 0 {
-		httpClient.Timeout = time.Duration(config.TimeoutSeconds) * time.Second
-	}
-
-	client := &Client{
-		config:     config,
-		httpClient: httpClient,
-	}
-
-	return client, nil
+	return &Client{
+		config: c,
+		httpClient: &http.Client{
+			Timeout: time.Duration(c.TimeoutSeconds) * time.Second,
+		},
+	}, nil
 }
 
 // Analyze sends an analysis request to OpenAI and returns the response.
-func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (*ltypes.AnalysisResponse, error) {
+func (c *Client) Analyze(ctx context.Context, request *llm.AnalysisRequest) (*llm.AnalysisResponse, error) {
 	startTime := time.Now()
 
-	fullPrompt, err := providers.BuildPrompt(request)
+	fullPrompt, err := llm.BuildPrompt(request)
 	if err != nil {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "prompt_build_error",
 			Message:   fmt.Sprintf("failed to build prompt: %v", err),
@@ -111,7 +90,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 
 	requestBody, err := json.Marshal(apiRequest)
 	if err != nil {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "request_marshal_error",
 			Message:   fmt.Sprintf("failed to marshal request: %v", err),
@@ -121,7 +100,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.BaseURL+"/chat/completions", bytes.NewBuffer(requestBody))
 	if err != nil {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "http_request_error",
 			Message:   fmt.Sprintf("failed to create HTTP request: %v", err),
@@ -134,7 +113,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "http_error",
 			Message:   fmt.Sprintf("HTTP request failed: %v", err),
@@ -145,7 +124,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 
 	var apiResponse openaiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "response_parse_error",
 			Message:   fmt.Sprintf("failed to parse response: %v", err),
@@ -174,7 +153,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 			errorMsg = fmt.Sprintf("OpenAI API error: %s", apiResponse.Error.Message)
 		}
 
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      errorType,
 			Message:   errorMsg,
@@ -183,7 +162,7 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 	}
 
 	if len(apiResponse.Choices) == 0 {
-		return nil, &ltypes.AnalysisError{
+		return nil, &llm.AnalysisError{
 			Provider:  c.GetProviderName(),
 			Type:      "empty_response",
 			Message:   "no choices in API response",
@@ -191,44 +170,38 @@ func (c *Client) Analyze(ctx context.Context, request *ltypes.AnalysisRequest) (
 		}
 	}
 
-	content := apiResponse.Choices[0].Message.Content
-	tokensUsed := apiResponse.Usage.TotalTokens
-
-	response := &ltypes.AnalysisResponse{
-		Content:    content,
-		TokensUsed: tokensUsed,
+	return &llm.AnalysisResponse{
+		Content:    apiResponse.Choices[0].Message.Content,
+		TokensUsed: apiResponse.Usage.TotalTokens,
 		Provider:   c.GetProviderName(),
 		Timestamp:  time.Now(),
 		Duration:   time.Since(startTime),
-	}
-
-	return response, nil
+	}, nil
 }
 
 // GetProviderName returns the provider name.
 func (c *Client) GetProviderName() string {
-	return string(ltypes.LLMProviderOpenAI)
+	return string(llm.ProviderOpenAI)
 }
 
 // ValidateConfig validates the client configuration.
 func (c *Client) ValidateConfig() error {
-	commonCfg := &providers.CommonConfig{
-		APIKey:         c.config.APIKey,
-		TimeoutSeconds: c.config.TimeoutSeconds,
-		MaxTokens:      c.config.MaxTokens,
+	if c.config.APIKey == "" {
+		return fmt.Errorf("API key is required")
 	}
-	if err := providers.ValidateCommonConfig(commonCfg); err != nil {
-		return err
+	if c.config.TimeoutSeconds < 0 {
+		return fmt.Errorf("timeout seconds must be non-negative")
 	}
-
-	if err := providers.ValidateBaseURL(c.config.BaseURL); err != nil {
-		return err
+	if c.config.MaxTokens < 0 {
+		return fmt.Errorf("max tokens must be non-negative")
 	}
-
-	return nil
+	if c.config.BaseURL == "" {
+		return fmt.Errorf("base URL is required")
+	}
+	return llm.ValidateURL(c.config.BaseURL)
 }
 
-// OpenAI API request/response structures
+// OpenAI API request/response structures.
 
 type openaiRequest struct {
 	Model               string          `json:"model"`

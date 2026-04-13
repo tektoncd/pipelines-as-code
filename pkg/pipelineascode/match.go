@@ -123,7 +123,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 		}
 		// When /ok-to-test is approved, update the parent "Pipelines as Code CI" status to success
 		// to indicate the approval was successful before pipelines start running.
-		if p.event.EventType == opscomments.OkToTestCommentEventType.String() && p.vcx.GetConfig().Name == "gitea" {
+		if p.event.EventType == opscomments.OkToTestCommentEventType.String() && !strings.Contains(p.vcx.GetConfig().Name, "github") {
 			approvalStatus := providerstatus.StatusOpts{
 				Status:     CompletedStatus,
 				Title:      "Approved",

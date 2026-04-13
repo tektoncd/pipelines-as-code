@@ -89,7 +89,7 @@ func TestMR(t *testing.T, topts *TestOpts) (context.Context, func()) {
 	groupPath := os.Getenv("TEST_GITLAB_GROUP")
 	hookURL := os.Getenv("TEST_GITLAB_SMEEURL")
 	webhookSecret := os.Getenv("TEST_EL_WEBHOOK_SECRET")
-	project, err := CreateGitLabProject(topts.GLProvider.Client(), groupPath, topts.TargetRefName, hookURL, webhookSecret, topts.ParamsRun.Clients.Log)
+	project, err := CreateGitLabProject(topts.GLProvider.Client(), groupPath, topts.TargetRefName, hookURL, webhookSecret, true, topts.ParamsRun.Clients.Log)
 	assert.NilError(t, err)
 	topts.ProjectID = int(project.ID)
 	topts.ProjectInfo = project

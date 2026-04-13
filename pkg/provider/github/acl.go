@@ -25,7 +25,7 @@ func (v *Provider) CheckPolicyAllowing(ctx context.Context, event *info.Event, a
 			members, resp, err := wrapAPI(v, "list_team_members_by_slug", func() ([]*github.User, *github.Response, error) {
 				return v.Client().Teams.ListTeamMembersBySlug(ctx, event.Organization, team, &github.TeamListTeamMembersOptions{ListOptions: opt})
 			})
-			if resp.StatusCode == http.StatusNotFound {
+			if resp != nil && resp.StatusCode == http.StatusNotFound {
 				// we explicitly disallow the policy when the team is not found
 				// maybe we should ignore it instead? i'd rather keep this explicit
 				// and conservative since being security related.
@@ -321,7 +321,7 @@ func (v *Provider) GetStringPullRequestComment(ctx context.Context, runevent *in
 
 	gitOpsCommentPrefix := provider.GetGitOpsCommentPrefix(v.repo)
 
-	for {
+	for page := 0; page < maxCommentPages; page++ {
 		comments, resp, err := wrapAPI(v, "list_issue_comments", func() ([]*github.IssueComment, *github.Response, error) {
 			return v.Client().Issues.ListComments(ctx, runevent.Organization, runevent.Repository,
 				prNumber, opt)

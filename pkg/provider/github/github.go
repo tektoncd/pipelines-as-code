@@ -41,6 +41,11 @@ const (
 	publicRawURLHost = "raw.githubusercontent.com"
 
 	defaultPaginedNumber = 100
+	// maxCommentPages caps the number of pages fetched when scanning PR
+	// comments (e.g. for /ok-to-test). With defaultPaginedNumber=100 this
+	// allows up to 1000 comments, which is generous for legitimate use while
+	// preventing rate-limit exhaustion from comment flooding.
+	maxCommentPages = 10
 )
 
 var _ provider.Interface = (*Provider)(nil)

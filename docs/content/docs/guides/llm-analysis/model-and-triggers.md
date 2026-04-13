@@ -9,8 +9,8 @@ This page explains how to choose the right LLM model for each analysis role and 
 
 Each analysis role can specify a different model. Choosing the right model lets you balance cost against analysis depth. If you do not specify a model, Pipelines-as-Code uses provider-specific defaults:
 
-- **OpenAI**: `gpt-5-mini`
-- **Gemini**: `gemini-2.5-flash-lite`
+- **OpenAI**: `gpt-5.4-mini`
+- **Gemini**: `gemini-3.1-flash-lite-preview`
 
 ### Specifying Models
 
@@ -37,7 +37,7 @@ settings:
         model: "gpt-5"
         prompt: "Analyze security failures..."
 
-      # Use default model (gpt-5-mini) for general analysis
+      # Use default model (gpt-5.4-mini) for general analysis
       - name: "general-failure"
         # No model specified - uses provider default
         prompt: "Analyze this failure..."

@@ -76,8 +76,8 @@ bitbucket_cloud:
   # Format: workspace/repo
   e2e_repository: ""
 
-# Bitbucket Data Center (Server)
-bitbucket_server:
+# Bitbucket Data Center
+bitbucket_datacenter:
   api_url: ""
   user: ""
   token: ""

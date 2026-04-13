@@ -3,7 +3,7 @@ title: Bitbucket Data Center
 weight: 5
 ---
 
-This page covers how to configure Pipelines-as-Code with [Bitbucket Data Center](https://www.atlassian.com/software/bitbucket/enterprise). Use this method when your organization runs a self-hosted Bitbucket Server or Data Center instance.
+This page covers how to configure Pipelines-as-Code with [Bitbucket Data Center](https://www.atlassian.com/software/bitbucket/enterprise). Use this method when your organization runs a self-hosted Bitbucket Data Center instance.
 
 ## Prerequisites
 

@@ -132,7 +132,7 @@ spec:
 
 - **Forgejo Instance URL**: Specify `git_provider.url` pointing to your Forgejo instance URL.
 
-- **Webhook Secret**: Pipelines-as-Code does not currently validate webhook signatures for Forgejo/Gitea. Secrets can be stored, but requests are accepted without signature verification.
+- **Webhook Secret**: Pipelines-as-Code validates webhook signatures for Forgejo/Gitea using HMAC-SHA256. A webhook secret must be configured both in the Forgejo webhook settings and in the Kubernetes secret referenced by the Repository CR. Requests without a valid signature will be rejected.
 
 - The `git_provider.secret` key cannot reference a secret in another namespace. Pipelines-as-Code always assumes it is in the same namespace where the Repository CR has been created.
 

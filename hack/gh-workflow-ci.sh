@@ -115,8 +115,8 @@ get_tests() {
   # which runs the workflow YAML from main (old target names).
   local github_chunk_size github_remainder
   if [[ ${#github_tests[@]} -gt 0 ]]; then
-    github_chunk_size=$(( ${#github_tests[@]} / 2 ))
-    github_remainder=$(( ${#github_tests[@]} % 2 ))
+    github_chunk_size=$((${#github_tests[@]} / 2))
+    github_remainder=$((${#github_tests[@]} % 2))
   fi
 
   case "${target}" in
@@ -287,6 +287,23 @@ collect_logs() {
   detect_panic
 }
 
+generate_github_summary() {
+  local raw_output="/tmp/logs/e2e-test-output.json"
+  local target="${TEST_PROVIDER:-unknown}"
+
+  if [[ -z "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    echo "GITHUB_STEP_SUMMARY not set, skipping summary generation"
+    return 0
+  fi
+
+  if [[ ! -f "${raw_output}" ]]; then
+    echo "No test output found at ${raw_output}, skipping summary generation"
+    return 0
+  fi
+
+  python3 ./hack/generate_github_summary.py "${raw_output}" "${target}" >>"${GITHUB_STEP_SUMMARY}"
+}
+
 detect_panic() {
   # shellcheck disable=SC2016
   (find /tmp/logs/ -type f -regex '.*/pipelines-as-code.*/[0-9]\.log$' | xargs -r sed -n '/stderr F panic:.*/,$p' | head -n 80) >/tmp/panic.log
@@ -328,6 +345,10 @@ help() {
     Will output logs using snazzy formatting when available or otherwise through a simple
     python formatter. This makes debugging easier from the GitHub Actions interface.
 
+  generate_github_summary
+    Parse gotestsum JSON output and write a markdown summary to GITHUB_STEP_SUMMARY.
+    Required env vars: TEST_PROVIDER, GITHUB_STEP_SUMMARY
+
   print_tests
     Print the list of tests that would be run for each provider target.
 
@@ -349,6 +370,9 @@ collect_logs)
   ;;
 output_logs)
   output_logs
+  ;;
+generate_github_summary)
+  generate_github_summary
   ;;
 print_tests)
   set +x

@@ -3,7 +3,6 @@
 package test
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"github.com/tektoncd/pipeline/pkg/names"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
-	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -206,6 +204,7 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 		topts.SecondGLProvider.Client(),
 		topts.ProjectID,
 		os.Getenv("TEST_GITLAB_SECOND_GROUP"),
+		true,
 		topts.ParamsRun.Clients.Log,
 	)
 	assert.NilError(t, err)
@@ -292,14 +291,14 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 	assert.NilError(t, err)
 
 	topts.ParamsRun.Clients.Log.Infof("Verifying commit statuses on fork (source) project for fork MR")
-	sourceStatusCount, err := waitForGitLabCommitStatusCount(ctx, topts.SecondGLProvider.Client(), topts.ParamsRun.Clients.Log, int(forkProject.ID), mr.SHA, 2)
+	sourceStatusCount, err := tgitlab.WaitForGitLabCommitStatusCount(ctx, topts.SecondGLProvider.Client(), topts.ParamsRun.Clients.Log, int(forkProject.ID), mr.SHA, "", 2)
 	assert.NilError(t, err)
 	assert.Assert(t, sourceStatusCount >= 2, "expected at least 2 commit statuses on fork (source) project, got %d", sourceStatusCount)
 
 	topts.ParamsRun.Clients.Log.Infof("Verifying no commit statuses on target project for fork MR")
-	targetStatusCount, err := gitlabCommitStatusCount(topts.GLProvider.Client(), topts.ProjectID, mr.SHA)
+	targetStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, mr.SHA, &clientGitlab.GetCommitStatusesOptions{})
 	assert.NilError(t, err)
-	assert.Equal(t, targetStatusCount, 0,
+	assert.Equal(t, len(targetStatuses), 0,
 		"expected no commit statuses on target project; with Developer access on fork, statuses are written directly to the source project")
 
 	topts.ParamsRun.Clients.Log.Infof("Verifying initial PipelineRuns for fork MR")
@@ -372,26 +371,4 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 	}
 	assert.Equal(t, newCount, 1,
 		"expected only 1 new PipelineRun after /retest from a fork MR, but got %d", newCount)
-}
-
-func waitForGitLabCommitStatusCount(ctx context.Context, client *clientGitlab.Client, logger *zap.SugaredLogger, projectID int, sha string, minCount int) (int, error) {
-	var count int
-	err := kubeinteraction.PollImmediateWithContext(ctx, twait.DefaultTimeout, func() (bool, error) {
-		currentCount, err := gitlabCommitStatusCount(client, projectID, sha)
-		logger.Infof("Current GitLab commit status count: %d (waiting for at least %d)", currentCount, minCount)
-		if err != nil {
-			return false, err
-		}
-		count = currentCount
-		return count >= minCount, nil
-	})
-	return count, err
-}
-
-func gitlabCommitStatusCount(client *clientGitlab.Client, projectID int, sha string) (int, error) {
-	statuses, _, err := client.Commits.GetCommitStatuses(projectID, sha, &clientGitlab.GetCommitStatusesOptions{})
-	if err != nil {
-		return 0, err
-	}
-	return len(statuses), nil
 }

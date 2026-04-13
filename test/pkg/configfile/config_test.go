@@ -152,12 +152,12 @@ bitbucket_cloud:
   user: "bbuser"
   token: "bb-token"
   e2e_repository: "workspace/repo"
-bitbucket_server:
+bitbucket_datacenter:
   api_url: "https://bitbucket.example.com"
   user: "bbsuser"
   token: "bbs-token"
   e2e_repository: "project/repo"
-  webhook_secret: "bbs-secret"
+  webhook_secret: "bds-secret"
 `
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	assert.NilError(t, os.WriteFile(configPath, []byte(content), 0o600))
@@ -178,9 +178,9 @@ bitbucket_server:
 		"TEST_GITEA_USERNAME", "TEST_GITEA_REPO_OWNER", "TEST_GITEA_SMEEURL",
 		"TEST_BITBUCKET_CLOUD_API_URL", "TEST_BITBUCKET_CLOUD_USER",
 		"TEST_BITBUCKET_CLOUD_TOKEN", "TEST_BITBUCKET_CLOUD_E2E_REPOSITORY",
-		"TEST_BITBUCKET_SERVER_API_URL", "TEST_BITBUCKET_SERVER_USER",
-		"TEST_BITBUCKET_SERVER_TOKEN", "TEST_BITBUCKET_SERVER_E2E_REPOSITORY",
-		"TEST_BITBUCKET_SERVER_WEBHOOK_SECRET",
+		"TEST_BITBUCKET_DATA_CENTER_API_URL", "TEST_BITBUCKET_DATA_CENTER_USER",
+		"TEST_BITBUCKET_DATA_CENTER_TOKEN", "TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY",
+		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET",
 	}
 	for _, env := range allEnvVars {
 		t.Setenv(env, "")
@@ -190,42 +190,42 @@ bitbucket_server:
 	assert.NilError(t, LoadConfig(configPath))
 
 	expected := map[string]string{
-		"TEST_EL_URL":                             "https://ctrl.example.com",
-		"TEST_EL_WEBHOOK_SECRET":                  "secret123",
-		"TEST_NOCLEANUP":                          "true",
-		"TEST_GITHUB_API_URL":                     "https://api.github.com",
-		"TEST_GITHUB_TOKEN":                       "ghp_abc",
-		"TEST_GITHUB_REPO_OWNER_GITHUBAPP":        "org/repo",
-		"TEST_GITHUB_REPO_OWNER_WEBHOOK":          "org/repo-webhook",
-		"TEST_GITHUB_REPO_INSTALLATION_ID":        "12345",
-		"TEST_GITHUB_PRIVATE_TASK_NAME":           "task-remote",
-		"TEST_GITHUB_PRIVATE_TASK_URL":            "https://github.com/org/repo/blob/main/task.yaml",
-		"TEST_GITHUB_SECOND_API_URL":              "https://ghe.example.com/api/v3",
-		"TEST_GITHUB_SECOND_TOKEN":                "ghe-token",
-		"TEST_GITHUB_SECOND_EL_URL":               "https://ghe-ctrl.example.com",
-		"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP": "ghe-org/repo",
-		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID": "1",
-		"TEST_GITLAB_API_URL":                     "https://gitlab.com",
-		"TEST_GITLAB_TOKEN":                       "glpat-xyz",
-		"TEST_GITLAB_SECOND_TOKEN":                "glpat-second",
-		"TEST_GITLAB_GROUP":                       "pac-e2e-tests",
-		"TEST_GITLAB_SECOND_GROUP":                "pac-e2e-tests-second",
-		"TEST_GITLAB_SMEEURL":                     "https://hook.pipelinesascode.com/gitlab-test",
-		"TEST_GITEA_API_URL":                      "http://localhost:3000",
-		"TEST_GITEA_INTERNAL_URL":                 "http://forgejo:3000",
-		"TEST_GITEA_PASSWORD":                     "pac",
-		"TEST_GITEA_USERNAME":                     "pac",
-		"TEST_GITEA_REPO_OWNER":                   "pac/pac",
-		"TEST_GITEA_SMEEURL":                      "https://smee.io/test",
-		"TEST_BITBUCKET_CLOUD_API_URL":            "https://api.bitbucket.org/2.0",
-		"TEST_BITBUCKET_CLOUD_USER":               "bbuser",
-		"TEST_BITBUCKET_CLOUD_TOKEN":              "bb-token",
-		"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY":     "workspace/repo",
-		"TEST_BITBUCKET_SERVER_API_URL":           "https://bitbucket.example.com",
-		"TEST_BITBUCKET_SERVER_USER":              "bbsuser",
-		"TEST_BITBUCKET_SERVER_TOKEN":             "bbs-token",
-		"TEST_BITBUCKET_SERVER_E2E_REPOSITORY":    "project/repo",
-		"TEST_BITBUCKET_SERVER_WEBHOOK_SECRET":    "bbs-secret",
+		"TEST_EL_URL":                               "https://ctrl.example.com",
+		"TEST_EL_WEBHOOK_SECRET":                    "secret123",
+		"TEST_NOCLEANUP":                            "true",
+		"TEST_GITHUB_API_URL":                       "https://api.github.com",
+		"TEST_GITHUB_TOKEN":                         "ghp_abc",
+		"TEST_GITHUB_REPO_OWNER_GITHUBAPP":          "org/repo",
+		"TEST_GITHUB_REPO_OWNER_WEBHOOK":            "org/repo-webhook",
+		"TEST_GITHUB_REPO_INSTALLATION_ID":          "12345",
+		"TEST_GITHUB_PRIVATE_TASK_NAME":             "task-remote",
+		"TEST_GITHUB_PRIVATE_TASK_URL":              "https://github.com/org/repo/blob/main/task.yaml",
+		"TEST_GITHUB_SECOND_API_URL":                "https://ghe.example.com/api/v3",
+		"TEST_GITHUB_SECOND_TOKEN":                  "ghe-token",
+		"TEST_GITHUB_SECOND_EL_URL":                 "https://ghe-ctrl.example.com",
+		"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP":   "ghe-org/repo",
+		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID":   "1",
+		"TEST_GITLAB_API_URL":                       "https://gitlab.com",
+		"TEST_GITLAB_TOKEN":                         "glpat-xyz",
+		"TEST_GITLAB_SECOND_TOKEN":                  "glpat-second",
+		"TEST_GITLAB_GROUP":                         "pac-e2e-tests",
+		"TEST_GITLAB_SECOND_GROUP":                  "pac-e2e-tests-second",
+		"TEST_GITLAB_SMEEURL":                       "https://hook.pipelinesascode.com/gitlab-test",
+		"TEST_GITEA_API_URL":                        "http://localhost:3000",
+		"TEST_GITEA_INTERNAL_URL":                   "http://forgejo:3000",
+		"TEST_GITEA_PASSWORD":                       "pac",
+		"TEST_GITEA_USERNAME":                       "pac",
+		"TEST_GITEA_REPO_OWNER":                     "pac/pac",
+		"TEST_GITEA_SMEEURL":                        "https://smee.io/test",
+		"TEST_BITBUCKET_CLOUD_API_URL":              "https://api.bitbucket.org/2.0",
+		"TEST_BITBUCKET_CLOUD_USER":                 "bbuser",
+		"TEST_BITBUCKET_CLOUD_TOKEN":                "bb-token",
+		"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY":       "workspace/repo",
+		"TEST_BITBUCKET_DATA_CENTER_API_URL":        "https://bitbucket.example.com",
+		"TEST_BITBUCKET_DATA_CENTER_USER":           "bbsuser",
+		"TEST_BITBUCKET_DATA_CENTER_TOKEN":          "bbs-token",
+		"TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY": "project/repo",
+		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET": "bds-secret",
 	}
 
 	for envVar, expectedVal := range expected {

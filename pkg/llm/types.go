@@ -1,8 +1,16 @@
-package ltypes
+package llm
 
 import (
 	"context"
 	"time"
+)
+
+const (
+	// DefaultTimeoutSeconds is the default timeout for LLM API calls.
+	DefaultTimeoutSeconds = 30
+
+	// DefaultMaxTokens is the default maximum tokens for LLM responses.
+	DefaultMaxTokens = 1000
 )
 
 // Client defines the interface for LLM providers.
@@ -45,18 +53,6 @@ func (e *AnalysisError) Error() string {
 type AIProvider string
 
 const (
-	LLMProviderOpenAI AIProvider = "openai"
-	LLMProviderGemini AIProvider = "gemini"
+	ProviderOpenAI AIProvider = "openai"
+	ProviderGemini AIProvider = "gemini"
 )
-
-// Config holds the default configuration values.
-type Config struct {
-	TimeoutSeconds int
-	MaxTokens      int
-}
-
-// DefaultConfig contains the default configuration values.
-var DefaultConfig = Config{
-	TimeoutSeconds: 30,
-	MaxTokens:      1000,
-}
