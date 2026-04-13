@@ -281,7 +281,7 @@ spec:
                   target=x86_64-unknown-linux-gnu
                 fi
                 version=$(curl -H "Authorization: Bearer ${HUB_TOKEN}" -L -s https://api.github.com/repos/zizmorcore/zizmor/releases/latest | python3 -c 'import sys, json; print(json.load(sys.stdin)["tag_name"])')
-                curl -sH "Authorization: Bearer ${HUB_TOKEN}" -L "https://github.com/zizmorcore/zizmor/releases/download/${version}/zizmor-${target}.tar.gz" | tar -xz -C /tmp/ --strip-components=1 -f-
+                curl -sH "Authorization: Bearer ${HUB_TOKEN}" -L "https://github.com/zizmorcore/zizmor/releases/download/${version}/zizmor-${target}.tar.gz" | tar -xz -C /tmp/ -f-
                 /tmp/zizmor .github/workflows/
 
             - name: ruff-lint
