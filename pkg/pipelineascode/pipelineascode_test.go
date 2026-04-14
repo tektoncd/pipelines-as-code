@@ -610,7 +610,11 @@ func TestRun(t *testing.T) {
 						},
 					},
 					Controller: &info.ControllerInfo{
-						Secret: info.DefaultPipelinesAscodeSecretName,
+						Secret:           info.DefaultPipelinesAscodeSecretName,
+						GlobalRepository: "global-repo",
+					},
+					Kube: &info.KubeOpts{
+						Namespace: repo.InstallNamespace,
 					},
 				},
 			}

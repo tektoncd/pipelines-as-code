@@ -113,7 +113,11 @@ func seedTestData(ctx context.Context, t *testing.T, repos []*v1alpha1.Repositor
 		},
 		Info: info.Info{
 			Controller: &info.ControllerInfo{
-				Secret: "pipelines-as-code-secret",
+				Secret:           "pipelines-as-code-secret",
+				GlobalRepository: "global-repo",
+			},
+			Kube: &info.KubeOpts{
+				Namespace: "default",
 			},
 		},
 	}
@@ -337,6 +341,155 @@ func TestSetupAuthenticatedClientRepositoryConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSetupAuthenticatedClientGlobalRepoAutoFetch tests the auto-fetch behavior
+// when globalRepo is nil.
+func TestSetupAuthenticatedClientGlobalRepoAutoFetch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		globalRepoExist bool
+		passGlobalRepo  bool
+		wantErr         bool
+		description     string
+	}{
+		{
+			name:            "globalRepo nil and exists in API is fetched and merged",
+			globalRepoExist: true,
+			passGlobalRepo:  false,
+			wantErr:         false,
+			description:     "When globalRepo is nil and exists in the API, it should be fetched automatically",
+		},
+		{
+			name:            "globalRepo nil and does not exist in API continues without error",
+			globalRepoExist: false,
+			passGlobalRepo:  false,
+			wantErr:         false,
+			description:     "When globalRepo is nil and does not exist in the API, function should continue without error",
+		},
+		{
+			name:            "globalRepo provided skips API fetch",
+			globalRepoExist: false,
+			passGlobalRepo:  true,
+			wantErr:         false,
+			description:     "When globalRepo is provided, no API fetch should happen",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, log := setupTestContext(t)
+
+			repo := createTestRepository(true)
+			repos := []*v1alpha1.Repository{repo}
+
+			// If global repo should exist in the API, seed it
+			var globalRepo *v1alpha1.Repository
+			if tt.globalRepoExist {
+				globalRepo = testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+					Name:             "global-repo",
+					URL:              "https://github.com/global/repo",
+					InstallNamespace: "default",
+				})
+				globalRepo.Spec.GitProvider = &v1alpha1.GitProvider{
+					URL: "https://github.com",
+					Secret: &v1alpha1.Secret{
+						Name: "global-secret",
+						Key:  "token",
+					},
+				}
+				repos = append(repos, globalRepo)
+			}
+
+			run := seedTestData(ctx, t, repos)
+			testProvider := createTestProvider(log)
+
+			kint := createTestKintMock(map[string]string{
+				"test-secret":   "test-token",
+				"global-secret": "global-token",
+			})
+
+			event := createTestEvent("pull_request", 0, "")
+			pacInfo := createTestPacInfo()
+
+			// Determine what to pass as globalRepo parameter
+			var globalRepoParam *v1alpha1.Repository
+			if tt.passGlobalRepo {
+				globalRepoParam = &v1alpha1.Repository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "provided-global-repo",
+						Namespace: "default",
+					},
+				}
+			}
+
+			err := SetupAuthenticatedClient(ctx, testProvider, kint, run, event, repo, globalRepoParam, pacInfo, log)
+
+			if tt.wantErr {
+				assert.Assert(t, err != nil, "%s: expected error but got nil", tt.description)
+			} else {
+				assert.NilError(t, err, "%s: %v", tt.description, err)
+			}
+		})
+	}
+}
+
+// TestSetupAuthenticatedClientGlobalRepoMergesSettings verifies that when globalRepo
+// is auto-fetched, its settings are properly merged into the local repo.
+func TestSetupAuthenticatedClientGlobalRepoMergesSettings(t *testing.T) {
+	t.Parallel()
+
+	ctx, log := setupTestContext(t)
+
+	// Local repo with git_provider URL but no secret (secret comes from global)
+	repo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+		Name:             "test-repo",
+		URL:              "https://github.com/owner/repo",
+		InstallNamespace: "default",
+	})
+	repo.Spec.GitProvider = &v1alpha1.GitProvider{
+		URL: "https://github.com",
+	}
+
+	// Global repo with git_provider credentials
+	globalRepo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+		Name:             "global-repo",
+		URL:              "https://github.com/global/repo",
+		InstallNamespace: "default",
+	})
+	globalRepo.Spec.GitProvider = &v1alpha1.GitProvider{
+		URL: "https://github.com",
+		Secret: &v1alpha1.Secret{
+			Name: "global-secret",
+			Key:  "token",
+		},
+		WebhookSecret: &v1alpha1.Secret{
+			Name: "global-secret",
+			Key:  "webhook.secret",
+		},
+	}
+
+	run := seedTestData(ctx, t, []*v1alpha1.Repository{repo, globalRepo})
+	testProvider := createTestProvider(log)
+
+	kint := createTestKintMock(map[string]string{
+		"global-secret": "global-token-value",
+	})
+
+	event := createTestEvent("pull_request", 0, "")
+	pacInfo := createTestPacInfo()
+
+	// Pass nil globalRepo so it gets auto-fetched
+	err := SetupAuthenticatedClient(ctx, testProvider, kint, run, event, repo, nil, pacInfo, log)
+
+	assert.NilError(t, err, "should succeed with auto-fetched global repo providing credentials")
+	// After merge, the repo should have secret from global repo
+	assert.Assert(t, repo.Spec.GitProvider.Secret != nil, "secret should be merged from global repo")
+	assert.Equal(t, "global-token-value", event.Provider.Token, "token should come from global repo secret")
 }
 
 // TestSetupAuthenticatedClient_WebhookValidation tests webhook secret validation.

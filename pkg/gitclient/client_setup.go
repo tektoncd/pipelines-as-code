@@ -12,10 +12,10 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // SetupAuthenticatedClient sets up the authenticated VCS client with proper token scoping.
@@ -33,6 +33,19 @@ func SetupAuthenticatedClient(
 	pacInfo *info.PacOpts,
 	logger *zap.SugaredLogger,
 ) error {
+	if globalRepo == nil &&
+		run != nil &&
+		run.Info.Controller != nil &&
+		run.Info.Kube != nil &&
+		run.Info.Kube.Namespace != "" &&
+		run.Info.Controller.GlobalRepository != "" {
+		var err error
+		if globalRepo, err = run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(run.Info.Kube.Namespace).Get(
+			ctx, run.Info.Controller.GlobalRepository, metav1.GetOptions{},
+		); err != nil {
+			logger.Errorf("cannot get global repository: %v", err)
+		}
+	}
 	// Determine secret namespace BEFORE merging repos
 	// This preserves the ability to detect when credentials come from global repo
 	secretNS := repo.GetNamespace()
@@ -96,19 +109,6 @@ is that what you want? make sure you use -n when generating the secret, eg: echo
 		return fmt.Errorf("failed to set client: %w", clientErr)
 	}
 	logger.Debugf("setupAuthenticatedClient: provider client initialized")
-
-	// Handle GitHub App token scoping for both global and repo-level configuration
-	if event.InstallationID > 0 {
-		logger.Debugf("setupAuthenticatedClient: scoping github app token")
-		token, err := github.ScopeTokenToListOfRepos(ctx, vcx, pacInfo, repo, run, event, eventEmitter, logger)
-		if err != nil {
-			return fmt.Errorf("failed to scope token: %w", err)
-		}
-		// If Global and Repo level configurations are not provided then lets not override the provider token.
-		if token != "" {
-			event.Provider.Token = token
-		}
-	}
 
 	return nil
 }

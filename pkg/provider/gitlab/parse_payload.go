@@ -13,8 +13,8 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -343,6 +343,19 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 		}
 	}
 
+	// Handle GitHub App token scoping for both global and repo-level configuration
+	if event.InstallationID > 0 {
+		v.Logger.Debugf("setupAuthenticatedClient: scoping github app token")
+		token, err := ScopeTokenToListOfRepos(ctx, v, v.pacInfo, repo, run, event, v.eventEmitter, v.Logger)
+		if err != nil {
+			return fmt.Errorf("failed to scope token: %w", err)
+		}
+		// If Global and Repo level configurations are not provided then lets not override the provider token.
+		if token != "" {
+			event.Provider.Token = token
+		}
+	}
+
 	return nil
 }
 

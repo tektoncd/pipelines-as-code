@@ -1124,8 +1124,16 @@ func TestGithubSetClient(t *testing.T) {
 					Log: testLog,
 				},
 			}
-			v := Provider{}
-			err := v.SetClient(ctx, fakeRun, tt.event, nil, nil)
+			v := Provider{
+				Logger:  testLog,
+				pacInfo: &info.PacOpts{},
+			}
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{},
+				},
+			}
+			err := v.SetClient(ctx, fakeRun, tt.event, repo, nil)
 			assert.NilError(t, err)
 			assert.Equal(t, tt.expectedURL, *v.APIURL)
 			assert.Equal(t, "https", v.Client().BaseURL.Scheme)

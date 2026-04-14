@@ -539,7 +539,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				pacInfo:       pacopts,
 			}
 
-			payload := fmt.Sprintf(`{"action": "created", "repository": {"name": "repo", "owner": {"login": "owner"}}, "sender": {"login": %q}, "issue": {"pull_request": {"html_url": "https://github.com/owner/repo/pull/1"}}, "comment": {"body": %q}}`,
+			payload := fmt.Sprintf(`{"action": "created", "repository": {"name": "repo", "owner": {"login": "owner"}, "html_url": "http://url.com/owner/repo/1"}, "sender": {"login": %q}, "issue": {"number": 1, "pull_request": {"html_url": "https://github.com/owner/repo/pull/1"}}, "comment": {"body": %q}}`,
 				tt.runevent.Sender, tt.commentBody)
 			_, err := gprovider.ParsePayload(ctx, gprovider.Run, &http.Request{Header: http.Header{"X-Github-Event": []string{"issue_comment"}}}, payload)
 			if (err != nil) != tt.wantErr {

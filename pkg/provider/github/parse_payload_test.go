@@ -462,6 +462,7 @@ func TestParsePayLoad(t *testing.T) {
 		objectType                 string
 		gitopscommentprefix        string
 		wantRepoCRError            bool
+		wantRequestSet             bool
 	}{
 		{
 			name:          "bad/unknown event",
@@ -499,35 +500,12 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckRunEvent{Action: github.Ptr("created")},
 		},
 		{
-			name:               "bad/issue comment retest only with github apps",
-			wantErrString:      "no github client has been initialized",
-			eventType:          "issue_comment",
-			triggerTarget:      "pull_request",
-			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Repo: sampleRepo},
-		},
-		{
 			name:               "bad/issue comment not coming from pull request",
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
 			githubClient:       true,
 			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Issue: &github.Issue{}, Repo: sampleRepo},
 			wantErrString:      "issue comment is not coming from a pull_request",
-		},
-		{
-			name:          "bad/issue comment invalid pullrequest",
-			eventType:     "issue_comment",
-			triggerTarget: "pull_request",
-			githubClient:  true,
-			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
-				Issue: &github.Issue{
-					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/bad"),
-					},
-				},
-				Repo: sampleRepo,
-			},
-			wantErrString: "bad pull request number",
 		},
 		{
 			name:          "bad/rerequest error fetching PR",
@@ -755,11 +733,13 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/666"),
 					},
+					Number: github.Ptr(666),
 				},
 				Repo: sampleRepo,
 			},
-			muxReplies: map[string]any{"/repos/owner/reponame/pulls/666": samplePR},
-			shaRet:     "samplePRsha",
+			muxReplies:     map[string]any{"/repos/owner/reponame/pulls/666": samplePR},
+			shaRet:         "samplePRsha",
+			wantRequestSet: true,
 		},
 		{
 			name:               "good/pull request",
@@ -799,6 +779,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/777"),
 					},
+					Number: github.Ptr(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -820,6 +801,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/777"),
 					},
+					Number: github.Ptr(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -842,6 +824,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/777"),
 					},
+					Number: github.Ptr(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -864,6 +847,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/777"),
 					},
+					Number: github.Ptr(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -886,6 +870,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/999"),
 					},
+					Number: github.Ptr(999),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -906,6 +891,7 @@ func TestParsePayLoad(t *testing.T) {
 					PullRequestLinks: &github.PullRequestLinks{
 						HTMLURL: github.Ptr("/888"),
 					},
+					Number: github.Ptr(888),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
@@ -1360,6 +1346,41 @@ func TestParsePayLoad(t *testing.T) {
 			skipPushEventForPRCommits: true,
 			muxReplies:                map[string]any{"/repos/owner/pushRepo/commits/SHAPush/pulls": sampleGhPRs},
 		},
+		{
+			name:          "good/issue comment without ghClient initializes webhook client",
+			eventType:     "issue_comment",
+			triggerTarget: "pull_request",
+			githubClient:  false,
+			payloadEventStruct: github.IssueCommentEvent{
+				Action: github.Ptr("created"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						HTMLURL: github.Ptr("/666"),
+					},
+					Number: github.Ptr(666),
+				},
+				Repo: sampleRepo,
+			},
+			wantErrString: "cannot initialize GitHub webhook client",
+		},
+		{
+			name:          "bad/issue comment no matching repo",
+			eventType:     "issue_comment",
+			triggerTarget: "pull_request",
+			githubClient:  true,
+			payloadEventStruct: github.IssueCommentEvent{
+				Action: github.Ptr("created"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						HTMLURL: github.Ptr("/666"),
+					},
+					Number: github.Ptr(666),
+				},
+				Repo: sampleRepo,
+			},
+			wantRepoCRError: true,
+			wantErrString:   "no repository found matching URL",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1396,6 +1417,15 @@ func TestParsePayLoad(t *testing.T) {
 					PipelineAsCode: stdata.PipelineAsCode,
 					Log:            logger,
 					Kube:           stdata.Kube,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{
+						Secret:           "pipelines-as-code-secret",
+						GlobalRepository: "global-repo",
+					},
+					Kube: &info.KubeOpts{
+						Namespace: "default",
+					},
 				},
 			}
 
@@ -1520,6 +1550,11 @@ func TestParsePayLoad(t *testing.T) {
 			}
 			if tt.targetCancelPipelinerun != "" {
 				assert.Equal(t, tt.targetCancelPipelinerun, ret.TargetCancelPipelineRun)
+			}
+			if tt.wantRequestSet {
+				assert.Assert(t, ret.Request != nil, "Request should be set on returned event")
+				assert.Equal(t, ret.Request.Header.Get("X-GitHub-Event"), tt.eventType)
+				assert.Assert(t, len(ret.Request.Payload) > 0, "Payload should be set on returned event")
 			}
 			assert.Equal(t, tt.triggerTarget, string(ret.TriggerTarget))
 		})
