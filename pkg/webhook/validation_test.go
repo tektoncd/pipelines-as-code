@@ -103,6 +103,26 @@ func TestReconciler_Admit(t *testing.T) {
 			allowed: false,
 			result:  "repository already exists with URL: https://pac.test/already/installed",
 		},
+		{
+			name: "reject repository URL with trailing slash",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://pac.test/already/installed/",
+			}),
+			allowed: false,
+			result:  "repository already exists with URL: https://pac.test/already/installed/",
+		},
+		{
+			name: "reject repository URL with multiple trailing slashes",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "namespace",
+				URL:              "https://pac.test/already/installed//////",
+			}),
+			allowed: false,
+			result:  "repository already exists with URL: https://pac.test/already/installed//////",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
