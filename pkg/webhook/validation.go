@@ -90,7 +90,7 @@ func checkIfRepoExist(pac pac.RepositoryLister, repo *v1alpha1.Repository, ns st
 	}
 	for i := len(repositories) - 1; i >= 0; i-- {
 		repoFromCluster := repositories[i]
-		if repoFromCluster.Spec.URL == repo.Spec.URL &&
+		if strings.TrimRight(strings.TrimSpace(repoFromCluster.Spec.URL), "/") == strings.TrimRight(strings.TrimSpace(repo.Spec.URL), "/") &&
 			(repoFromCluster.Name != repo.Name || repoFromCluster.Namespace != repo.Namespace) {
 			return true, nil
 		}
