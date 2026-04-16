@@ -78,22 +78,28 @@ func PostCommentOnPullRequest(t *testing.T, topt *TestOpts, body string) {
 
 func checkEvents(t *testing.T, events *corev1.EventList, topts *TestOpts) {
 	t.Helper()
-	newEvents := make([]corev1.Event, 0)
-	// filter out events that are not related to the test like checking for cancelled pipelineruns
-	for i := len(events.Items) - 1; i >= 0; i-- {
+	unexpected := unexpectedEvents(events)
+	for i := range events.Items {
 		topts.ParamsRun.Clients.Log.Infof("Reason is %s", events.Items[i].Reason)
-		if events.Items[i].Reason == "CancelInProgress" {
-			continue
-		}
-		newEvents = append(newEvents, events.Items[i])
 	}
-	if len(newEvents) > 0 {
-		topts.ParamsRun.Clients.Log.Infof("0 events expected in case of failure but got %d", len(newEvents))
-		for _, em := range newEvents {
+	if len(unexpected) > 0 {
+		topts.ParamsRun.Clients.Log.Infof("0 warning events expected in case of failure but got %d", len(unexpected))
+		for _, em := range unexpected {
 			topts.ParamsRun.Clients.Log.Infof("Event: Reason: %s Type: %s ReportingInstance: %s Message: %s", em.Reason, em.Type, em.ReportingInstance, em.Message)
 		}
 		t.FailNow()
 	}
+}
+
+func unexpectedEvents(events *corev1.EventList) []corev1.Event {
+	unexpected := make([]corev1.Event, 0)
+	for i := len(events.Items) - 1; i >= 0; i-- {
+		if events.Items[i].Type == corev1.EventTypeNormal {
+			continue
+		}
+		unexpected = append(unexpected, events.Items[i])
+	}
+	return unexpected
 }
 
 func AddLabelToIssue(t *testing.T, topt *TestOpts, label string) {
