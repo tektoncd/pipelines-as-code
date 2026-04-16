@@ -7,10 +7,10 @@ This page explains how to control the volume and behavior of Pull/Merge Request 
 
 For GitHub (Webhook), GitLab, and Gitea/Forgejo integrations, you can control which
 Pull/Merge Request comments Pipelines-as-Code posts by using
-the `spec.<provider>.comment_strategy` setting. This is useful for reducing notification
+the `spec.settings.<provider>.comment_strategy` setting. This is useful for reducing notification
 volume in repositories that use long-lasting Pull/Merge Requests with many PipelineRuns.
 
-The `spec.<provider>.comment_strategy` field accepts `""`
+The `spec.settings.<provider>.comment_strategy` field accepts `""`
 (default), `"update"`, and `"disable_all"`.
 
 Setting `comment_strategy` to `update` creates a single comment for
