@@ -57,7 +57,7 @@ spec:
           enable-cancel-in-progress-on-pull-requests: 'false'
           enable-cancel-in-progress-on-push: 'false'
           skip-push-event-for-pr-commits: 'true'
-          hub-url: 'https://artifacthub.io'
+          hub-url: 'https://artifacthub.io/api/v1'
           hub-catalog-type: 'artifacthub'
           error-detection-max-number-of-lines: '50'
           error-detection-simple-regexp: >-

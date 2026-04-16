@@ -57,11 +57,11 @@ secret-github-app-scope-extra-repos: "owner/private-repo1, org/repo2"
 
 ### Hub Configuration
 
-{{< param name="hub-url" type="string" default="<https://artifacthub.io>" id="param-hub-url" >}}
-Specifies the default hub URL that Pipelines-as-Code uses to fetch remote tasks.
+{{< param name="hub-url" type="string" default="<https://artifacthub.io/api/v1>" id="param-hub-url" >}}
+Specifies the default hub API URL that Pipelines-as-Code uses to fetch remote tasks.
 
 ```yaml
-hub-url: "https://artifacthub.io"
+hub-url: "https://artifacthub.io/api/v1"
 ```
 
 {{< /param >}}
@@ -89,7 +89,7 @@ Name of the catalog.
 {{< /param >}}
 
 {{< param name="catalog-{N}-url" type="string" id="param-catalog-n-url" >}}
-URL of the catalog API.
+URL of the catalog API endpoint.
 {{< /param >}}
 
 {{< param name="catalog-{N}-type" type="string" id="param-catalog-n-type" >}}
@@ -159,6 +159,16 @@ Defines the template URL for task logs. Supports variables: `{{ namespace }}`, `
 
 ```yaml
 custom-console-url-pr-tasklog: "https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ task }}"
+```
+
+{{< /param >}}
+
+{{< param name="custom-console-url-namespace" type="string" id="param-custom-console-url-namespace" >}}
+Defines the template URL for namespace-level views in your custom console.
+Supports the `{{ namespace }}` variable.
+
+```yaml
+custom-console-url-namespace: "https://url/ns/{{ namespace }}"
 ```
 
 {{< /param >}}
@@ -351,7 +361,7 @@ data:
   secret-github-app-token-scoped: "true"
   secret-github-app-scope-extra-repos: "org/shared-repo"
 
-  hub-url: "https://artifacthub.io"
+  hub-url: "https://artifacthub.io/api/v1"
   hub-catalog-type: "artifacthub"
   remote-tasks: "true"
 

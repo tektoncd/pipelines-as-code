@@ -408,8 +408,8 @@ data:
   # Application settings
   application-name: "Pipelines as Code"
 
-  # Tekton Hub URL
-  hub-url: "https://api.hub.tekton.dev/v1"
+  # Artifact Hub API URL
+  hub-url: "https://artifacthub.io/api/v1"
 
   # Remote tasks support
   remote-tasks: "true"

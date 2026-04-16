@@ -42,4 +42,10 @@ Do not use gosmee in production environments. It is intended for testing only.
 
 ## bootstrap github-app
 
-To create only a GitHub App without running the full bootstrap process, use `tkn pac bootstrap github-app`. This skips the installation step and only creates the GitHub App and the corresponding secret in the `pipelines-as-code` namespace.
+Use `tkn pac bootstrap github-app` when you want help creating the GitHub App without running the full interactive bootstrap flow.
+
+This command does not perform the installation flow from `tkn pac bootstrap`. It creates the GitHub App configuration and the corresponding secret for a fresh Pipelines-as-Code setup.
+
+{{< callout type="info" >}}
+If Pipelines-as-Code is already installed, the command exits unless you pass `--force-install`.
+{{< /callout >}}

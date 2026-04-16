@@ -39,6 +39,12 @@ Load completions in the current session:
 source <(tkn pac completion zsh)
 ```
 
+If shell completion is not already enabled in your environment, run this once first:
+
+```shell
+echo "autoload -U compinit; compinit" >> ~/.zshrc
+```
+
 To load completions automatically for every session, run once:
 
 ```shell
@@ -57,4 +63,12 @@ To load completions automatically for every session, run once:
 
 ```shell
 tkn pac completion fish > ~/.config/fish/completions/tkn-pac.fish
+```
+
+### PowerShell
+
+Load completions in the current session:
+
+```powershell
+tkn pac completion powershell | Out-String | Invoke-Expression
 ```

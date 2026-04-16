@@ -23,13 +23,20 @@ When using a GitHub webhook, the scoping of the token is what you set when creat
 ## Prerequisites
 
 - You must have Pipelines-as-Code installed with the **GitHub App** method. Token scoping does not apply to webhook-based installations because the token scope is determined by your personal access token.
-- In the `pipelines-as-code` ConfigMap, set the `secret-github-app-token-scoped` key to `false`.
-This setting enables Pipelines-as-Code to scope the GitHub token to private and public repositories listed in the global and repository level configuration.
+
+| Scoping method | `secret-github-app-token-scoped` setting |
+| --- | --- |
+| **Global** (`secret-github-app-scope-extra-repos`) | Can stay `true` (default) |
+| **Repository-level** (`settings.github_app_token_scope_repos`) | Must be `false` |
+| **Both combined** | Can stay `true` |
 
 ## Scoping the GitHub token using Global configuration
 
 Use the global configuration to define a list of repositories accessible from any Repository CR in any namespace.
 You can specify repositories using exact names or glob patterns (for example, `myorg/*` to match all repositories under an organization where the app is installed).
+
+Unlike repository-level scoping, this global configuration does not require you to disable
+`secret-github-app-token-scoped`.
 
 To set the global configuration, add the `secret-github-app-scope-extra-repos` key to the `pipelines-as-code` ConfigMap as shown in the following example:
 
@@ -48,6 +55,10 @@ To set the global configuration, add the `secret-github-app-scope-extra-repos` k
 You can also use the Repository CR to scope the generated GitHub token to a list of repositories.
 The repositories can be public or private, but must reside in the same namespace as the Repository CR.
 You can specify repositories using exact names or glob patterns (for example, `myorg/*` to match all repositories under an organization that has the GitHub App installed).
+
+When you use only `settings.github_app_token_scope_repos`, set
+`secret-github-app-token-scoped` to `false`. Otherwise Pipelines-as-Code rejects the
+repository-level scope extension request.
 
 Set the `github_app_token_scope_repos` field in the Repository CR spec, as shown in the following example:
 

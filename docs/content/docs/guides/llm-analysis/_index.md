@@ -93,7 +93,7 @@ Each role defines a specific analysis scenario. You can configure multiple roles
 | `name` | string | Yes | Unique identifier for this role |
 | `prompt` | string | Yes | Prompt template for the LLM |
 | `model` | string | No | Model name (consult provider documentation for available models). Uses provider default if not specified. |
-| `on_cel` | string | No | CEL expression for conditional triggering. If not specified, the role will always run. |
+| `on_cel` | string | No | CEL expression for conditional triggering. If not specified, the role runs only for failed PipelineRuns. |
 | `output` | string | Yes | Output destination (currently only `pr-comment` is supported) |
 | `context_items` | object | No | Configuration for context inclusion |
 
@@ -129,4 +129,3 @@ When you set `commit_content: true`, Pipelines-as-Code includes the following fi
 - Pipelines-as-Code **intentionally excludes email addresses** from the commit context to protect personally identifiable information (PII) when sending data to external LLM providers.
 - Fields appear only if your Git provider makes them available. Some providers supply limited information (for example, Bitbucket Cloud provides only the author name).
 - Author and committer may be the same person or different (for example, when using `git commit --amend` or rebasing).
-asing).

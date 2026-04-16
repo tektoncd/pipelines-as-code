@@ -27,7 +27,7 @@ On Windows, tkn-pac will look for the Kubernetes config in `%USERPROFILE%\.kube\
 {{< /tab >}}
 
 {{< tab name="Homebrew" >}}
-The `tkn pac` plug-in is available from Homebrew as a "Tap". Install it with:
+The `tkn pac` plug-in is available from Homebrew as a cask. Install it with:
 
 ```shell
 brew install --cask openshift-pipelines/pipelines-as-code/tektoncd-pac

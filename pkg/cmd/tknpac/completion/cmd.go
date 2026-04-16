@@ -39,7 +39,7 @@ Linux:
   $ tkn-pac completion bash > /etc/bash_completion.d/tkn-pac
 
 MacOS:
-  $ tkn-pac completion bash > /usr/local/etc/bash_completion.d/tkn-pac
+  $ tkn-pac completion bash > $(brew --prefix)/etc/bash_completion.d/tkn-pac
 
 Zsh:
 

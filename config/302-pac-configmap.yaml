@@ -43,8 +43,8 @@ data:
   # i.e: "owner/private-repo1, org/repo2"
   secret-github-app-scope-extra-repos: ""
 
-  # The default hub url to use, by default it is artifacthub.
-  hub-url: "https://artifacthub.io"
+  # The default hub API url to use, by default it is Artifact Hub's API.
+  hub-url: "https://artifacthub.io/api/v1"
 
   # The default hub catalog type, by default it is artifacthub.
   # Other supported values: tektonhub (for custom self-hosted Tekton Hub instances)

@@ -9,7 +9,7 @@ Use `tkn pac create` and `tkn pac delete` to manage Repository CRs. These comman
 
 ```shell
 tkn pac create repo
-tkn pac delete repo [--cascade]
+tkn pac delete repo <repository-name> [--cascade]
 ```
 
 ## Creating a Repository CR
@@ -20,6 +20,6 @@ If you have not configured a Git provider previously, the command prompts you to
 
 ## Deleting a Repository CR
 
-`tkn pac delete repo` deletes a Repository CR.
+`tkn pac delete repo <repository-name>` deletes a Repository CR. You can also use the full subcommand name, `tkn pac delete repository <repository-name>`.
 
 Specify the `--cascade` flag to also delete the attached secrets (such as webhook or provider secrets) associated with the Repository CR.
