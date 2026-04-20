@@ -49,7 +49,7 @@ release:
   extra_files:
     - glob: ./release.yaml
     - glob: ./release.k8s.yaml
-  prerelease: true
+  draft: true
   header: |
     # Pipelines as Code version {{.Tag}}
 

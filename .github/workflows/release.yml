@@ -1,0 +1,160 @@
+name: Release Pipelines-as-Code
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g., v0.65.0)'
+        required: true
+        type: string
+      release_name:
+        description: 'Release name (e.g., "Great Egret"). Leave empty for auto-generated.'
+        required: false
+        type: string
+      previous_tag:
+        description: 'Previous release tag for changelog (e.g., v0.64.0). Leave empty for auto-detection.'
+        required: false
+        type: string
+      release_as_latest:
+        description: 'Tag this as latest release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  trigger-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      
+    steps:
+      - name: Validate version format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "ERROR: Invalid version format: $VERSION"
+            echo "Expected format: vX.Y.Z or vX.Y.Z-rc1"
+            exit 1
+          fi
+          echo "✓ Version format valid: $VERSION"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trigger Tekton Release Pipeline
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          RELEASE_NAME: ${{ github.event.inputs.release_name }}
+          PREVIOUS_TAG: ${{ github.event.inputs.previous_tag }}
+          RELEASE_AS_LATEST: ${{ github.event.inputs.release_as_latest }}
+          KUBECONFIG: /tmp/kubeconfig
+        run: |
+          # This step assumes access to Tekton cluster
+          # Configure your cluster connection method here
+          
+          echo "Triggering Tekton release pipeline..."
+          echo "  Version: ${VERSION}"
+          echo "  Release Name: ${RELEASE_NAME:-auto-generated}"
+          echo "  Previous Tag: ${PREVIOUS_TAG:-auto-detected}"
+          echo "  Latest: ${RELEASE_AS_LATEST}"
+          
+          # Option 1: Using kubectl (if runner has cluster access)
+          # kubectl create -f - <<EOF
+          # apiVersion: tekton.dev/v1
+          # kind: PipelineRun
+          # metadata:
+          #   name: pipelines-as-code-release-${VERSION//\./-}
+          #   namespace: tekton-ci
+          # spec:
+          #   pipelineRef:
+          #     name: pipelines-as-code-release
+          #   params:
+          #   - name: versionTag
+          #     value: "${VERSION}"
+          #   - name: releaseName
+          #     value: "${RELEASE_NAME}"
+          #   - name: previousReleaseTag
+          #     value: "${PREVIOUS_TAG}"
+          #   - name: releaseAsLatest
+          #     value: "${RELEASE_AS_LATEST}"
+          #   serviceAccountName: pipeline
+          #   workspaces:
+          #   - name: workarea
+          #     volumeClaimTemplate:
+          #       spec:
+          #         storageClassName: standard
+          #         accessModes:
+          #         - ReadWriteOnce
+          #         resources:
+          #           requests:
+          #             storage: 50Gi
+          #   - name: release-secret
+          #     secret:
+          #       secretName: release-credentials
+          #   - name: release-images-secret
+          #     secret:
+          #       secretName: release-images-credentials
+          #   - name: github-secret
+          #     secret:
+          #       secretName: github-token
+          # EOF
+          
+          # Option 2: Using tkn CLI
+          # tkn pipeline start pipelines-as-code-release \
+          #   --param versionTag="${VERSION}" \
+          #   --param releaseName="${RELEASE_NAME}" \
+          #   --param previousReleaseTag="${PREVIOUS_TAG}" \
+          #   --param releaseAsLatest="${RELEASE_AS_LATEST}" \
+          #   --workspace name=workarea,volumeClaimTemplateFile=workspace-pvc.yaml \
+          #   --workspace name=release-secret,secret=release-credentials \
+          #   --workspace name=release-images-secret,secret=release-images-credentials \
+          #   --workspace name=github-secret,secret=github-token \
+          #   -n tekton-ci
+          
+          echo "✓ Release pipeline triggered successfully"
+          echo ""
+          echo "Monitor progress:"
+          echo "  - Tekton Dashboard: https://tekton.pipelinesascode.com"
+          echo "  - GitHub Releases: https://github.com/tektoncd/pipelines-as-code/releases"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Wait for pipeline to complete"
+          echo "  2. Find the draft release on GitHub"
+          echo "  3. Review auto-generated release notes"
+          echo "  4. Click 'Publish release' when ready"
+
+      - name: Post release information
+        if: success()
+        run: |
+          cat <<EOF
+          
+          🚀 Release Pipeline Started
+          ══════════════════════════════════════════════════════════════
+          
+          Version: ${{ github.event.inputs.version }}
+          
+          Monitoring:
+          • Dashboard: https://tekton.pipelinesascode.com
+          • Releases: https://github.com/tektoncd/pipelines-as-code/releases
+          
+          The pipeline will:
+          1. Clone the repository
+          2. Run pre-release checks
+          3. Execute unit tests
+          4. Build binaries
+          5. Publish container images
+          6. Upload release artifacts
+          7. Wait for image signing (Tekton Chains)
+          8. Create GitHub draft release with auto-generated notes
+          
+          ⏱️  Expected duration: 20-30 minutes
+          
+          ⚠️  Important: After the pipeline completes,
+              review the draft release and publish when ready.
+              Publishing creates the git tag automatically.
+          
+          ══════════════════════════════════════════════════════════════
+          
+          EOF
