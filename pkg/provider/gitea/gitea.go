@@ -432,14 +432,22 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 	if tektonDirSha == "" {
 		return "", nil
 	}
-	// Get all files in the .tekton directory recursively
-	// TODO: figure out if there is a object limit we need to handle here
-	opts := forgejo.GetTreesOptions{Recursive: false}
-	tektonDirObjects, _, err := v.Client().GetTrees(event.Organization, event.Repository, tektonDirSha, opts)
-	if err != nil {
-		return "", err
+
+	entries := []forgejo.GitEntry{}
+	opts := forgejo.GetTreesOptions{Recursive: true, ListOptions: forgejo.ListOptions{PageSize: 100, Page: 1}}
+	for {
+		tektonDirObjects, _, err := v.Client().GetTrees(event.Organization, event.Repository, tektonDirSha, opts)
+		if err != nil {
+			return "", err
+		}
+		entries = append(entries, tektonDirObjects.Entries...)
+		if !tektonDirObjects.Truncated {
+			break
+		}
+		opts.Page++
 	}
-	return v.concatAllYamlFiles(tektonDirObjects.Entries, event)
+
+	return v.concatAllYamlFiles(entries, event)
 }
 
 func (v *Provider) concatAllYamlFiles(objects []forgejo.GitEntry, event *info.Event) (string,
