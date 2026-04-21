@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-github/v84/github"
@@ -683,6 +685,91 @@ func TestProviderGetExistingCheckRunID(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.expectedID) {
 				t.Errorf("getExistingCheckRunID() got = %v, want %v", got, tt.expectedID)
 			}
+		})
+	}
+}
+
+func TestGetExistingCheckRunIDCache(t *testing.T) {
+	tests := []struct {
+		name            string
+		jsonret         string
+		failFirstN      int
+		goroutines      int
+		secondLookup    string
+		expectedID      int64
+		expectedAPIHits int64
+	}{
+		{
+			name:            "second call serves from cache",
+			jsonret:         `{"total_count": 2, "check_runs": [{"id": 55555, "external_id": "mypr"}, {"id": 55556, "external_id": "mypr2"}]}`,
+			secondLookup:    "mypr2",
+			expectedID:      55555,
+			expectedAPIHits: 1,
+		},
+		{
+			name:            "concurrent calls share single fetch",
+			jsonret:         `{"total_count": 2, "check_runs": [{"id": 55555, "external_id": "mypr"}, {"id": 55556, "external_id": "mypr2"}]}`,
+			goroutines:      10,
+			expectedAPIHits: 1,
+		},
+		{
+			name:            "retries on transient error",
+			jsonret:         `{"total_count": 1, "check_runs": [{"id": 77777, "external_id": "mypr"}]}`,
+			failFirstN:      1,
+			expectedID:      77777,
+			expectedAPIHits: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			client, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			event := &info.Event{
+				Organization: "owner",
+				Repository:   "repository",
+				SHA:          "sha",
+			}
+
+			var apiHits atomic.Int64
+			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA), func(w http.ResponseWriter, _ *http.Request) {
+				hit := apiHits.Add(1)
+				if int(hit) <= tt.failFirstN {
+					w.WriteHeader(http.StatusBadGateway)
+					return
+				}
+				fmt.Fprint(w, tt.jsonret)
+			})
+
+			cnx := New()
+			cnx.SetGithubClient(client)
+
+			if tt.goroutines > 1 {
+				var wg sync.WaitGroup
+				wg.Add(tt.goroutines)
+				for range tt.goroutines {
+					go func() {
+						defer wg.Done()
+						_, _ = cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: "mypr"})
+					}()
+				}
+				wg.Wait()
+			} else {
+				id, err := cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: "mypr"})
+				assert.NilError(t, err)
+				if tt.expectedID != 0 {
+					assert.Assert(t, id != nil)
+					assert.Equal(t, *id, tt.expectedID)
+				}
+				if tt.secondLookup != "" {
+					id2, err := cnx.getExistingCheckRunID(ctx, event, providerstatus.StatusOpts{PipelineRunName: tt.secondLookup})
+					assert.NilError(t, err)
+					assert.Assert(t, id2 != nil)
+				}
+			}
+
+			assert.Equal(t, apiHits.Load(), tt.expectedAPIHits)
 		})
 	}
 }

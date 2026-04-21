@@ -23,8 +23,10 @@ import (
 )
 
 const (
-	botType         = "Bot"
-	pendingApproval = "Pending approval, waiting for an /ok-to-test"
+	botType                      = "Bot"
+	pendingApproval              = "Pending approval, waiting for an /ok-to-test"
+	checkRunsFetchMaxRetries     = 2
+	checkRunsFetchInitialBackoff = 200 * time.Millisecond
 )
 
 const taskStatusTemplate = `
@@ -42,7 +44,9 @@ const taskStatusTemplate = `
 {{- end }}
 </table>`
 
-func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts) (*int64, error) {
+// fetchAllCheckRunPages retrieves every page of check runs for the event SHA.
+func (v *Provider) fetchAllCheckRunPages(ctx context.Context, runevent *info.Event) ([]*github.CheckRun, error) {
+	var all []*github.CheckRun
 	opt := github.ListOptions{PerPage: v.PaginedNumber}
 	for {
 		res, resp, err := wrapAPI(v, "list_check_runs_for_ref", func() (*github.ListCheckRunsResults, *github.Response, error) {
@@ -55,25 +59,95 @@ func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Eve
 		if err != nil {
 			return nil, err
 		}
-
-		for _, checkrun := range res.CheckRuns {
-			// if it is a Pending approval CheckRun then overwrite it
-			if isPendingApprovalCheckrun(checkrun) || isFailedCheckrun(checkrun) {
-				if v.canIUseCheckrunID(checkrun.ID) {
-					return checkrun.ID, nil
-				}
-			}
-			if *checkrun.ExternalID == status.PipelineRunName {
-				return checkrun.ID, nil
-			}
-		}
+		all = append(all, res.CheckRuns...)
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
 	}
+	return all, nil
+}
 
-	return nil, nil
+func (v *Provider) searchCheckRuns(runs []*github.CheckRun, status providerstatus.StatusOpts) *int64 {
+	for _, checkrun := range runs {
+		if isPendingApprovalCheckrun(checkrun) || isFailedCheckrun(checkrun) {
+			if v.canIUseCheckrunID(checkrun.ID) {
+				return checkrun.ID
+			}
+		}
+		if checkrun.ExternalID != nil && *checkrun.ExternalID == status.PipelineRunName {
+			return checkrun.ID
+		}
+	}
+	return nil
+}
+
+func (v *Provider) getExistingCheckRunID(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts) (*int64, error) {
+	for {
+		v.checkRunsCache.mu.Lock()
+		if v.checkRunsCache.loading {
+			done := v.checkRunsCache.done
+			v.checkRunsCache.mu.Unlock()
+			<-done
+			continue
+		}
+		if v.checkRunsCache.populated {
+			runs := v.checkRunsCache.runs
+			v.checkRunsCache.mu.Unlock()
+			return v.searchCheckRuns(runs, status), nil
+		}
+
+		v.checkRunsCache.loading = true
+		v.checkRunsCache.done = make(chan struct{})
+		v.checkRunsCache.mu.Unlock()
+
+		runs, err := v.fetchAllCheckRunPagesWithRetry(ctx, runevent)
+
+		v.checkRunsCache.mu.Lock()
+		if err != nil {
+			v.checkRunsCache.loading = false
+		} else {
+			v.checkRunsCache.runs = runs
+			v.checkRunsCache.loading = false
+			v.checkRunsCache.populated = true
+		}
+		close(v.checkRunsCache.done)
+		v.checkRunsCache.mu.Unlock()
+
+		if err != nil {
+			return nil, err
+		}
+		return v.searchCheckRuns(runs, status), nil
+	}
+}
+
+func (v *Provider) fetchAllCheckRunPagesWithRetry(ctx context.Context, runevent *info.Event) ([]*github.CheckRun, error) {
+	var lastErr error
+	for attempt := range checkRunsFetchMaxRetries + 1 {
+		runs, err := v.fetchAllCheckRunPages(ctx, runevent)
+		if err == nil {
+			return runs, nil
+		}
+		lastErr = err
+
+		if attempt == checkRunsFetchMaxRetries {
+			return nil, err
+		}
+
+		backoff := time.Duration(1<<uint(attempt)) * checkRunsFetchInitialBackoff
+		if v.Logger != nil {
+			v.Logger.Debugf("check-runs lookup failed for %s/%s@%s (attempt %d/%d): %v; retrying in %v",
+				runevent.Organization, runevent.Repository, runevent.SHA,
+				attempt+1, checkRunsFetchMaxRetries+1, err, backoff)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-v.getClock().After(backoff):
+		}
+	}
+	return nil, lastErr
 }
 
 func isPendingApprovalCheckrun(run *github.CheckRun) bool {
