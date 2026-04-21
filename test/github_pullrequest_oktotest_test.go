@@ -75,6 +75,7 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 				PullRequestLinks: &github.PullRequestLinks{
 					HTMLURL: github.Ptr(fmt.Sprintf("%s/pull/%d", runevent.URL, g.PRNumber)),
 				},
+				Number: github.Ptr(g.PRNumber),
 			},
 			Repo: &github.Repository{
 				DefaultBranch: &runevent.DefaultBranch,
