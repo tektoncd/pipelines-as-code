@@ -543,6 +543,9 @@ data:
 - Configure PipelineRun retention (`max-keep-runs`)
 - Enable remote task caching
 - Use volume workspaces instead of PVCs for better performance
+- Informer cache transforms automatically strip unused fields from cached
+  objects, reducing watcher memory usage by up to 94% per object — see
+  [Informer Cache Optimization]({{< relref "/docs/operations/informer-cache.md" >}})
 
 ## Security Architecture
 
