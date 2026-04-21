@@ -728,6 +728,79 @@ func TestGetFileInsideRepo(t *testing.T) {
 	}
 }
 
+func TestGetFileInsideRepoRefSelection(t *testing.T) {
+	fileContent := base64.StdEncoding.EncodeToString([]byte("valid owners file"))
+	tests := []struct {
+		name        string
+		event       *info.Event
+		target      string
+		provenance  string
+		expectedRef string
+	}{
+		{
+			name: "uses SHA when target is empty",
+			event: &info.Event{
+				Organization:  "org",
+				Repository:    "repo",
+				SHA:           "sha123",
+				BaseBranch:    "main",
+				DefaultBranch: "main",
+			},
+			target:      "",
+			expectedRef: "sha123",
+		},
+		{
+			name: "uses target ref when target is provided",
+			event: &info.Event{
+				Organization:  "org",
+				Repository:    "repo",
+				SHA:           "sha123",
+				BaseBranch:    "main",
+				DefaultBranch: "main",
+			},
+			target:      "refs/heads/release-1.0",
+			expectedRef: "refs/heads/release-1.0",
+		},
+		{
+			name: "uses DefaultBranch when target is empty and provenance is default_branch",
+			event: &info.Event{
+				Organization:  "org",
+				Repository:    "repo",
+				SHA:           "sha123",
+				BaseBranch:    "develop",
+				DefaultBranch: "main",
+			},
+			target:      "",
+			provenance:  "default_branch",
+			expectedRef: "main",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+			gvcs := Provider{
+				ghClient:   fakeclient,
+				provenance: tt.provenance,
+			}
+
+			mux.HandleFunc("/repos/org/repo/contents/OWNERS", func(w http.ResponseWriter, r *http.Request) {
+				gotRef := r.URL.Query().Get("ref")
+				assert.Equal(t, gotRef, tt.expectedRef)
+				fmt.Fprintf(w, `{"name": "OWNERS", "path": "OWNERS", "sha": "ownersha"}`)
+			})
+			mux.HandleFunc("/repos/org/repo/git/blobs/ownersha", func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprintf(w, `{"content": %q, "sha": "ownersha"}`, fileContent)
+			})
+
+			got, err := gvcs.GetFileInsideRepo(ctx, tt.event, "OWNERS", tt.target)
+			assert.NilError(t, err)
+			assert.Equal(t, got, "valid owners file")
+		})
+	}
+}
+
 func TestCheckSenderOrgMembership(t *testing.T) {
 	tests := []struct {
 		name      string
