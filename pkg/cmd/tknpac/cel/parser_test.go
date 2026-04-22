@@ -529,3 +529,78 @@ func TestGiteaParserWithMissingFields(t *testing.T) {
 		})
 	}
 }
+
+func TestEventFromForgejo(t *testing.T) {
+	prPayload := `{
+		"action": "opened",
+		"number": 1,
+		"pull_request": {
+			"title": "Test PR",
+			"head": {"ref": "feature", "sha": "abc123",
+				"repo": {"html_url": "https://forgejo.example.com/fork/repo"}},
+			"base": {"ref": "main",
+				"repo": {"html_url": "https://forgejo.example.com/owner/repo"}}
+		},
+		"repository": {
+			"html_url": "https://forgejo.example.com/owner/repo",
+			"name": "repo",
+			"default_branch": "main",
+			"owner": {"login": "owner"}
+		},
+		"sender": {"login": "contributor"}
+	}`
+
+	tests := []struct {
+		name    string
+		headers map[string]string
+		wantErr bool
+		checks  func(t *testing.T, event *info.Event)
+	}{
+		{
+			name: "Forgejo header only",
+			headers: map[string]string{
+				"X-Forgejo-Event-Type": "pull_request",
+			},
+			checks: func(t *testing.T, event *info.Event) {
+				t.Helper()
+				assert.Equal(t, event.Organization, "owner")
+				assert.Equal(t, event.Repository, "repo")
+				assert.Equal(t, event.Sender, "contributor")
+				assert.Equal(t, event.HeadBranch, "feature")
+				assert.Equal(t, event.BaseBranch, "main")
+			},
+		},
+		{
+			name: "both Forgejo and Gitea headers",
+			headers: map[string]string{
+				"X-Forgejo-Event-Type": "pull_request",
+				"X-Gitea-Event-Type":   "pull_request",
+			},
+			checks: func(t *testing.T, event *info.Event) {
+				t.Helper()
+				assert.Equal(t, event.Organization, "owner")
+				assert.Equal(t, event.Repository, "repo")
+			},
+		},
+		{
+			name: "error when only Gitea header provided",
+			headers: map[string]string{
+				"X-Gitea-Event-Type": "pull_request",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event, err := eventFromForgejo([]byte(prPayload), tt.headers)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Assert(t, event != nil)
+			tt.checks(t, event)
+		})
+	}
+}

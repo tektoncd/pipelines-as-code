@@ -586,6 +586,14 @@ func (p *GiteaParser) GetEventTypeHeader() string {
 	return "X-Gitea-Event-Type"
 }
 
+type ForgejoParser struct {
+	GiteaParser
+}
+
+func (p *ForgejoParser) GetEventTypeHeader() string {
+	return "X-Forgejo-Event-Type"
+}
+
 func (p *GiteaParser) ParsePayload(eventType string, body []byte) (any, error) {
 	var eventInt any
 	switch eventType {

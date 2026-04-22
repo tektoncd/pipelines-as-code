@@ -1540,6 +1540,33 @@ func TestDetectProvider(t *testing.T) {
 			expectedProvider: "gitea",
 		},
 		{
+			name: "Forgejo provider with all headers",
+			headers: map[string]string{
+				"X-GitHub-Event":       "pull_request",
+				"X-Gitea-Event-Type":   "pull_request",
+				"X-Forgejo-Event-Type": "pull_request",
+			},
+			body:             []byte(`{"repository": {"html_url": "https://forgejo.example.com/owner/repo"}}`),
+			expectedProvider: "forgejo",
+		},
+		{
+			name: "Forgejo provider with only Forgejo header",
+			headers: map[string]string{
+				"X-Forgejo-Event-Type": "pull_request",
+			},
+			body:             []byte(`{"repository": {"html_url": "https://forgejo.example.com/owner/repo"}}`),
+			expectedProvider: "forgejo",
+		},
+		{
+			name: "Forgejo provider with GitHub and Forgejo headers",
+			headers: map[string]string{
+				"X-GitHub-Event":       "pull_request",
+				"X-Forgejo-Event-Type": "pull_request",
+			},
+			body:             []byte(`{"repository": {"html_url": "https://forgejo.example.com/owner/repo"}}`),
+			expectedProvider: "forgejo",
+		},
+		{
 			name: "GitLab provider",
 			headers: map[string]string{
 				"X-Gitlab-Event": "Merge Request Hook",
