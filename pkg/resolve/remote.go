@@ -33,11 +33,14 @@ func assembleTaskFQDNs(pipelineURL string, tasks []string) ([]string, error) {
 		return tasks, nil // no pipeline URL, return tasks as is
 	}
 
-	// Only HTTP(S) URLs can serve as base for relative task resolution.
+	// Only HTTP(S) URLs and repository file paths can serve as base for relative task resolution.
 	// Hub catalog references (e.g., "catalog://resource:version") use a
 	// different scheme where relative paths are meaningless.
 	lowered := strings.ToLower(pipelineURL)
-	if !strings.HasPrefix(lowered, "http://") && !strings.HasPrefix(lowered, "https://") {
+	isHTTP := strings.HasPrefix(lowered, "http://") || strings.HasPrefix(lowered, "https://")
+	isRepoPath := strings.Contains(lowered, "/") && !strings.Contains(lowered, "://")
+
+	if !isHTTP && !isRepoPath {
 		return tasks, nil
 	}
 
