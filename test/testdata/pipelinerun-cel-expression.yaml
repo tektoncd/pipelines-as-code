@@ -1,0 +1,18 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: "\\ .PipelineName //"
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-cel-expression: >-
+      event == "\\ .TargetEvent //" && target_branch == "\\ .TargetBranch //"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: cel-expression-task
+        taskSpec:
+          steps:
+            - name: test-cel-expression-values
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/echo", "HELLOMOTO"]
