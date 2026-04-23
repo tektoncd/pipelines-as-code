@@ -107,6 +107,42 @@ func TestBitbucketCloudPullRequestCancelInProgressMerged(t *testing.T) {
 	assert.Equal(t, prs.Items[0].GetStatusCondition().GetCondition(apis.ConditionSucceeded).GetReason(), "Cancelled", "should have been cancelled")
 }
 
+func TestBitbucketCloudCELExpressionOnPush(t *testing.T) {
+	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
+	ctx := context.Background()
+
+	runcnx, opts, bprovider, err := tbb.Setup(ctx)
+	if err != nil {
+		t.Skip(err.Error())
+		return
+	}
+	bcrepo := tbb.CreateCRD(ctx, t, bprovider, runcnx, opts, targetNS)
+	targetRefName := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
+	title := "TestPullRequest - " + targetRefName
+
+	entries, err := payload.GetEntries(
+		map[string]string{".tekton/pipelinerun.yaml": "testdata/pipelinerun-cel-expression.yaml"},
+		targetNS, targetRefName, triggertype.Push.String(), map[string]string{})
+	assert.NilError(t, err)
+
+	repobranch, err := tbb.MakePush(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)
+	assert.NilError(t, err)
+	defer tbb.TearDown(ctx, t, runcnx, bprovider, opts, -1, repobranch.Name, targetNS, false)
+
+	hash, ok := repobranch.Target["hash"].(string)
+	assert.Assert(t, ok)
+
+	sopt := twait.SuccessOpt{
+		TargetNS:        targetNS,
+		OnEvent:         triggertype.Push.String(),
+		NumberofPRMatch: 1,
+		SHA:             hash,
+		Title:           title,
+		MinNumberStatus: 1,
+	}
+	twait.Succeeded(ctx, t, runcnx, opts, sopt)
+}
+
 // Local Variables:
 // compile-command: "go test -tags=e2e -v -run TestBitbucketCloudPullRequest$ ."
 // End:

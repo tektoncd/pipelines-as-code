@@ -17,6 +17,29 @@ import (
 func MakePR(t *testing.T, bprovider bitbucketcloud.Provider, runcnx *params.Run, bcrepo *bitbucket.Repository, opts options.E2E, title, targetRefName string,
 	entries map[string]string,
 ) (*types.PullRequest, *bitbucket.RepositoryBranch) {
+	repobranch, err := MakePush(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)
+	assert.NilError(t, err)
+
+	intf, err := bprovider.Client().Repositories.PullRequests.Create(&bitbucket.PullRequestsOptions{
+		Owner:        opts.Organization,
+		RepoSlug:     opts.Repo,
+		Title:        title,
+		Message:      "A new PR for testing",
+		SourceBranch: targetRefName,
+	})
+	assert.NilError(t, err)
+
+	pr := &types.PullRequest{}
+	err = mapstructure.Decode(intf, pr)
+	assert.NilError(t, err)
+	runcnx.Clients.Log.Infof("Created PR %s", pr.Links.HTML.HRef)
+
+	return pr, repobranch
+}
+
+func MakePush(t *testing.T, bprovider bitbucketcloud.Provider, runcnx *params.Run, bcrepo *bitbucket.Repository, opts options.E2E, title, targetRefName string,
+	entries map[string]string,
+) (*bitbucket.RepositoryBranch, error) {
 	commitAuthor := "OpenShift Pipelines E2E test"
 	commitEmail := "e2e-pipelines@redhat.com"
 
@@ -38,7 +61,10 @@ func MakePR(t *testing.T, bprovider bitbucketcloud.Provider, runcnx *params.Run,
 		Branch:   targetRefName,
 		Author:   fmt.Sprintf("%s <%s>", commitAuthor, commitEmail),
 	})
-	assert.NilError(t, err)
+	if err != nil {
+		return nil, err
+	}
+
 	runcnx.Clients.Log.Infof("Using repo %s branch %s", bcrepo.Full_name, targetRefName)
 
 	repobranch, err := bprovider.Client().Repositories.Repository.GetBranch(&bitbucket.RepositoryBranchOptions{
@@ -46,21 +72,9 @@ func MakePR(t *testing.T, bprovider bitbucketcloud.Provider, runcnx *params.Run,
 		RepoSlug:   opts.Repo,
 		BranchName: targetRefName,
 	})
-	assert.NilError(t, err)
+	if err != nil {
+		return nil, err
+	}
 
-	intf, err := bprovider.Client().Repositories.PullRequests.Create(&bitbucket.PullRequestsOptions{
-		Owner:        opts.Organization,
-		RepoSlug:     opts.Repo,
-		Title:        title,
-		Message:      "A new PR for testing",
-		SourceBranch: targetRefName,
-	})
-	assert.NilError(t, err)
-
-	pr := &types.PullRequest{}
-	err = mapstructure.Decode(intf, pr)
-	assert.NilError(t, err)
-	runcnx.Clients.Log.Infof("Created PR %s", pr.Links.HTML.HRef)
-
-	return pr, repobranch
+	return repobranch, nil
 }
