@@ -713,18 +713,20 @@ func Test_listener_detectIncoming(t *testing.T) {
 
 func Test_listener_processIncoming(t *testing.T) {
 	tests := []struct {
-		name       string
-		want       provider.Interface
-		wantErr    bool
-		targetRepo *v1alpha1.Repository
-		wantOrg    string
-		wantRepo   string
+		name          string
+		want          provider.Interface
+		wantErr       bool
+		targetRepo    *v1alpha1.Repository
+		wantOrg       string
+		wantRepo      string
+		wantRepoNames []string
 	}{
 		{
-			name:     "process/github",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "process/github",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL: "https://forge/owner/repo",
@@ -821,10 +823,11 @@ func Test_listener_processIncoming(t *testing.T) {
 			},
 		},
 		{
-			name:     "No GitProvider is provided",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "No GitProvider is provided",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL:         "https://forge/owner/repo",
@@ -833,10 +836,11 @@ func Test_listener_processIncoming(t *testing.T) {
 			},
 		},
 		{
-			name:     "No GitProvider type is provided",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "No GitProvider type is provided",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL:         "https://forge/owner/repo",
@@ -864,6 +868,11 @@ func Test_listener_processIncoming(t *testing.T) {
 			assert.Assert(t, reflect.TypeOf(pintf).Elem() == reflect.TypeOf(tt.want).Elem())
 			assert.Assert(t, l.event.Organization == tt.wantOrg)
 			assert.Assert(t, l.event.Repository == tt.wantRepo)
+			if len(tt.wantRepoNames) > 0 {
+				gh, ok := pintf.(*github.Provider)
+				assert.Assert(t, ok, "expected *github.Provider for RepositoryNames check")
+				assert.DeepEqual(t, tt.wantRepoNames, gh.RepositoryNames)
+			}
 		})
 	}
 }

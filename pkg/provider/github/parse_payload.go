@@ -64,9 +64,14 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 	if err != nil {
 		return "", err
 	}
-	itr.InstallationTokenOptions = &oGitHub.InstallationTokenOptions{
-		RepositoryIDs: v.RepositoryIDs,
+	opts := &oGitHub.InstallationTokenOptions{}
+	switch {
+	case len(v.RepositoryIDs) > 0:
+		opts.RepositoryIDs = v.RepositoryIDs
+	case len(v.RepositoryNames) > 0:
+		opts.Repositories = v.RepositoryNames
 	}
+	itr.InstallationTokenOptions = opts
 
 	// This is a hack when we have auth and api disassociated like in our
 	// unittests since we are using a custom http server with httptest
