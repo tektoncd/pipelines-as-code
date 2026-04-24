@@ -51,19 +51,20 @@ const (
 var _ provider.Interface = (*Provider)(nil)
 
 type Provider struct {
-	ghClient      *github.Client
-	Logger        *zap.SugaredLogger
-	Run           *params.Run
-	pacInfo       *info.PacOpts
-	Token, APIURL *string
-	ApplicationID *int64
-	providerName  string
-	provenance    string
-	RepositoryIDs []int64
-	repo          *v1alpha1.Repository
-	eventEmitter  *events.EventEmitter
-	PaginedNumber int
-	userType      string // The type of user i.e bot or not
+	ghClient        *github.Client
+	Logger          *zap.SugaredLogger
+	Run             *params.Run
+	pacInfo         *info.PacOpts
+	Token, APIURL   *string
+	ApplicationID   *int64
+	providerName    string
+	provenance      string
+	RepositoryIDs   []int64
+	RepositoryNames []string
+	repo            *v1alpha1.Repository
+	eventEmitter    *events.EventEmitter
+	PaginedNumber   int
+	userType        string // The type of user i.e bot or not
 	skippedRun
 	triggerEvent       string
 	cachedChangedFiles *changedfiles.ChangedFiles
@@ -360,9 +361,19 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 		if err != nil {
 			return fmt.Errorf("failed to scope token: %w", err)
 		}
-		// If Global and Repo level configurations are not provided then lets not override the provider token.
-		if token != "" {
+		switch {
+		case token != "":
 			event.Provider.Token = token
+		case len(v.RepositoryIDs) > 0 || len(v.RepositoryNames) > 0:
+			// Defer scoping until after ScopeTokenToListOfRepos so CreateToken can
+			// look up extra repos from the configmap first.  When no additional repos
+			// are configured, scope the token to only the triggering repo.
+			ns := info.GetNS(ctx)
+			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+			if err != nil {
+				return fmt.Errorf("failed to scope token to triggering repository: %w", err)
+			}
+			event.Provider.Token = scopedToken
 		}
 	}
 

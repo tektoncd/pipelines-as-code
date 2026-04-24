@@ -222,24 +222,27 @@ func (l *listener) processIncoming(event *info.Event, targetRepo *v1alpha1.Repos
 	event.Organization = org
 	event.Repository = repo
 
+	providerType := ""
+	if targetRepo.Spec.GitProvider != nil {
+		providerType = targetRepo.Spec.GitProvider.Type
+	}
+
 	var provider provider.Interface
-	if targetRepo.Spec.GitProvider == nil || targetRepo.Spec.GitProvider.Type == "" {
-		provider = github.New()
-	} else {
-		switch targetRepo.Spec.GitProvider.Type {
-		case "github":
-			provider = github.New()
-		case "gitlab":
-			provider = &gitlab.Provider{}
-		case "gitea", "forgejo":
-			provider = &gitea.Provider{}
-		case "bitbucket-cloud":
-			provider = &bitbucketcloud.Provider{}
-		case "bitbucket-datacenter":
-			provider = &bitbucketdatacenter.Provider{}
-		default:
-			return l.processRes(false, nil, l.logger.With("namespace", targetRepo.Namespace), "", fmt.Errorf("no supported Git provider has been detected"))
-		}
+	switch providerType {
+	case "", "github":
+		gh := github.New()
+		gh.RepositoryNames = []string{repo}
+		provider = gh
+	case "gitlab":
+		provider = &gitlab.Provider{}
+	case "gitea", "forgejo":
+		provider = &gitea.Provider{}
+	case "bitbucket-cloud":
+		provider = &bitbucketcloud.Provider{}
+	case "bitbucket-datacenter":
+		provider = &bitbucketdatacenter.Provider{}
+	default:
+		return l.processRes(false, nil, l.logger.With("namespace", targetRepo.Namespace), "", fmt.Errorf("no supported Git provider has been detected"))
 	}
 
 	return l.processRes(true, provider, l.logger.With("provider", "incoming", "namespace", targetRepo.Namespace), "", nil)

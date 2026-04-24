@@ -1246,6 +1246,96 @@ func TestGithubSetClient(t *testing.T) {
 	}
 }
 
+func TestSetClientFallbackScopesToken(t *testing.T) {
+	testNamespace := "pipelinesascode"
+	secretName := "pipelines-as-code-secret"
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+				},
+			},
+		},
+	})
+
+	tests := []struct {
+		name            string
+		repositoryIDs   []int64
+		repositoryNames []string
+	}{
+		{
+			name:          "scopes by RepositoryIDs",
+			repositoryIDs: []int64{42},
+		},
+		{
+			name:            "scopes by RepositoryNames",
+			repositoryNames: []string{"my-repo"},
+		},
+		{
+			name:            "scopes by both",
+			repositoryIDs:   []int64{42},
+			repositoryNames: []string{"my-repo"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			scopedToken := "ghs_scoped_token_value"
+			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprintf(w, `{"token":%q,"expires_at":"2099-01-01T00:00:00Z"}`, scopedToken)
+			})
+
+			ctx = info.StoreCurrentControllerName(ctx, "default")
+			ctx = info.StoreNS(ctx, testNamespace)
+
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
+			initialToken := "ghs_initial_unscoped_token"
+			event := info.NewEvent()
+			event.InstallationID = testInstallationID
+			event.Provider.Token = initialToken
+
+			testLog, _ := logger.GetLogger()
+			v := Provider{
+				Logger:          testLog,
+				RepositoryIDs:   tt.repositoryIDs,
+				RepositoryNames: tt.repositoryNames,
+				pacInfo:         &info.PacOpts{},
+			}
+
+			run := &params.Run{
+				Clients: clients.Clients{
+					Log:  testLog,
+					Kube: seedData.Kube,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{Secret: secretName},
+				},
+			}
+
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{},
+				},
+			}
+
+			err := v.SetClient(ctx, run, event, repo, nil)
+			assert.NilError(t, err)
+			assert.Equal(t, scopedToken, event.Provider.Token)
+		})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	header := http.Header{}
 	header.Set(github.SHA256SignatureHeader, "hello")

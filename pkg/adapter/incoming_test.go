@@ -2,7 +2,9 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +14,8 @@ import (
 
 	apincoming "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/incoming"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/gitclient"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
@@ -31,6 +35,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 )
 
@@ -855,18 +860,20 @@ func TestListenerDetectIncoming(t *testing.T) {
 
 func TestListenerProcessIncoming(t *testing.T) {
 	tests := []struct {
-		name       string
-		want       provider.Interface
-		wantErr    bool
-		targetRepo *v1alpha1.Repository
-		wantOrg    string
-		wantRepo   string
+		name          string
+		want          provider.Interface
+		wantErr       bool
+		targetRepo    *v1alpha1.Repository
+		wantOrg       string
+		wantRepo      string
+		wantRepoNames []string
 	}{
 		{
-			name:     "process/github",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "process/github",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL: "https://forge/owner/repo",
@@ -977,10 +984,11 @@ func TestListenerProcessIncoming(t *testing.T) {
 			},
 		},
 		{
-			name:     "No GitProvider is provided",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "No GitProvider is provided",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL:         "https://forge/owner/repo",
@@ -989,10 +997,11 @@ func TestListenerProcessIncoming(t *testing.T) {
 			},
 		},
 		{
-			name:     "No GitProvider type is provided",
-			want:     github.New(),
-			wantOrg:  "owner",
-			wantRepo: "repo",
+			name:          "No GitProvider type is provided",
+			want:          github.New(),
+			wantOrg:       "owner",
+			wantRepo:      "repo",
+			wantRepoNames: []string{"repo"},
 			targetRepo: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					URL:         "https://forge/owner/repo",
@@ -1021,8 +1030,108 @@ func TestListenerProcessIncoming(t *testing.T) {
 			assert.Assert(t, reflect.TypeOf(pintf).Elem() == reflect.TypeOf(tt.want).Elem())
 			assert.Assert(t, event.Organization == tt.wantOrg)
 			assert.Assert(t, event.Repository == tt.wantRepo)
+			if len(tt.wantRepoNames) > 0 {
+				gh, ok := pintf.(*github.Provider)
+				assert.Assert(t, ok, "expected *github.Provider for RepositoryNames check")
+				assert.DeepEqual(t, tt.wantRepoNames, gh.RepositoryNames)
+			}
 		})
 	}
+}
+
+func TestIncomingGitHubAppScopesTokenThroughClientSetup(t *testing.T) {
+	const (
+		namespace    = "pipelines-as-code"
+		secretName   = "pipelines-as-code-secret"
+		repoName     = "incoming-repo"
+		installation = int64(1)
+	)
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	ctx = info.StoreNS(ctx, namespace)
+
+	_, mux, serverURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
+	var capturedBody map[string]any
+	mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", installation), func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NilError(t, err)
+		assert.NilError(t, json.Unmarshal(body, &capturedBody))
+		_, _ = fmt.Fprint(w, `{"token":"scoped-token","expires_at":"2099-01-01T00:00:00Z"}`)
+	})
+
+	testLog := zap.NewNop().Sugar()
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Namespaces: []*corev1.Namespace{{
+			ObjectMeta: metav1.ObjectMeta{Name: namespace},
+		}},
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+				"webhook.secret":        []byte("webhook-secret"),
+			},
+		}},
+	})
+
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube:           seedData.Kube,
+			PipelineAsCode: seedData.PipelineAsCode,
+			Log:            testLog,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+			Kube:       &info.KubeOpts{Namespace: namespace},
+		},
+	}
+
+	kint, err := kubeinteraction.NewKubernetesInteraction(run)
+	assert.NilError(t, err)
+
+	targetRepo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      repoName,
+			Namespace: "default",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL: "https://github.com/owner/" + repoName,
+		},
+	}
+
+	event := info.NewEvent()
+	event.EventType = "incoming"
+	event.InstallationID = installation
+	event.URL = targetRepo.Spec.URL
+	event.Provider.Token = "initial-unscoped-token"
+
+	l := listener{run: run, logger: testLog}
+	vcx, eventLogger, err := l.processIncoming(event, targetRepo)
+	assert.NilError(t, err)
+
+	pacInfo := &info.PacOpts{}
+	vcx.SetPacInfo(pacInfo)
+
+	err = gitclient.SetupAuthenticatedClient(ctx, vcx, kint, run, event, targetRepo, nil, pacInfo, eventLogger)
+	assert.NilError(t, err)
+
+	assert.Equal(t, "scoped-token", event.Provider.Token)
+
+	rawRepos, ok := capturedBody["repositories"]
+	assert.Assert(t, ok, "expected repositories field in token request body")
+	repos, ok := rawRepos.([]any)
+	assert.Assert(t, ok, "repositories is not an array")
+	assert.DeepEqual(t, []any{repoName}, repos)
+
+	_, hasRepoIDs := capturedBody["repository_ids"]
+	assert.Assert(t, !hasRepoIDs, "repository_ids should not be present for incoming name-scoped token")
 }
 
 func TestApplyIncomingParams(t *testing.T) {

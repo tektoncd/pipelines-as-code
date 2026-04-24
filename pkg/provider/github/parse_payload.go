@@ -67,9 +67,14 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 	if err != nil {
 		return "", err
 	}
-	itr.InstallationTokenOptions = &githubv84.InstallationTokenOptions{
-		RepositoryIDs: v.RepositoryIDs,
+	opts := &githubv84.InstallationTokenOptions{}
+	switch {
+	case len(v.RepositoryIDs) > 0:
+		opts.RepositoryIDs = v.RepositoryIDs
+	case len(v.RepositoryNames) > 0:
+		opts.Repositories = v.RepositoryNames
 	}
+	itr.InstallationTokenOptions = opts
 
 	// This is a hack when we have auth and api disassociated like in our
 	// unittests since we are using a custom http server with httptest
@@ -131,18 +136,26 @@ type Payload struct {
 	Installation struct {
 		ID *int64 `json:"id"`
 	} `json:"installation"`
+	Repository struct {
+		ID *int64 `json:"id"`
+	} `json:"repository"`
 }
 
-func getInstallationIDFromPayload(payload string) (int64, error) {
+func getInstallationAndRepoIDFromPayload(payload string) (int64, int64, error) {
 	var data Payload
-	err := json.Unmarshal([]byte(payload), &data)
-	if err != nil {
-		return -1, err
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return -1, -1, err
 	}
+
+	installationID, repoID := int64(-1), int64(-1)
 	if data.Installation.ID != nil {
-		return *data.Installation.ID, nil
+		installationID = *data.Installation.ID
 	}
-	return -1, nil
+	if data.Repository.ID != nil {
+		repoID = *data.Repository.ID
+	}
+
+	return installationID, repoID, nil
 }
 
 // ParsePayload will parse the payload and return the event
@@ -177,7 +190,7 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		return nil, err
 	}
 
-	installationIDFrompayload, err := getInstallationIDFromPayload(payload)
+	installationIDFrompayload, repoIDFromPayload, err := getInstallationAndRepoIDFromPayload(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +200,10 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		if event.Provider.Token, err = v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, installationIDFrompayload, systemNS); err != nil {
 			return nil, err
 		}
+	}
+
+	if repoIDFromPayload > 0 {
+		v.RepositoryIDs = []int64{repoIDFromPayload}
 	}
 
 	eventInt, err := github.ParseWebHook(event.EventType, []byte(payload))
@@ -537,6 +554,7 @@ func (v *Provider) handleReRequestEvent(ctx context.Context, event *github.Check
 		// fine because you can't do a rereq without being a github owner?
 		runevent.Sender = event.GetSender().GetLogin()
 		v.userType = event.GetSender().GetType()
+		v.RepositoryIDs = []int64{event.GetRepo().GetID()}
 		return runevent, nil
 	}
 	runevent.PullRequestNumber = event.GetCheckRun().GetCheckSuite().PullRequests[0].GetNumber()
@@ -584,6 +602,7 @@ func (v *Provider) handleCheckSuites(ctx context.Context, event *github.CheckSui
 		// fine because you can't do a rereq without being a github owner?
 		runevent.Sender = event.GetSender().GetLogin()
 		v.userType = event.GetSender().GetType()
+		v.RepositoryIDs = []int64{event.GetRepo().GetID()}
 		return runevent, nil
 	}
 	runevent.PullRequestNumber = event.GetCheckSuite().PullRequests[0].GetNumber()
@@ -699,6 +718,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	runevent.BaseURL = runevent.HeadURL
 	runevent.TriggerTarget = triggertype.Push
 	v.userType = event.GetSender().GetType()
+	v.RepositoryIDs = []int64{event.GetRepo().GetID()}
 
 	repo, err := MatchEventURLRepo(ctx, v.Run, runevent, "")
 	if err != nil {

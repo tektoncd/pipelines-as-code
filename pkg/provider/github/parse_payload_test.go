@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -1713,6 +1714,119 @@ func TestAppTokenGeneration(t *testing.T) {
 
 			// Verify client was created successfully for GitHub App
 			assert.Assert(t, gprovider.Client() != nil)
+		})
+	}
+}
+
+func TestGetAppTokenScopesRepositoryNames(t *testing.T) {
+	testNamespace := "pipelinesascode"
+	secretName := "pipelines-as-code-secret"
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+				},
+			},
+		},
+	})
+
+	tests := []struct {
+		name            string
+		repositoryIDs   []int64
+		repositoryNames []string
+		wantIDs         []int64
+		wantNames       []string
+	}{
+		{
+			name:            "only RepositoryNames",
+			repositoryNames: []string{"my-repo"},
+			wantNames:       []string{"my-repo"},
+		},
+		{
+			name:          "only RepositoryIDs",
+			repositoryIDs: []int64{42},
+			wantIDs:       []int64{42},
+		},
+		{
+			name:            "RepositoryIDs takes precedence over RepositoryNames",
+			repositoryIDs:   []int64{42},
+			repositoryNames: []string{"my-repo"},
+			wantIDs:         []int64{42},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			var capturedBody map[string]any
+			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(body, &capturedBody)
+				_, _ = fmt.Fprint(w, `{"token":"fake-token","expires_at":"2099-01-01T00:00:00Z"}`)
+			})
+
+			logger, _ := logger.GetLogger()
+			gprovider := Provider{
+				Logger:          logger,
+				RepositoryIDs:   tt.repositoryIDs,
+				RepositoryNames: tt.repositoryNames,
+				Run: &params.Run{
+					Info: info.Info{
+						Controller: &info.ControllerInfo{Secret: secretName},
+					},
+				},
+			}
+
+			ctx = info.StoreCurrentControllerName(ctx, "default")
+			ctx = info.StoreNS(ctx, testNamespace)
+
+			envRemove := env.PatchAll(t, map[string]string{
+				"PAC_GIT_PROVIDER_TOKEN_APIURL": serverURL + "/api/v3",
+			})
+			defer envRemove()
+
+			token, err := gprovider.GetAppToken(ctx, seedData.Kube, "", testInstallationID, testNamespace)
+			assert.NilError(t, err)
+			assert.Assert(t, token != "")
+
+			if tt.wantNames != nil {
+				raw, ok := capturedBody["repositories"]
+				assert.Assert(t, ok, "expected repositories field in token request body")
+				rawSlice, ok := raw.([]any)
+				assert.Assert(t, ok, "repositories is not an array")
+				names := make([]string, 0, len(rawSlice))
+				for _, v := range rawSlice {
+					s, ok := v.(string)
+					assert.Assert(t, ok, "repository name is not a string")
+					names = append(names, s)
+				}
+				assert.DeepEqual(t, tt.wantNames, names)
+			} else {
+				_, ok := capturedBody["repositories"]
+				assert.Assert(t, !ok, "repositories field should not be present when IDs are used")
+			}
+			if tt.wantIDs != nil {
+				raw, ok := capturedBody["repository_ids"]
+				assert.Assert(t, ok, "expected repository_ids field in token request body")
+				rawSlice, ok := raw.([]any)
+				assert.Assert(t, ok, "repository_ids is not an array")
+				ids := make([]int64, 0, len(rawSlice))
+				for _, v := range rawSlice {
+					f, ok := v.(float64)
+					assert.Assert(t, ok, "repository_id is not a number")
+					ids = append(ids, int64(f))
+				}
+				assert.DeepEqual(t, tt.wantIDs, ids)
+			}
 		})
 	}
 }
