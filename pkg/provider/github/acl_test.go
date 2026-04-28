@@ -125,6 +125,7 @@ func TestOkToTestComment(t *testing.T) {
 						PullRequestLinks: &github.PullRequestLinks{
 							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
 						},
+						Number: github.Ptr(1),
 					},
 				},
 			},
@@ -142,6 +143,7 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
 						HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+						Number:  github.Ptr(1),
 					},
 				},
 			},
@@ -178,6 +180,7 @@ func TestOkToTestComment(t *testing.T) {
 						PullRequestLinks: &github.PullRequestLinks{
 							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
 						},
+						Number: github.Ptr(1),
 					},
 				},
 			},
@@ -197,6 +200,7 @@ func TestOkToTestComment(t *testing.T) {
 						PullRequestLinks: &github.PullRequestLinks{
 							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
 						},
+						Number: github.Ptr(1),
 					},
 				},
 			},
@@ -308,6 +312,7 @@ func TestOkToTestComment(t *testing.T) {
 						PullRequestLinks: &github.PullRequestLinks{
 							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
 						},
+						Number: github.Ptr(1),
 					},
 				},
 			},
