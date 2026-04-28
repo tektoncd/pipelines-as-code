@@ -124,7 +124,9 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 		}
 		// When /ok-to-test is approved, update the parent "Pipelines as Code CI" status to success
 		// to indicate the approval was successful before pipelines start running.
-		if p.event.EventType == opscomments.OkToTestCommentEventType.String() && !strings.Contains(p.vcx.GetConfig().Name, "github") {
+		// we only do this for all providers except github apps since github apps use the checkRun API to update the status
+		// checking installationID is <= 0 because sometime it's set to -1
+		if p.event.EventType == opscomments.OkToTestCommentEventType.String() && p.event.InstallationID <= 0 {
 			approvalStatus := providerstatus.StatusOpts{
 				Status:     CompletedStatus,
 				Title:      "Approved",

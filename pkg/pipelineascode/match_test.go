@@ -4,7 +4,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -752,6 +754,36 @@ func TestVerifyRepoAndUser(t *testing.T) {
 			wantRepoNil:   false,
 			wantErr:       false,
 		},
+		{
+			name: "happy path with ok-to-test comment status reporting",
+			runevent: info.Event{
+				Organization:  "owner",
+				Repository:    "repo",
+				URL:           "https://example.com/owner/repo",
+				SHA:           "123abc",
+				EventType:     opscomments.OkToTestCommentEventType.String(),
+				TriggerTarget: triggertype.PullRequest,
+				Sender:        "owner",
+				Request:       request,
+			},
+			repositories: []*v1alpha1.Repository{{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "ns"},
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://example.com/owner/repo",
+					GitProvider: &v1alpha1.GitProvider{
+						Secret: &v1alpha1.Secret{
+							Name: "secret",
+						},
+						WebhookSecret: &v1alpha1.Secret{
+							Name: "webhook-secret",
+						},
+					},
+				},
+			}},
+			webhookSecret: "secret",
+			wantRepoNil:   false,
+			wantErr:       false,
+		},
 	}
 
 	pacInfo := &info.PacOpts{Settings: settings.DefaultSettings()}
@@ -786,14 +818,23 @@ func TestVerifyRepoAndUser(t *testing.T) {
 			// status endpoint stub (used when CreateStatus is called)
 			mux.HandleFunc(
 				fmt.Sprintf("/repos/%s/%s/statuses/%s", tt.runevent.Organization, tt.runevent.Repository, tt.runevent.SHA),
-				func(rw http.ResponseWriter, _ *http.Request) { fmt.Fprint(rw, `{}`) },
+				func(rw http.ResponseWriter, r *http.Request) {
+					body, _ := io.ReadAll(r.Body)
+					a := struct {
+						State string `json:"state"`
+					}{}
+					err := json.Unmarshal(body, &a)
+					assert.NilError(t, err)
+					assert.Equal(t, a.State, "success")
+					fmt.Fprint(rw, `{}`)
+				},
 			)
 
 			vcx := &ghprovider.Provider{Token: github.Ptr("token"), Logger: logger}
 			vcx.SetGithubClient(ghClient)
 			vcx.SetPacInfo(pacInfo)
 
-			k8int := &kitesthelper.KinterfaceTest{GetSecretResult: map[string]string{"pipelines-as-code-secret": tt.webhookSecret}}
+			k8int := &kitesthelper.KinterfaceTest{GetSecretResult: map[string]string{"pipelines-as-code-secret": tt.webhookSecret, "secret": "token", "webhook-secret": "secret"}}
 
 			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{Repositories: tt.repositories /*Secret: []*corev1.Secret{secret}*/})
 			in := info.NewInfo()
