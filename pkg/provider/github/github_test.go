@@ -870,13 +870,13 @@ func TestGetStringPullRequestComment(t *testing.T) {
 	}{
 		{
 			name:      "Get String from comments",
-			runevent:  info.Event{URL: "http://1"},
+			runevent:  info.Event{URL: "http://1", PullRequestNumber: 1},
 			apiReturn: `[{"body": "/ok-to-test"}]`,
 			wantRet:   true,
 		},
 		{
 			name:      "Not matching string in comments",
-			runevent:  info.Event{URL: "http://1"},
+			runevent:  info.Event{URL: "http://1", PullRequestNumber: 1},
 			apiReturn: `[{"body": ""}]`,
 			wantRet:   false,
 		},
