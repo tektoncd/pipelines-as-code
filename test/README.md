@@ -228,8 +228,8 @@ Example from e2e.yaml workflow:
     PAC_SECOND_SECRET_FOLDER: ~/secrets-second
   run: |
     mkdir -p ~/secrets-second
-    echo "${{ vars.TEST_GITHUB_GHE_APPLICATION_ID }}" > ~/secrets-second/github-application-id
-    echo "${{ secrets.TEST_GITHUB_GHE_PRIVATE_KEY }}" > ~/secrets-second/github-private-key
+    echo "${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}" > ~/secrets-second/github-application-id
+    echo "${{ secrets.TEST_GITHUB_SECOND_PRIVATE_KEY }}" > ~/secrets-second/github-private-key
     # ... other secrets ...
 
     cd startpaac

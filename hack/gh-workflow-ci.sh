@@ -39,17 +39,17 @@ create_pac_github_app_secret() {
 
 create_second_github_app_controller_on_ghe() {
   # Read from environment variables instead of arguments
-  local test_github_ghe_smee_url="${TEST_GITHUB_GHE_SMEE_URL}"
-  local test_github_ghe_private_key="${TEST_GITHUB_GHE_PRIVATE_KEY}"
-  local test_github_ghe_application_id="${TEST_GITHUB_GHE_APPLICATION_ID}"
-  local test_github_ghe_webhook_secret="${TEST_GITHUB_GHE_WEBHOOK_SECRET}"
+  local test_github_second_smee_url="${TEST_GITHUB_SECOND_SMEE_URL}"
+  local test_github_second_private_key="${TEST_GITHUB_SECOND_PRIVATE_KEY}"
+  local test_github_second_application_id="${TEST_GITHUB_SECOND_APPLICATION_ID}"
+  local test_github_second_webhook_secret="${TEST_GITHUB_SECOND_WEBHOOK_SECRET}"
 
   # install uv
   type -p uv >/dev/null 2>&1 || { curl -LsSf https://astral.sh/uv/install.sh | sh; }
 
   ./hack/second-controller.py \
     --controller-image="ko" \
-    --smee-url="${test_github_ghe_smee_url}" \
+    --smee-url="${test_github_second_smee_url}" \
     --ingress-domain="paac-127-0-0-1.nip.io" \
     --namespace="pipelines-as-code" \
     ghe | tee /tmp/generated.yaml
@@ -57,9 +57,9 @@ create_second_github_app_controller_on_ghe() {
   ko apply --insecure-registry -f /tmp/generated.yaml
   kubectl delete secret -n pipelines-as-code ghe-secret || true
   kubectl -n pipelines-as-code create secret generic ghe-secret \
-    --from-literal github-private-key="${test_github_ghe_private_key}" \
-    --from-literal github-application-id="${test_github_ghe_application_id}" \
-    --from-literal webhook.secret="${test_github_ghe_webhook_secret}"
+    --from-literal github-private-key="${test_github_second_private_key}" \
+    --from-literal github-application-id="${test_github_second_application_id}" \
+    --from-literal webhook.secret="${test_github_second_webhook_secret}"
   sed "s/name: pipelines-as-code/name: ghe-configmap/" <config/302-pac-configmap.yaml | kubectl apply -n pipelines-as-code -f-
   kubectl patch configmap -n pipelines-as-code ghe-configmap -p '{"data":{"application-name": "Pipelines as Code GHE"}}'
   kubectl -n pipelines-as-code delete pod -l app.kubernetes.io/name=ghe-controller
@@ -242,7 +242,7 @@ output_logs() {
 collect_logs() {
   # Read from environment variables (use default empty value for optional vars)
   local test_gitea_smee_url="${TEST_GITEA_SMEEURL:-}"
-  local github_ghe_smee_url="${TEST_GITHUB_GHE_SMEE_URL:-}"
+  local github_ghe_smee_url="${TEST_GITHUB_SECOND_SMEE_URL:-}"
   local test_gitlab_smee_url="${TEST_GITLAB_SMEEURL:-}"
 
   mkdir -p /tmp/logs
@@ -331,7 +331,7 @@ help() {
 
   create_second_github_app_controller_on_ghe
     Create the second controller on GHE
-    Required env vars: TEST_GITHUB_GHE_SMEE_URL, TEST_GITHUB_GHE_PRIVATE_KEY, TEST_GITHUB_GHE_WEBHOOK_SECRET
+    Required env vars: TEST_GITHUB_SECOND_SMEE_URL, TEST_GITHUB_SECOND_PRIVATE_KEY, TEST_GITHUB_SECOND_WEBHOOK_SECRET
 
   run_e2e_tests
     Run the e2e tests
@@ -339,7 +339,7 @@ help() {
 
   collect_logs
     Collect logs from the cluster
-    Optional env vars: TEST_GITEA_SMEEURL, TEST_GITHUB_GHE_SMEE_URL (for scrubbing URLs from logs)
+    Optional env vars: TEST_GITEA_SMEEURL, TEST_GITHUB_SECOND_SMEE_URL (for scrubbing URLs from logs)
 
   output_logs
     Will output logs using snazzy formatting when available or otherwise through a simple

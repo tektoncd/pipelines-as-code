@@ -146,7 +146,7 @@ func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
 	// For GHE + webhook, create a dynamic repo with SMEE webhook
 	if g.GHE && g.Webhook {
 		repoName := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
-		smeeURL := os.Getenv("TEST_GITHUB_GHE_WEBHOOK_SMEE_URL")
+		smeeURL := os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL")
 		webhookSecret := os.Getenv("TEST_EL_WEBHOOK_SECRET")
 
 		g.Logger.Infof("Creating dynamic GHE repository %s/%s with webhook to %s", opts.Organization, repoName, smeeURL)
@@ -282,7 +282,7 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 	// For GHE + webhook, create a dynamic repo with SMEE webhook
 	if g.GHE && g.Webhook {
 		repoName := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
-		smeeURL := os.Getenv("TEST_GITHUB_GHE_WEBHOOK_SMEE_URL")
+		smeeURL := os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL")
 		webhookSecret := os.Getenv("TEST_EL_WEBHOOK_SECRET")
 
 		g.Logger.Infof("Creating dynamic GHE repository %s/%s with webhook to %s", opts.Organization, repoName, smeeURL)

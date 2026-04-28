@@ -82,38 +82,38 @@ func setupEnvVars(onGHE, viaDirectWebhook bool) (*envConfig, error) {
 	case onGHE && viaDirectWebhook:
 		requiredEnvs = append(requiredEnvs,
 			"TEST_EL_WEBHOOK_SECRET",
-			"TEST_GITHUB_GHE_API_URL",
-			"TEST_GITHUB_GHE_EL_URL",
-			"TEST_GITHUB_GHE_WEBHOOK_TOKEN",
-			"TEST_GITHUB_GHE_WEBHOOK_SECRET",
+			"TEST_GITHUB_SECOND_API_URL",
+			"TEST_GITHUB_SECOND_EL_URL",
+			"TEST_GITHUB_SECOND_WEBHOOK_TOKEN",
+			"TEST_GITHUB_SECOND_WEBHOOK_SECRET",
 		)
 		if err := setup.RequireEnvs(requiredEnvs...); err != nil {
 			return nil, err
 		}
-		config.url = os.Getenv("TEST_GITHUB_GHE_API_URL")
-		config.controllerURL = os.Getenv("TEST_GITHUB_GHE_EL_URL")
-		config.token = os.Getenv("TEST_GITHUB_GHE_WEBHOOK_TOKEN")
-		webhookOrg := os.Getenv("TEST_GITHUB_GHE_WEBHOOK_ORG")
+		config.url = os.Getenv("TEST_GITHUB_SECOND_API_URL")
+		config.controllerURL = os.Getenv("TEST_GITHUB_SECOND_EL_URL")
+		config.token = os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_TOKEN")
+		webhookOrg := os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_ORG")
 		if webhookOrg == "" {
-			webhookOrg = os.Getenv("TEST_GITHUB_GHE_REPO_OWNER_GITHUBAPP")
+			webhookOrg = os.Getenv("TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP")
 		}
 		config.repoOwner = webhookOrg
 	case onGHE && !viaDirectWebhook:
 		requiredEnvs = append(requiredEnvs,
-			"TEST_GITHUB_GHE_API_URL",
-			"TEST_GITHUB_GHE_EL_URL",
-			"TEST_GITHUB_GHE_TOKEN",
-			"TEST_GITHUB_GHE_REPO_OWNER_GITHUBAPP",
-			"TEST_GITHUB_GHE_REPO_INSTALLATION_ID",
-			"TEST_GITHUB_GHE_WEBHOOK_SECRET",
+			"TEST_GITHUB_SECOND_API_URL",
+			"TEST_GITHUB_SECOND_EL_URL",
+			"TEST_GITHUB_SECOND_TOKEN",
+			"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP",
+			"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID",
+			"TEST_GITHUB_SECOND_WEBHOOK_SECRET",
 		)
 		if err := setup.RequireEnvs(requiredEnvs...); err != nil {
 			return nil, err
 		}
-		config.url = os.Getenv("TEST_GITHUB_GHE_API_URL")
-		config.controllerURL = os.Getenv("TEST_GITHUB_GHE_EL_URL")
-		config.token = os.Getenv("TEST_GITHUB_GHE_TOKEN")
-		config.repoOwner = os.Getenv("TEST_GITHUB_GHE_REPO_OWNER_GITHUBAPP")
+		config.url = os.Getenv("TEST_GITHUB_SECOND_API_URL")
+		config.controllerURL = os.Getenv("TEST_GITHUB_SECOND_EL_URL")
+		config.token = os.Getenv("TEST_GITHUB_SECOND_TOKEN")
+		config.repoOwner = os.Getenv("TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP")
 
 	case !onGHE && viaDirectWebhook:
 		requiredEnvs = append(requiredEnvs,

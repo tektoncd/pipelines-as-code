@@ -56,7 +56,7 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 	assert.NilError(t, err)
 	initialPipelineRunCount := len(pruns.Items)
 
-	installID, err := strconv.ParseInt(os.Getenv("TEST_GITHUB_GHE_REPO_INSTALLATION_ID"), 10, 64)
+	installID, err := strconv.ParseInt(os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"), 10, 64)
 	assert.NilError(t, err)
 
 	sendIssueComment := func(t *testing.T, sender string) {
@@ -90,10 +90,10 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 
 		err = payload.Send(ctx,
 			g.Cnx,
-			os.Getenv("TEST_GITHUB_GHE_EL_URL"),
-			os.Getenv("TEST_GITHUB_GHE_WEBHOOK_SECRET"),
-			os.Getenv("TEST_GITHUB_GHE_API_URL"),
-			os.Getenv("TEST_GITHUB_GHE_REPO_INSTALLATION_ID"),
+			os.Getenv("TEST_GITHUB_SECOND_EL_URL"),
+			os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SECRET"),
+			os.Getenv("TEST_GITHUB_SECOND_API_URL"),
+			os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"),
 			event,
 			"issue_comment",
 		)

@@ -35,14 +35,14 @@ type GitHubConfig struct {
 }
 
 type GitHubEnterpriseConfig struct {
-	APIURL             string `env:"TEST_GITHUB_GHE_API_URL"              json:"api_url"              yaml:"api_url"`
-	Token              string `env:"TEST_GITHUB_GHE_TOKEN"                json:"token"                yaml:"token"`
-	ControllerURL      string `env:"TEST_GITHUB_GHE_EL_URL"               json:"controller_url"       yaml:"controller_url"`
-	RepoOwnerGithubApp string `env:"TEST_GITHUB_GHE_REPO_OWNER_GITHUBAPP" json:"repo_owner_githubapp" yaml:"repo_owner_githubapp"`
-	RepoInstallationID string `env:"TEST_GITHUB_GHE_REPO_INSTALLATION_ID" json:"repo_installation_id" yaml:"repo_installation_id"`
-	SmeeURL            string `env:"TEST_GITHUB_GHE_SMEE_URL"             json:"smee_url"             yaml:"smee_url"`
-	WebhookSmeeURL     string `env:"TEST_GITHUB_GHE_WEBHOOK_SMEE_URL"     json:"webhook_smee_url"     yaml:"webhook_smee_url"`
-	WebhookOrg         string `env:"TEST_GITHUB_GHE_WEBHOOK_ORG"          json:"webhook_org"          yaml:"webhook_org"`
+	APIURL             string `env:"TEST_GITHUB_SECOND_API_URL"              json:"api_url"              yaml:"api_url"`
+	Token              string `env:"TEST_GITHUB_SECOND_TOKEN"                json:"token"                yaml:"token"`
+	ControllerURL      string `env:"TEST_GITHUB_SECOND_EL_URL"               json:"controller_url"       yaml:"controller_url"`
+	RepoOwnerGithubApp string `env:"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP" json:"repo_owner_githubapp" yaml:"repo_owner_githubapp"`
+	RepoInstallationID string `env:"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID" json:"repo_installation_id" yaml:"repo_installation_id"`
+	SmeeURL            string `env:"TEST_GITHUB_SECOND_SMEE_URL"             json:"smee_url"             yaml:"smee_url"`
+	WebhookSmeeURL     string `env:"TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL"     json:"webhook_smee_url"     yaml:"webhook_smee_url"`
+	WebhookOrg         string `env:"TEST_GITHUB_SECOND_WEBHOOK_ORG"          json:"webhook_org"          yaml:"webhook_org"`
 }
 
 type GitLabConfig struct {

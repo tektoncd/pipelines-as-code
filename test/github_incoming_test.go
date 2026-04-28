@@ -198,7 +198,7 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 	// For GHE + webhook, create a dynamic repo with SMEE webhook
 	if onGHE && onWebhook {
 		repoName := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
-		smeeURL := os.Getenv("TEST_GITHUB_GHE_WEBHOOK_SMEE_URL")
+		smeeURL := os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL")
 		webhookSecret := os.Getenv("TEST_EL_WEBHOOK_SECRET")
 
 		runcnx.Clients.Log.Infof("Creating dynamic GHE repository %s/%s with webhook to %s", opts.Organization, repoName, smeeURL)
