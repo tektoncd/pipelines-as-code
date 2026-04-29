@@ -122,8 +122,8 @@ func resolveRemoteResources(ctx context.Context, rt *matcher.RemoteTasks, types 
 				// making sure that the pipeline with same annotation name is not fetched
 				if alreadyFetchedResource(fetchedResourcesForEvent.Pipelines, remotePipeline) {
 					rt.Logger.Debugf("skipping already fetched pipeline %s in annotations on pipelinerun %s", remotePipeline, pipelinerun.GetName())
-					// already fetched, then just get the pipeline to add to run specific Resources
-					pipeline = fetchedResourcesForEvent.Pipelines[remotePipeline]
+					// already fetched, deep-copy so inlining for this run doesn't mutate the cached original
+					pipeline = fetchedResourcesForEvent.Pipelines[remotePipeline].DeepCopy()
 				} else {
 					// seems like a new pipeline, fetch it based on name in annotation
 					pipeline, err = rt.GetPipelineFromAnnotationName(ctx, remotePipeline)
@@ -181,7 +181,7 @@ func resolveRemoteResources(ctx context.Context, rt *matcher.RemoteTasks, types 
 				// if task is already fetched in the event, then just copy the task
 				if alreadyFetchedResource(fetchedResourcesForEvent.Tasks, remoteTask) {
 					rt.Logger.Debugf("skipping already fetched task %s in annotations on pipelinerun %s", remoteTask, pipelinerun.GetName())
-					task = fetchedResourcesForEvent.Tasks[remoteTask]
+					task = fetchedResourcesForEvent.Tasks[remoteTask].DeepCopy()
 				} else {
 					// get the task from annotation name
 					task, err = rt.GetTaskFromAnnotationName(ctx, remoteTask)
@@ -213,7 +213,7 @@ func resolveRemoteResources(ctx context.Context, rt *matcher.RemoteTasks, types 
 
 		// if PipelineRef is used then, first resolve pipeline and replace all taskRef{Finally/Task} of Pipeline, then put inlinePipeline in PipelineRun
 		if pipelinerun.Spec.PipelineRef != nil && pipelinerun.Spec.PipelineRef.Resolver == "" {
-			pipelineResolved := fetchedResourcesForPipelineRun.Pipeline
+			pipelineResolved := fetchedResourcesForPipelineRun.Pipeline.DeepCopy()
 			turns, err := inlineTasks(pipelineResolved.Spec.Tasks, ropt, fetchedResourcesForPipelineRun)
 			if err != nil {
 				return nil, err
