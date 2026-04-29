@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -219,6 +221,42 @@ func GetCheckName(status providerstatus.StatusOpts, pacopts *info.PacOpts) strin
 		return fmt.Sprintf("%s / %s", pacopts.ApplicationName, status.OriginalPipelineRunName)
 	}
 	return status.OriginalPipelineRunName
+}
+
+// GetBBCloudStatusKey returns a unique key for Bitbucket Cloud build commit status.
+// Bitbucket Cloud limits the key to 40 characters. When both ApplicationName and
+// OriginalPipelineRunName are set and their combined form ("{appName} / {prName}")
+// fits within 40 chars, that combined form is used. Otherwise, the
+// OriginalPipelineRunName alone is used. If the name exceeds 40 chars, it is
+// truncated to 33 chars with a 6-char hash suffix for uniqueness. If only
+// ApplicationName is set, it is returned truncated to 40 chars.
+func GetBBCloudStatusKey(status providerstatus.StatusOpts, pacopts *info.PacOpts) string {
+	if pacopts.ApplicationName != "" {
+		if status.OriginalPipelineRunName == "" {
+			if len(pacopts.ApplicationName) > 40 {
+				return pacopts.ApplicationName[:40]
+			}
+			return pacopts.ApplicationName
+		}
+		key := fmt.Sprintf("%s / %s", pacopts.ApplicationName, status.OriginalPipelineRunName)
+		// if application name and pipeline run name combined are less than 40 characters, return the key
+		// otherwise, skip it here and let the only pipeline run being returned.
+		if len(key) <= 40 {
+			return key
+		}
+	}
+
+	if len(status.OriginalPipelineRunName) > 40 {
+		hash := getNameHash(status.OriginalPipelineRunName)
+		return fmt.Sprintf("%s-%s", status.OriginalPipelineRunName[:33], hash)
+	}
+
+	return status.OriginalPipelineRunName
+}
+
+func getNameHash(input string) string {
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])[:6]
 }
 
 func IsZeroSHA(sha string) bool {

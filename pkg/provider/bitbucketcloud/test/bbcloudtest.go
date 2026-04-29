@@ -189,7 +189,7 @@ func MuxCreateCommitstatus(t *testing.T, mux *http.ServeMux, event *info.Event, 
 		err := json.Unmarshal(bit, cso)
 		assert.NilError(t, err)
 		pacOpts := &info.PacOpts{Settings: settings.Settings{ApplicationName: applicationName}}
-		assert.Equal(t, provider.GetCheckName(expStatus, pacOpts), cso.Key)
+		assert.Equal(t, provider.GetBBCloudStatusKey(expStatus, pacOpts), cso.Key)
 
 		if expStatus.DetailsURL != "" {
 			assert.Equal(t, expStatus.DetailsURL, cso.Url)

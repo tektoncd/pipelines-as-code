@@ -113,8 +113,10 @@ func (v *Provider) CreateStatus(_ context.Context, event *info.Event, statusopts
 		detailsURL = statusopts.DetailsURL
 	}
 
+	key := provider.GetBBCloudStatusKey(statusopts, v.pacInfo)
+
 	cso := &bitbucket.CommitStatusOptions{
-		Key:         provider.GetCheckName(statusopts, v.pacInfo),
+		Key:         key,
 		Url:         detailsURL,
 		State:       string(state),
 		Description: statusopts.Title,
