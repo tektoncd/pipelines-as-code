@@ -580,6 +580,10 @@ func TestRun(t *testing.T) {
 			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.skipReplyingOrgPublicMembers)
 			if tt.tektondir != "" {
 				ghtesthelper.SetupGitTree(t, mux, tt.tektondir, &tt.runevent, false)
+			} else {
+				replyString(mux,
+					fmt.Sprintf("/repos/%s/%s/git/trees/%s", tt.runevent.Organization, tt.runevent.Repository, tt.runevent.SHA),
+					`{"sha": "`+tt.runevent.SHA+`", "tree": []}`)
 			}
 
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/issues/%d/comments", tt.runevent.Organization, tt.runevent.Repository, tt.runevent.PullRequestNumber),

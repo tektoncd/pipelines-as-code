@@ -25,10 +25,10 @@ import (
 )
 
 func (p *PacRun) matchRepoPR(ctx context.Context) ([]matcher.Match, *v1alpha1.Repository, error) {
-	p.debugf("matchRepoPR: starting repo verification for url=%s", p.event.URL)
-	repo, err := p.verifyRepoAndUser(ctx)
+	p.debugf("matchRepoPR: starting repo setup for url=%s", p.event.URL)
+	repo, err := p.setupRepo(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, repo, err
 	}
 	if repo == nil {
 		p.debugf("matchRepoPR: no repository match for url=%s", p.event.URL)
@@ -40,8 +40,24 @@ func (p *PacRun) matchRepoPR(ctx context.Context) ([]matcher.Match, *v1alpha1.Re
 		return nil, repo, p.cancelPipelineRunsOpsComment(ctx, repo)
 	}
 
+	rawTemplates, err := p.fetchTektonTemplates(ctx, repo)
+	if err != nil {
+		return nil, repo, err
+	}
+	if rawTemplates == "" {
+		return nil, repo, nil
+	}
+	allowed, err := p.checkUserAccess(ctx, repo)
+	if err != nil {
+		return nil, repo, err
+	}
+	if !allowed {
+		p.debugf("matchRepoPR: ACL check denied access")
+		return nil, repo, nil
+	}
+
 	p.debugf("matchRepoPR: fetching pipelineruns from repo=%s/%s", repo.GetNamespace(), repo.GetName())
-	matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo)
+	matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo, rawTemplates)
 	if err != nil {
 		return nil, repo, err
 	}
@@ -50,11 +66,11 @@ func (p *PacRun) matchRepoPR(ctx context.Context) ([]matcher.Match, *v1alpha1.Re
 	return matchedPRs, repo, nil
 }
 
-// verifyRepoAndUser verifies if the Repo CR exists for the Git Repository,
-// if the user has permission to run CI  and also initialise provider client.
-func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, error) {
+// setupRepo matches the Repository CR, sets up the authenticated provider client,
+// and fetches commit info. It does NOT perform ACL checks.
+func (p *PacRun) setupRepo(ctx context.Context) (*v1alpha1.Repository, error) {
 	// Match the Event URL to a Repository URL,
-	p.debugf("verifyRepoAndUser: matching repository for url=%s", p.event.URL)
+	p.debugf("setupRepo: matching repository for url=%s", p.event.URL)
 	repo, err := matcher.MatchEventURLRepo(ctx, p.run, p.event, "")
 	if err != nil {
 		return nil, fmt.Errorf("error matching Repository for event: %w", err)
@@ -65,13 +81,13 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 		p.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositoryNamespaceMatch", msg)
 		return nil, nil
 	}
-	p.debugf("verifyRepoAndUser: matched repo=%s/%s", repo.GetNamespace(), repo.GetName())
+	p.debugf("setupRepo: matched repo=%s/%s", repo.GetNamespace(), repo.GetName())
 
 	p.logger = p.logger.With("namespace", repo.Namespace)
 	p.vcx.SetLogger(p.logger)
 	p.eventEmitter.SetLogger(p.logger)
 
-	// Set up authenticated client with proper token scoping
+	// Set up authenticated client with proper token scoping.
 	// NOTE: This is typically already done in sinker.processEvent() for all event types,
 	// but we call it here as a safety net for edge cases (e.g., tests calling Run() directly,
 	// or if the early setup in sinker failed/was skipped). The call is idempotent.
@@ -80,21 +96,25 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 	if err != nil {
 		return repo, err
 	}
-	p.debugf("verifyRepoAndUser: authenticated client setup complete")
+	p.debugf("setupRepo: authenticated client setup complete")
 
 	// Get the SHA commit info, we want to get the URL and commit title
 	if p.event.SHA == "" || p.event.SHATitle == "" || p.event.SHAURL == "" {
-		p.debugf("verifyRepoAndUser: fetching commit info")
+		p.debugf("setupRepo: fetching commit info")
 		if err = p.vcx.GetCommitInfo(ctx, p.event); err != nil {
 			return repo, fmt.Errorf("could not find commit info: %w", err)
 		}
-		p.debugf("verifyRepoAndUser: commit info loaded sha=%s title=%s", p.event.SHA, p.event.SHATitle)
+		p.debugf("setupRepo: commit info loaded sha=%s title=%s", p.event.SHA, p.event.SHATitle)
 	}
 
+	return repo, nil
+}
+
+func (p *PacRun) checkUserAccess(ctx context.Context, repo *v1alpha1.Repository) (bool, error) {
 	// Verify whether the sender of the GitOps command (e.g., /test) has the appropriate permissions to
 	// trigger CI on the repository, as any user is able to comment on a pushed commit in open-source repositories.
 	if p.event.TriggerTarget == triggertype.Push && opscomments.IsAnyOpsEventType(p.event.EventType) {
-		p.debugf("verifyRepoAndUser: checking access for gitops comment on push")
+		p.debugf("checkUserAccess: checking access for gitops comment on push")
 		status := providerstatus.StatusOpts{
 			Status:       CompletedStatus,
 			Title:        "Permission denied",
@@ -103,7 +123,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 			AccessDenied: true,
 		}
 		if allowed, err := p.checkAccessOrError(ctx, repo, status, "by GitOps comment on push commit"); !allowed {
-			return nil, err
+			return false, err
 		}
 	}
 
@@ -111,7 +131,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 	// on push we don't need to check the policy since the user has pushed to the repo so it has access to it.
 	// on comment we skip it for now, we are going to check later on
 	if p.event.TriggerTarget != triggertype.Push && p.event.EventType != opscomments.NoOpsCommentEventType.String() {
-		p.debugf("verifyRepoAndUser: checking access for trigger target=%s event_type=%s", p.event.TriggerTarget, p.event.EventType)
+		p.debugf("checkUserAccess: checking access for trigger target=%s event_type=%s", p.event.TriggerTarget, p.event.EventType)
 		status := providerstatus.StatusOpts{
 			Status:       queuedStatus,
 			Title:        "Pending approval, waiting for an /ok-to-test",
@@ -120,7 +140,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 			AccessDenied: true,
 		}
 		if allowed, err := p.checkAccessOrError(ctx, repo, status, "via "+p.event.TriggerTarget.String()); !allowed {
-			return nil, err
+			return false, err
 		}
 		// When /ok-to-test is approved, update the parent "Pipelines as Code CI" status to success
 		// to indicate the approval was successful before pipelines start running.
@@ -136,16 +156,15 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 			}
 		}
 	}
-	return repo, nil
+	return true, nil
 }
 
-// getPipelineRunsFromRepo fetches pipelineruns from git repository and prepare them for creation.
-func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository) ([]matcher.Match, error) {
+func (p *PacRun) fetchTektonTemplates(ctx context.Context, repo *v1alpha1.Repository) (string, error) {
 	provenance := "source"
 	if repo.Spec.Settings != nil && repo.Spec.Settings.PipelineRunProvenance != "" {
 		provenance = repo.Spec.Settings.PipelineRunProvenance
 	}
-	p.debugf("getPipelineRunsFromRepo: repo=%s/%s provenance=%s", repo.GetNamespace(), repo.GetName(), provenance)
+	p.debugf("fetchTektonTemplates: repo=%s/%s provenance=%s", repo.GetNamespace(), repo.GetName(), provenance)
 	rawTemplates, err := p.vcx.GetTektonDir(ctx, p.event, tektonDir, provenance)
 	if err != nil && p.event.TriggerTarget == triggertype.PullRequest && strings.Contains(err.Error(), "error unmarshalling yaml file") {
 		// make the error a bit more friendly for users who don't know what marshalling or intricacies of the yaml parser works
@@ -163,43 +182,62 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 					},
 				},
 			)
-			return nil, nil
+			return "", nil
 		}
 
-		return nil, err
+		return "", err
 	}
 
 	if err != nil {
-		p.debugf("getPipelineRunsFromRepo: GetTektonDir returned error: %v", err)
-	} else {
-		p.debugf("getPipelineRunsFromRepo: fetched templates length=%d", len(rawTemplates))
-	}
-
-	if rawTemplates == "" && p.event.EventType == opscomments.OkToTestCommentEventType.String() {
-		err = p.createNeutralStatus(ctx, ".tekton directory not found", tektonDirMissingError)
-		if err != nil {
-			p.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryCreateStatus", err.Error())
-		}
-	}
-
-	// This is for push event error logging because we can't create comment for yaml validation errors on push
-	if err != nil || rawTemplates == "" {
+		p.debugf("fetchTektonTemplates: GetTektonDir returned error: %v", err)
 		msg := ""
-		reason := "RepositoryPipelineRunNotFound"
-		logLevel := zap.InfoLevel
-		if err != nil {
-			reason = "RepositoryInvalidPipelineRunTemplate"
-			logLevel = zap.ErrorLevel
-			if strings.Contains(err.Error(), "error unmarshalling yaml file") {
-				msg = "PipelineRun YAML validation"
-			}
-			msg += fmt.Sprintf(" err: %s", err.Error())
-		} else {
-			msg = fmt.Sprintf("cannot locate templates in %s/ directory for this repository in %s", tektonDir, p.event.HeadBranch)
+		if strings.Contains(err.Error(), "error unmarshalling yaml file") {
+			msg = "PipelineRun YAML validation"
 		}
-		p.eventEmitter.EmitMessage(nil, logLevel, reason, msg)
+		msg += fmt.Sprintf(" err: %s", err.Error())
+		p.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryInvalidPipelineRunTemplate", msg)
+		return "", nil
+	}
+
+	p.debugf("fetchTektonTemplates: fetched templates length=%d", len(rawTemplates))
+
+	if rawTemplates == "" {
+		if p.event.EventType == opscomments.OkToTestCommentEventType.String() {
+			if statusErr := p.createNeutralStatus(ctx, ".tekton directory not found", tektonDirMissingError); statusErr != nil {
+				p.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryCreateStatus", statusErr.Error())
+			}
+		}
+		msg := fmt.Sprintf("cannot locate templates in %s/ directory for this repository in %s", tektonDir, p.event.HeadBranch)
+		p.eventEmitter.EmitMessage(nil, zap.InfoLevel, "RepositoryPipelineRunNotFound", msg)
+		return "", nil
+	}
+
+	return rawTemplates, nil
+}
+
+// verifyRepoAndUser verifies if the Repo CR exists for the Git Repository,
+// if the user has permission to run CI and also initialise provider client.
+func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, error) {
+	repo, err := p.setupRepo(ctx)
+	if err != nil {
+		return repo, err
+	}
+	if repo == nil {
 		return nil, nil
 	}
+	allowed, err := p.checkUserAccess(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, nil
+	}
+	return repo, nil
+}
+
+// getPipelineRunsFromRepo processes pre-fetched .tekton templates and prepares PipelineRuns for creation.
+func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository, rawTemplates string) ([]matcher.Match, error) {
+	p.debugf("getPipelineRunsFromRepo: repo=%s/%s templates_length=%d", repo.GetNamespace(), repo.GetName(), len(rawTemplates))
 
 	// check for condition if need update the pipelinerun with regexp from the
 	// "raw" pipelinerun string

@@ -268,7 +268,8 @@ spec:
 				nil,
 			)
 
-			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repositories[0])
+			rawTemplates := fmt.Sprintf(template, tt.targetNamespaceLine)
+			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repositories[0], rawTemplates)
 			assert.NilError(t, err)
 			if tt.wantNoMatch {
 				assert.Equal(t, len(matchedPRs), 0)
@@ -431,23 +432,7 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 				},
 				Spec: v1alpha1.RepositorySpec{},
 			},
-			// if `testdata/no_yaml` dir is supplied here p.getPipelineRunsFromRepo func will return after
-			// GetTektonDir so providing `testdat/push_branch` so that it should call MatchPipelineRunsByAnnotation
-			// first and then create a neutral check-run.
 			tektondir:             "testdata/push_branch",
-			expectedNumberOfPruns: 0,
-			event:                 okToTestEvent,
-		},
-		{
-			name: "no .tekton dir in repository",
-			repositories: &v1alpha1.Repository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "testrepo",
-					Namespace: "test",
-				},
-				Spec: v1alpha1.RepositorySpec{},
-			},
-			tektondir:             "testdata/no_tekton_dir",
 			expectedNumberOfPruns: 0,
 			event:                 okToTestEvent,
 		},
@@ -572,7 +557,9 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 			vcx.SetPacInfo(pacInfo)
 			p := NewPacs(tt.event, vcx, cs, pacInfo, k8int, logger, nil)
 			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
-			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, tt.repositories)
+			rawTemplates, err := vcx.GetTektonDir(ctx, tt.event, ".tekton", "source")
+			assert.NilError(t, err)
+			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, tt.repositories, rawTemplates)
 			if tt.wantErr {
 				assert.Assert(t, err != nil, "expected an error but got nil")
 				return
@@ -823,6 +810,206 @@ func TestVerifyRepoAndUser(t *testing.T) {
 				assert.Assert(t, repo == nil)
 			} else {
 				assert.Assert(t, repo != nil)
+			}
+		})
+	}
+}
+
+func TestMatchRepoPRSkipsACLWithoutTektonDir(t *testing.T) {
+	validTemplate := `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pr
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[pull_request]"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: step
+          image: alpine
+          script: echo hello
+`
+
+	tests := []struct {
+		name              string
+		event             *info.Event
+		tektonDirTemplate string
+		allowIT           bool
+		wantMatches       int
+		wantLogSnippet    string
+		dontWantLog       string
+	}{
+		{
+			name: "PR from external user without tekton dir skips ACL and status",
+			event: &info.Event{
+				SHA:            "abc123",
+				Organization:   "org",
+				Repository:     "repo",
+				URL:            "https://example.com/org/repo",
+				HeadBranch:     "feature",
+				BaseBranch:     "main",
+				Sender:         "external-user",
+				EventType:      triggertype.PullRequest.String(),
+				TriggerTarget:  triggertype.PullRequest,
+				InstallationID: 1,
+				Provider:       &info.Provider{Token: "test"},
+			},
+			tektonDirTemplate: "",
+			allowIT:           false,
+			wantMatches:       0,
+			wantLogSnippet:    "fetched templates length=0",
+			dontWantLog:       "checkUserAccess:",
+		},
+		{
+			name: "push gitops comment without tekton dir skips ACL and status",
+			event: &info.Event{
+				SHA:            "abc123",
+				Organization:   "org",
+				Repository:     "repo",
+				URL:            "https://example.com/org/repo",
+				HeadBranch:     "main",
+				BaseBranch:     "main",
+				Sender:         "external-user",
+				EventType:      opscomments.TestAllCommentEventType.String(),
+				TriggerTarget:  triggertype.Push,
+				InstallationID: 1,
+				Provider:       &info.Provider{Token: "test"},
+			},
+			tektonDirTemplate: "",
+			allowIT:           false,
+			wantMatches:       0,
+			wantLogSnippet:    "fetched templates length=0",
+			dontWantLog:       "checkUserAccess:",
+		},
+		{
+			name: "ok-to-test without tekton dir creates neutral status but skips ACL",
+			event: &info.Event{
+				SHA:            "abc123",
+				Organization:   "org",
+				Repository:     "repo",
+				URL:            "https://example.com/org/repo",
+				HeadBranch:     "feature",
+				BaseBranch:     "main",
+				Sender:         "maintainer",
+				EventType:      opscomments.OkToTestCommentEventType.String(),
+				TriggerTarget:  triggertype.PullRequest,
+				InstallationID: 1,
+				Provider:       &info.Provider{Token: "test"},
+			},
+			tektonDirTemplate: "",
+			allowIT:           true,
+			wantMatches:       0,
+			wantLogSnippet:    "fetched templates length=0",
+			dontWantLog:       "checkUserAccess:",
+		},
+		{
+			name: "PR from external user with tekton dir runs ACL and creates status",
+			event: &info.Event{
+				SHA:            "abc123",
+				Organization:   "org",
+				Repository:     "repo",
+				URL:            "https://example.com/org/repo",
+				HeadBranch:     "main",
+				BaseBranch:     "main",
+				Sender:         "external-user",
+				EventType:      triggertype.PullRequest.String(),
+				TriggerTarget:  triggertype.PullRequest,
+				InstallationID: 1,
+				Provider:       &info.Provider{Token: "test"},
+			},
+			tektonDirTemplate: validTemplate,
+			allowIT:           false,
+			wantMatches:       0,
+			wantLogSnippet:    "is not allowed to trigger CI",
+		},
+		{
+			name: "PR from allowed user with tekton dir succeeds",
+			event: &info.Event{
+				SHA:            "abc123",
+				Organization:   "org",
+				Repository:     "repo",
+				URL:            "https://example.com/org/repo",
+				HeadBranch:     "main",
+				BaseBranch:     "main",
+				Sender:         "collaborator",
+				EventType:      triggertype.PullRequest.String(),
+				TriggerTarget:  triggertype.PullRequest,
+				InstallationID: 1,
+				Provider:       &info.Provider{Token: "test"},
+			},
+			tektonDirTemplate: validTemplate,
+			allowIT:           true,
+			wantMatches:       1,
+			wantLogSnippet:    "checkUserAccess:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observerCore, logCatcher := zapobserver.New(zap.DebugLevel)
+			logger := zap.New(observerCore).Sugar()
+
+			baseCtx, _ := rtesting.SetupFakeContext(t)
+			ctx := info.StoreNS(baseCtx, "pac")
+
+			repositories := []*v1alpha1.Repository{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "repo",
+					Namespace: "ns",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://example.com/org/repo",
+				},
+			}}
+
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Repositories: repositories,
+			})
+
+			in := info.NewInfo()
+			cs := &params.Run{
+				Info: in,
+				Clients: clients.Clients{
+					PipelineAsCode: stdata.PipelineAsCode,
+					Kube:           stdata.Kube,
+					Tekton:         stdata.Pipeline,
+					Log:            logger,
+				},
+			}
+			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			vcx := &testprovider.TestProviderImp{
+				AllowIT:           tt.allowIT,
+				TektonDirTemplate: tt.tektonDirTemplate,
+			}
+
+			pacInfo := &info.PacOpts{
+				Settings: settings.Settings{
+					ApplicationName:    "Pipelines as Code CI",
+					SecretAutoCreation: true,
+					RemoteTasks:        true,
+				},
+			}
+
+			k8int := &kitesthelper.KinterfaceTest{
+				GetSecretResult: map[string]string{"webhook.secret": "secret"},
+			}
+
+			p := NewPacs(tt.event, vcx, cs, pacInfo, k8int, logger, nil)
+			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
+
+			matchedPRs, _, err := p.matchRepoPR(ctx)
+			assert.NilError(t, err)
+			assert.Equal(t, len(matchedPRs), tt.wantMatches)
+			assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantLogSnippet).Len() > 0,
+				"expected log containing %q, got: %v", tt.wantLogSnippet, logCatcher.All())
+			if tt.dontWantLog != "" {
+				assert.Equal(t, logCatcher.FilterMessageSnippet(tt.dontWantLog).Len(), 0,
+					"unexpected log containing %q", tt.dontWantLog)
 			}
 		})
 	}
