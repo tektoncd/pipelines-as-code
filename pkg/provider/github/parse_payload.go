@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -590,14 +589,6 @@ func (v *Provider) handleCheckSuites(ctx context.Context, event *github.CheckSui
 	runevent.TriggerTarget = triggertype.PullRequest
 	v.Logger.Infof("Rerun of all check on PR %s/%s#%d has been requested", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
 	return v.getPullRequest(ctx, runevent)
-}
-
-func convertPullRequestURLtoNumber(pullRequest string) (int, error) {
-	prNumber, err := strconv.Atoi(path.Base(pullRequest))
-	if err != nil {
-		return -1, fmt.Errorf("bad pull request number html_url number: %w", err)
-	}
-	return prNumber, nil
 }
 
 const (

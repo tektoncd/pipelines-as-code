@@ -142,14 +142,14 @@ func (v *Provider) aclAllowedOkToTestFromAnOwner(ctx context.Context, event *inf
 		if !v.pacInfo.RememberOKToTest {
 			return v.aclAllowedOkToTestCurrentComment(ctx, revent, event.Comment.GetID())
 		}
-		revent.URL = event.Issue.GetPullRequestLinks().GetHTMLURL()
+		revent.PullRequestNumber = event.GetIssue().GetNumber()
 	case *github.PullRequestEvent:
 		// if we don't need to check old comments, then on push event we don't need
 		// to check anything for the non-allowed user
 		if !v.pacInfo.RememberOKToTest {
 			return false, nil
 		}
-		revent.URL = event.GetPullRequest().GetHTMLURL()
+		revent.PullRequestNumber = event.GetPullRequest().GetNumber()
 	default:
 		return false, nil
 	}
@@ -330,10 +330,6 @@ func (v *Provider) getFileFromDefaultBranch(ctx context.Context, path string, ru
 // the comments text of a pull request.
 func (v *Provider) GetStringPullRequestComment(ctx context.Context, runevent *info.Event) ([]*github.IssueComment, error) {
 	var ret []*github.IssueComment
-	prNumber, err := convertPullRequestURLtoNumber(runevent.URL)
-	if err != nil {
-		return nil, err
-	}
 
 	opt := &github.IssueListCommentsOptions{
 		ListOptions: github.ListOptions{PerPage: v.PaginedNumber},
@@ -344,7 +340,7 @@ func (v *Provider) GetStringPullRequestComment(ctx context.Context, runevent *in
 	for page := 0; page < maxCommentPages; page++ {
 		comments, resp, err := wrapAPI(v, "list_issue_comments", func() ([]*github.IssueComment, *github.Response, error) {
 			return v.Client().Issues.ListComments(ctx, runevent.Organization, runevent.Repository,
-				prNumber, opt)
+				runevent.PullRequestNumber, opt)
 		})
 		if err != nil {
 			return nil, err
