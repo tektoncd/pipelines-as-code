@@ -130,6 +130,57 @@ func TestGiteaOnCommentAnnotation(t *testing.T) {
 	assert.NilError(t, err)
 }
 
+// TestGiteaOnCommentTestOverride tests that a PipelineRun with
+// on-comment: "^/test.*" is triggered when posting "/test custom1=value".
+// This verifies that key=value arguments are not mistaken for a PipelineRun
+// name, which would bypass the on-comment annotation matching entirely.
+func TestGiteaOnCommentTestOverride(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	topts := &tgitea.TestOpts{
+		TargetRefName: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test"),
+		RepoCRParams: &[]v1alpha1.Params{
+			{
+				Name:  "custom1",
+				Value: "default",
+			},
+		},
+	}
+	topts.TargetNS = topts.TargetRefName
+	topts.ParamsRun, topts.Opts, topts.GiteaCNX, err = tgitea.Setup(ctx)
+	assert.NilError(t, err, fmt.Errorf("cannot do gitea setup: %w", err))
+	ctx, err = cctx.GetControllerCtxInfo(ctx, topts.ParamsRun)
+	assert.NilError(t, err)
+	assert.NilError(t, pacrepo.CreateNS(ctx, topts.TargetNS, topts.ParamsRun))
+	assert.NilError(t, secret.Create(ctx, topts.ParamsRun, map[string]string{"secret": "SHHHHHHH"}, topts.TargetNS, "pac-secret"))
+	topts.TargetEvent = triggertype.PullRequest.String()
+	topts.YAMLFiles = map[string]string{
+		".tekton/on-comment-test-override.yaml": "testdata/pipelinerun-on-comment-test-override.yaml",
+	}
+	topts.ExpectEvents = false
+	_, f := tgitea.TestPR(t, topts)
+	defer f()
+
+	tgitea.PostCommentOnPullRequest(t, topts, "/test custom1=overridden")
+	waitOpts := twait.Opts{
+		RepoName:        topts.TargetNS,
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 1,
+		PollTimeout:     twait.DefaultTimeout,
+	}
+	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	assert.NilError(t, err)
+	assert.Equal(t, len(repo.Status), 1, "should have exactly 1 status")
+	assert.Equal(t, *repo.Status[0].EventType, opscomments.OnCommentEventType.String(),
+		"should have matched via on-comment annotation, not built-in /test handler")
+
+	last := repo.Status[0]
+	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS,
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.PipelineRunName), "step-task",
+		*regexp.MustCompile("custom1 is overridden"), "", 2, nil)
+	assert.NilError(t, err)
+}
+
 // TestGiteaTestPipelineRunExplicitlyWithTestComment will test a pipelinerun
 // even if it hasn't matched when we are doing a /test comment.
 func TestGiteaTestPipelineRunExplicitlyWithTestComment(t *testing.T) {

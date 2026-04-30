@@ -106,8 +106,11 @@ func getNameFromComment(typeOfComment, comment string) string {
 	splitTest := strings.Split(comment, typeOfComment)
 	// now get the first line
 	getFirstLine := strings.Split(splitTest[1], "\n")
-	// trim spaces
-	return strings.TrimSpace(getFirstLine[0])
+	name := strings.TrimSpace(getFirstLine[0])
+	if strings.Contains(name, "=") {
+		return ""
+	}
+	return name
 }
 
 func GetPipelineRunAndBranchOrTagNameFromTestComment(comment, prefix string) (string, string, string, error) {
@@ -157,6 +160,9 @@ func getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment string) 
 		prData := strings.Split(strings.TrimSpace(branchData[0]), " ")
 		if len(prData) > 1 {
 			prName = strings.TrimSpace(prData[0])
+			if strings.Contains(prName, "=") {
+				prName = ""
+			}
 		}
 	} else {
 		// get the second part of the typeOfComment (/test, /retest or /cancel)
@@ -166,6 +172,9 @@ func getPipelineRunAndBranchOrTagNameFromComment(typeOfComment, comment string) 
 		// trim spaces
 		// adapt for the comment contains the key=value pair
 		prName = strings.Split(strings.TrimSpace(getFirstLine[0]), " ")[0]
+		if strings.Contains(prName, "=") {
+			prName = ""
+		}
 	}
 	return prName, branchName, tagName, nil
 }
