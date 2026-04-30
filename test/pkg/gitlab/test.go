@@ -32,8 +32,8 @@ type TestOpts struct {
 	GitHTMLURL           string
 	SHA                  string
 	ParamsRun            *params.Run
-	GLProvider           gitlab2.Provider
-	SecondGLProvider     gitlab2.Provider
+	GLProvider           *gitlab2.Provider
+	SecondGLProvider     *gitlab2.Provider
 	Opts                 options.E2E
 	SecondOpts           options.E2E
 	YAMLFiles            map[string]string
