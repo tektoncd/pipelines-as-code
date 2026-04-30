@@ -215,6 +215,11 @@ func TestGetPipelineRunFromComment(t *testing.T) {
 			want:    "abc-01-pr",
 		},
 		{
+			name:    "test with key value is not a pipeline name",
+			comment: "/test custom1=value",
+			want:    "",
+		},
+		{
 			name:    "retest a pipeline",
 			comment: "/retest abc-01-pr",
 			want:    "abc-01-pr",
@@ -259,6 +264,11 @@ func TestGetPipelineRunFromCancelComment(t *testing.T) {
 			name:    "cancel a pipeline",
 			comment: "/cancel abc-01-pr",
 			want:    "abc-01-pr",
+		},
+		{
+			name:    "cancel with key value is not a pipeline name",
+			comment: "/cancel custom1=value",
+			want:    "",
 		},
 		{
 			name:    "string before cancel command",
@@ -363,6 +373,19 @@ func TestGetPipelineRunAndBranchNameFromTestComment(t *testing.T) {
 			comment:    "/test abc-01-pr key=value",
 			prName:     "abc-01-pr",
 			branchName: "",
+			wantError:  false,
+		},
+		{
+			name:      "test with only key value is not a pipeline name",
+			comment:   "/test custom1=value",
+			prName:    "",
+			wantError: false,
+		},
+		{
+			name:       "test with key value and branch is not a pipeline name",
+			comment:    "/test custom1=value branch:nightly",
+			prName:     "",
+			branchName: "nightly",
 			wantError:  false,
 		},
 		{
