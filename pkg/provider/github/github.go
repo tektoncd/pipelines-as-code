@@ -375,11 +375,10 @@ func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provid
 
 // GetTektonDir retrieves all YAML files from the .tekton directory and returns them as a single concatenated multi-document YAML file.
 func (v *Provider) GetTektonDir(ctx context.Context, runevent *info.Event, path, provenance string) (string, error) {
-	tektonDirSha := ""
-
 	v.provenance = provenance
-	// default set provenance from the SHA
 	revision := runevent.SHA
+
+	// For default_branch, get the branch SHA first (keep REST API call for simplicity)
 	if provenance == "default_branch" {
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", runevent.DefaultBranch)
 		branch, _, err := wrapAPI(v, "get_default_branch", func() (*github.Branch, *github.Response, error) {
@@ -400,38 +399,43 @@ func (v *Provider) GetTektonDir(ctx context.Context, runevent *info.Event, path,
 		v.Logger.Infof("Using PipelineRun definition from source %s %s on commit SHA %s", runevent.TriggerTarget.String(), prInfo, runevent.SHA)
 	}
 
-	rootobjects, _, err := wrapAPI(v, "get_root_tree", func() (*github.Tree, *github.Response, error) {
-		return v.Client().Git.GetTree(ctx, runevent.Organization, runevent.Repository, revision, false)
-	})
-	if err != nil {
-		return "", err
-	}
-	for _, object := range rootobjects.Entries {
-		if object.GetPath() == path {
-			if object.GetType() != "tree" {
-				return "", fmt.Errorf("%s has been found but is not a directory", path)
-			}
-			tektonDirSha = object.GetSHA()
+	// Try GraphQL - fetches tekton tree + blob contents in single request
+	if v.graphQLClient == nil {
+		var err error
+		v.graphQLClient, err = newGraphQLClient(v)
+		if err != nil {
+			return "", fmt.Errorf("failed to create GraphQL client: %w", err)
 		}
 	}
 
-	// If we didn't find a .tekton directory then just silently ignore the error.
-	if tektonDirSha == "" {
-		return "", nil
-	}
-
-	// Get all files in the .tekton directory recursively
-	// there is a limit on this recursive calls to 500 entries, as documented here:
-	// https://docs.github.com/en/rest/reference/git#get-a-tree
-	// so we may need to address it in the future.
-	tektonDirObjects, _, err := wrapAPI(v, "get_tekton_tree", func() (*github.Tree, *github.Response, error) {
-		return v.Client().Git.GetTree(ctx, runevent.Organization, runevent.Repository, tektonDirSha,
-			true)
-	})
+	result, err := v.graphQLClient.fetchTektonDirGraphQL(ctx, runevent.Organization, runevent.Repository, revision, path)
 	if err != nil {
 		return "", err
 	}
-	return v.concatAllYamlFiles(ctx, tektonDirObjects.Entries, runevent, path, revision)
+
+	// If no yaml files found, return empty (directory doesn't exist or is empty)
+	if len(result.FileContents) == 0 {
+		return "", nil
+	}
+
+	// Concatenate YAML files (result already filtered to .yaml/.yml blobs)
+	var buf strings.Builder
+	for filePath, content := range result.FileContents {
+		// Validate YAML
+		if err := provider.ValidateYaml(content, filePath); err != nil {
+			return "", err
+		}
+
+		// Concatenate with separator
+		if buf.Len() > 0 && !strings.HasPrefix(string(content), "---") {
+			buf.WriteString("---")
+		}
+		buf.WriteString("\n")
+		buf.Write(content)
+		buf.WriteString("\n")
+	}
+
+	return buf.String(), nil
 }
 
 // GetCommitInfo get info (url and title) on a commit in runevent, this needs to
@@ -537,58 +541,6 @@ func (v *Provider) GetFileInsideRepo(ctx context.Context, runevent *info.Event, 
 	}
 
 	return string(getobj), nil
-}
-
-// concatAllYamlFiles concat all yaml files from a directory as one big multi document yaml string.
-func (v *Provider) concatAllYamlFiles(ctx context.Context, objects []*github.TreeEntry, runevent *info.Event, tektonDirPath, ref string) (string, error) {
-	var yamlFiles []string
-	for _, value := range objects {
-		if strings.HasSuffix(value.GetPath(), ".yaml") ||
-			strings.HasSuffix(value.GetPath(), ".yml") {
-			fullPath := tektonDirPath + "/" + value.GetPath()
-			yamlFiles = append(yamlFiles, fullPath)
-		}
-	}
-
-	if len(yamlFiles) == 0 {
-		return "", nil
-	}
-
-	if v.graphQLClient == nil {
-		var err error
-		v.graphQLClient, err = newGraphQLClient(v)
-		if err != nil {
-			return "", fmt.Errorf("failed to create GraphQL client: %w", err)
-		}
-	}
-
-	graphQLResults, err := v.graphQLClient.fetchFiles(ctx, runevent.Organization, runevent.Repository, ref, yamlFiles)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch .tekton files via GraphQL: %w", err)
-	}
-
-	var buf strings.Builder
-	for _, path := range yamlFiles {
-		content, ok := graphQLResults[path]
-		if !ok {
-			return "", fmt.Errorf("file %s not found in GraphQL response", path)
-		}
-
-		// it used to be like that (stripped prefix) before we moved to GraphQL so
-		// let's keep it that way.
-		relativePath := strings.TrimPrefix(path, tektonDirPath+"/")
-		if err := provider.ValidateYaml(content, relativePath); err != nil {
-			return "", err
-		}
-		if buf.Len() > 0 && !strings.HasPrefix(string(content), "---") {
-			buf.WriteString("---")
-		}
-		buf.WriteString("\n")
-		buf.Write(content)
-		buf.WriteString("\n")
-	}
-
-	return buf.String(), nil
 }
 
 // getPullRequest get a pull request details, caching the result for the lifetime of the event.
