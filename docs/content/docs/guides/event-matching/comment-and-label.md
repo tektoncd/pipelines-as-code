@@ -36,6 +36,8 @@ The `on-comment` annotation follows the pull_request [Policy]({{< relref "/docs/
 
 {{< callout type="info" >}}
 The `on-comment` annotation works with pull_request events. For push events, Pipelines-as-Code supports it only [when targeting the main branch without arguments]({{< relref "/docs/guides/gitops-commands/push-commands" >}}).
+
+Avoid using Pipelines-as-Code's built-in [GitOps commands]({{< relref "/docs/guides/gitops-commands" >}}) — such as `/test`, `/retest`, `/cancel`, or `/ok-to-test` — as `on-comment` patterns. These commands are processed before `on-comment` matching and can lead to unexpected behavior.
 {{< /callout >}}
 
 ## Matching on pull request labels
