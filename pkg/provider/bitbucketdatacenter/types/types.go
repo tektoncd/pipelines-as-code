@@ -197,3 +197,43 @@ type ToCommit struct {
 	Commit
 	Parents []Commit `json:"parents"` // Commit also has Parents field, but its Parents has only two fields while actual payload has more.
 }
+
+type Pagination struct {
+	Start    int  `json:"start"`
+	Size     int  `json:"size"`
+	Limit    int  `json:"limit"`
+	LastPage bool `json:"isLastPage"`
+	NextPage int  `json:"nextPageStart"`
+}
+
+type DiffStats struct {
+	Pagination
+	Values []*DiffStat `json:"values"`
+}
+
+type DiffPath struct {
+	Components []string `json:"components"`
+	Parent     string   `json:"parent"`
+	Name       string   `json:"name"`
+	Extension  string   `json:"extension"`
+	ToString   string   `json:"toString"`
+}
+
+type DiffStat struct {
+	ContentID        string    `json:"contentId"`
+	FromContentID    string    `json:"fromContentId"`
+	Path             DiffPath  `json:"path"`
+	SrcPath          *DiffPath `json:"srcPath,omitempty"`
+	PercentUnchanged int       `json:"percentUnchanged"`
+	Type             string    `json:"type"`
+	NodeType         string    `json:"nodeType"`
+	SrcExecutable    bool      `json:"srcExecutable"`
+	Links            struct {
+		Self []struct {
+			Href string `json:"href"`
+		} `json:"self"`
+	} `json:"links"`
+	Properties struct {
+		GitChangeType string `json:"gitChangeType"`
+	} `json:"properties"`
+}

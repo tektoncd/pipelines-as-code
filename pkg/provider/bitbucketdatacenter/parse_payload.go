@@ -175,6 +175,22 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 			return nil, fmt.Errorf("push event contains no commits; cannot proceed")
 		}
 
+		// In Bitbucket Data Center, when a pull request is merged, it creates two commits in the repository:
+		// 1. A merge commit, which is represented by `changes[0].ToHash`.
+		// 2. The actual commit containing the changes from the source branch.
+		//
+		// However, the merge commit often does not contain any file changes itself,
+		// which can cause issues when determining whether file modifications should trigger PipelineRuns.
+		//
+		// Typically, a regular (non-merge) commit has a single parent, but a merge commit has two parents:
+		// - The first parent is the previous HEAD of the destination branch (the branch into which the PR was merged).
+		// - The second parent is the HEAD of the source branch (the branch being merged).
+		//
+		// if we detect a merge commit, we will use the previous HEAD commit to get changes from the previous HEAD to the current HEAD.
+		if len(e.Commits) > 1 && len(e.Commits[0].Parents) > 1 {
+			v.previousHeadCommit = e.Commits[0].Parents[0].ID
+		}
+
 		processedEvent.SHA = e.Changes[0].ToHash
 		processedEvent.URL = e.Repository.Links.Self[0].Href
 		processedEvent.BaseBranch = e.Changes[0].RefID

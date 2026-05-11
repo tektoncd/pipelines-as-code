@@ -82,15 +82,16 @@ func TearDownNs(ctx context.Context, t *testing.T, runcnx *params.Run, targetNS 
 	repository.NSTearDown(ctx, t, runcnx, targetNS)
 }
 
-func TearDown(ctx context.Context, t *testing.T, runcnx *params.Run, client *scm.Client, prID int, orgAndRepo, ref string) {
+func TearDown(ctx context.Context, t *testing.T, runcnx *params.Run, client *scm.Client, pr *scm.PullRequest, orgAndRepo, ref string) {
 	if os.Getenv("TEST_NOCLEANUP") == "true" {
 		runcnx.Clients.Log.Infof("Not cleaning up and closing PR since TEST_NOCLEANUP is set")
 		return
 	}
 
-	if prID != -1 {
-		runcnx.Clients.Log.Infof("Deleting PR #%d", prID)
-		_, err := client.PullRequests.DeletePullRequest(ctx, orgAndRepo, prID)
+	// in Bitbucket Data Center, merged pull requests cannot be deleted.
+	if pr != nil && !pr.Merged {
+		runcnx.Clients.Log.Infof("Deleting PR #%d", pr.Number)
+		_, err := client.PullRequests.DeletePullRequest(ctx, orgAndRepo, pr.Number)
 		assert.NilError(t, err)
 	}
 

@@ -13,6 +13,7 @@ require (
 	github.com/google/cel-go v0.28.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260403152401-96a365122246
+	github.com/google/go-github/v84 v84.0.0
 	github.com/google/go-github/v85 v85.0.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/jenkins-x/go-scm v1.15.17
@@ -78,7 +79,6 @@ require (
 	github.com/go-openapi/swag/typeutils v0.25.5 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/rickb777/plural v1.4.10 // indirect
