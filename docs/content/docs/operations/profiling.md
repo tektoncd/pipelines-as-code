@@ -6,9 +6,9 @@ BookToC: true
 
 # Profiling PAC Components
 
-Pipelines-as-Code components embed the [Knative profiling server](https://pkg.go.dev/knative.dev/pkg/profiling),
+Pipelines-as-Code components embed the [Knative runtime profiling server](https://pkg.go.dev/knative.dev/pkg/observability/runtime),
 which exposes Go runtime profiling data via the standard `net/http/pprof` endpoints.
-Profiling is useful for diagnosing CPU hot-spots, memory growth, goroutine leaks, and
+This is useful for diagnosing CPU hot-spots, memory growth, goroutine leaks, and
 other performance issues.
 
 ## How It Works
@@ -31,14 +31,42 @@ When profiling is disabled the server still listens but returns `404` for every 
 
 ## Enabling Profiling
 
-### Watcher
+All components read profiling configuration from the same ConfigMap:
 
-The **watcher** (`pipelines-as-code-watcher`) uses Knative's `sharedmain` framework,
-which watches the `config-observability` ConfigMap and toggles profiling **without a
-restart**.
+```bash
+# Enable
+kubectl patch configmap pipelines-as-code-config-observability \
+  -n pipelines-as-code \
+  --type merge \
+  -p '{"data":{"runtime-profiling":"enabled"}}'
 
-**`PAC_DISABLE_HEALTH_PROBE=true` must be set on the watcher, otherwise a port conflict
-on 8080 will cause the profiling server to shut down:**
+# Disable
+kubectl patch configmap pipelines-as-code-config-observability \
+  -n pipelines-as-code \
+  --type merge \
+  -p '{"data":{"runtime-profiling":"disabled"}}'
+```
+
+{{< callout type="warning" >}}
+The old `profiling.enable: "true"` key no longer works. Use
+`runtime-profiling: "enabled"` instead.
+{{< /callout >}}
+
+### Component-specific prerequisites
+
+The **controller** reads profiling configuration from the `config-observability` ConfigMap
+at startup. Unlike the watcher and webhook (which use the `sharedmain` framework), the
+controller's eventing adapter does not register a dynamic callback for profiling changes,
+so a pod restart is required after enabling or disabling profiling:
+
+```bash
+kubectl rollout restart deployment/pipelines-as-code-controller \
+  -n pipelines-as-code
+```
+
+The **watcher** needs `PAC_DISABLE_HEALTH_PROBE=true`, otherwise a port conflict on
+8080 causes the profiling server to shut down. The watcher picks up ConfigMap changes
+without a restart.
 
 ```bash
 kubectl set env deployment/pipelines-as-code-watcher \
@@ -46,35 +74,9 @@ kubectl set env deployment/pipelines-as-code-watcher \
   PAC_DISABLE_HEALTH_PROBE=true
 ```
 
-Then enable profiling via the ConfigMap:
-
-```bash
-kubectl patch configmap pipelines-as-code-config-observability \
-  -n pipelines-as-code \
-  --type merge \
-  -p '{"data":{"profiling.enable":"true"}}'
-```
-
-To disable profiling:
-
-```bash
-kubectl patch configmap pipelines-as-code-config-observability \
-  -n pipelines-as-code \
-  --type merge \
-  -p '{"data":{"profiling.enable":"false"}}'
-```
-
-The watcher picks up the ConfigMap change immediately without a restart.
-
-### Webhook
-
-The **webhook** (`pipelines-as-code-webhook`) also uses `sharedmain` and supports
-dynamic toggling via the same ConfigMap. Unlike the watcher, the webhook does not run
-its own health probe server, so `PAC_DISABLE_HEALTH_PROBE` is not required.
-
-The webhook deployment does not set `CONFIG_OBSERVABILITY_NAME` by default, so it
-falls back to looking for a ConfigMap named `config-observability`, which does not
-exist in the PAC namespace. Set the environment variable first:
+The **webhook** needs `CONFIG_OBSERVABILITY_NAME` set explicitly. Without it, the webhook
+looks for a ConfigMap called `config-observability`, which does not exist in the PAC
+namespace. The webhook picks up ConfigMap changes without a restart.
 
 ```bash
 kubectl set env deployment/pipelines-as-code-webhook \
@@ -82,61 +84,41 @@ kubectl set env deployment/pipelines-as-code-webhook \
   CONFIG_OBSERVABILITY_NAME=pipelines-as-code-config-observability
 ```
 
-Then use the same `kubectl patch` on the ConfigMap above to enable or disable profiling.
-
-### Controller
-
-The **controller** (`pipelines-as-code-controller`) uses the Knative eventing adapter
-framework. Profiling is configured at startup from the `K_METRICS_CONFIG` environment
-variable and is **not** dynamically reloaded; a pod restart is required after any change.
-
-The `K_METRICS_CONFIG` variable contains a JSON object whose `ConfigMap` field holds
-inline key/value configuration data. To enable profiling, add `"profiling.enable":"true"`
-inside that `ConfigMap` object:
-
-```bash
-# Read the current value first
-kubectl get deployment pipelines-as-code-controller \
-  -n pipelines-as-code \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="K_METRICS_CONFIG")].value}'
-```
-
-Then patch the Deployment with `profiling.enable` added to the `ConfigMap` field, for example:
-
-```bash
-kubectl set env deployment/pipelines-as-code-controller \
-  -n pipelines-as-code \
-  'K_METRICS_CONFIG={"Domain":"pipelinesascode.tekton.dev/controller","Component":"pac_controller","PrometheusPort":9090,"ConfigMap":{"name":"pipelines-as-code-config-observability","profiling.enable":"true"}}'
-```
-
-This triggers a rolling restart of the controller pod. Remove `"profiling.enable":"true"`
-(or set it to `"false"`) and re-apply to disable.
-
 ## Accessing Profiles
 
-Port 8008 is not declared in the container spec by default. To make it reachable, patch
-the target Deployment(s) to add the port:
+The profiling server listens on port **8008** by default. If that conflicts with another
+service, set `PROFILING_PORT` on the relevant Deployment(s):
 
 ```bash
+kubectl set env deployment/pipelines-as-code-watcher \
+  deployment/pipelines-as-code-controller \
+  deployment/pipelines-as-code-webhook \
+  -n pipelines-as-code \
+  PROFILING_PORT=8090
+```
+
+Port 8008 (or your chosen port) is not declared in the container spec by default, so
+you need to patch the target Deployment(s) to expose it:
+
+```bash
+PROFILING_PORT="${PROFILING_PORT:-8008}"
 for deploy in pipelines-as-code-watcher pipelines-as-code-controller pipelines-as-code-webhook; do
   kubectl patch deployment "$deploy" \
     -n pipelines-as-code \
     --type json \
-    -p '[{"op":"add","path":"/spec/template/spec/containers/0/ports/-","value":{"name":"profiling","containerPort":8008,"protocol":"TCP"}}]'
+    -p "[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/ports/-\",\"value\":{\"name\":\"profiling\",\"containerPort\":${PROFILING_PORT},\"protocol\":\"TCP\"}}]"
 done
 ```
 
-This triggers a rolling restart of the pod. Once the pod is running, you can access
-the pprof endpoints.
+This triggers a rolling restart. Once the pod is running you can access the pprof
+endpoints.
 
 ### Using `kubectl port-forward`
 
-The recommended way to access the profiling server is with `kubectl port-forward`. This
-forwards a local port on your machine to the port on the pod, without exposing it to the
-cluster network.
+The simplest way to reach the profiling server is `kubectl port-forward`. This forwards
+a local port to the pod without exposing it to the cluster network.
 
-First, get the name of the pod you want to profile. Choose the label that matches the
-component:
+First, grab the pod name for the component you want to profile:
 
 ```bash
 # Watcher
@@ -155,63 +137,53 @@ export POD_NAME=$(kubectl get pods -n pipelines-as-code \
   -o jsonpath='{.items[0].metadata.name}')
 ```
 
-Then, forward a local port to the pod's profiling port:
+Then forward the port:
 
 ```bash
-kubectl port-forward -n pipelines-as-code $POD_NAME 8008:8008
+PROFILING_PORT="${PROFILING_PORT:-8008}"
+kubectl port-forward -n pipelines-as-code $POD_NAME ${PROFILING_PORT}:${PROFILING_PORT}
 ```
 
-The pprof index is now available at `http://localhost:8008/debug/pprof/`.
-
-### Changing the profiling port
-
-If port 8008 conflicts with another service, set the `PROFILING_PORT` environment
-variable on the Deployment to use a different port:
-
-```bash
-kubectl set env deployment/pipelines-as-code-watcher \
-  -n pipelines-as-code \
-  PROFILING_PORT=8090
-```
-
-Update the `containerPort` in the patch above and your port-forward command to match.
+The pprof index is now at `http://localhost:${PROFILING_PORT}/debug/pprof/`.
 
 ### Capturing profiles with `go tool pprof`
 
-With `kubectl port-forward` running, use `go tool pprof` to analyze profiles directly:
+With `kubectl port-forward` running, you can analyze profiles directly:
 
 ```bash
 # Heap profile
-go tool pprof http://localhost:8008/debug/pprof/heap
+go tool pprof http://localhost:${PROFILING_PORT}/debug/pprof/heap
 
 # 30-second CPU profile
-go tool pprof http://localhost:8008/debug/pprof/profile
+go tool pprof http://localhost:${PROFILING_PORT}/debug/pprof/profile
 
 # Goroutine dump
-go tool pprof http://localhost:8008/debug/pprof/goroutine
+go tool pprof http://localhost:${PROFILING_PORT}/debug/pprof/goroutine
 ```
 
 ### Saving profiles to disk
 
-You can also save profiles to disk for later analysis using `curl`:
+You can save profiles for later analysis with `curl`:
 
 ```bash
 # Save a heap profile
 curl -o heap-$(date +%Y%m%d-%H%M%S).pb.gz \
-  http://localhost:8008/debug/pprof/heap
+  http://localhost:${PROFILING_PORT}/debug/pprof/heap
 
-# Analyze later - CLI
+# Analyze later
 go tool pprof heap-<timestamp>.pb.gz
 
-# Analyze later - interactive web UI (opens browser at http://localhost:8009)
+# Or open the interactive web UI (starts a browser at http://localhost:8009)
 go tool pprof -http=:8009 heap-<timestamp>.pb.gz
 ```
 
 ## Security Considerations
 
-The profiling server exposes internal runtime data. Because port 8008 is not declared
-in the container spec by default, access requires an explicit Deployment patch, limiting
-it to users with `deployments/patch` permission in the `pipelines-as-code` namespace.
+The profiling server exposes internal runtime data. Because the profiling port is not
+declared in the container spec by default, access requires an explicit Deployment patch,
+limiting it to users with `deployments/patch` permission in the `pipelines-as-code`
+namespace.
 
-Do not expose port 8008 via a Service or Ingress in production environments. Disable
-profiling (`profiling.enable: "false"`) when not actively investigating an issue.
+Do not expose the profiling port via a Service or Ingress in production. Disable
+profiling (`runtime-profiling: "disabled"`) when you are not actively investigating
+an issue.
