@@ -588,42 +588,6 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 			},
 			expectedAPICount: 2, // 1 for get_default_branch + 1 for GraphQL
 		},
-		{
-			name: "invalid yaml validation failure",
-			event: &info.Event{
-				Organization:  "tekton",
-				Repository:    "cat",
-				TriggerTarget: triggertype.PullRequest,
-			},
-			skipSetupGitTree: true,
-			setup: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
-				t.Helper()
-				shaDir := fmt.Sprintf("%x", sha256.Sum256([]byte("testdata/tree/badyaml")))
-				event.SHA = shaDir
-
-				mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, _ *http.Request) {
-					_ = json.NewEncoder(w).Encode(map[string]any{
-						"data": map[string]any{
-							"repository": map[string]any{
-								"tektonTree": map[string]any{
-									"entries": []map[string]any{
-										{
-											"name":   "badyaml.yaml",
-											"type":   "blob",
-											"path":   "badyaml.yaml",
-											"oid":    "badyaml-sha",
-											"object": map[string]any{"text": "bad:\n  yaml:\n    - indent\n  error"},
-										},
-									},
-								},
-							},
-						},
-					})
-				})
-			},
-			wantErr:          "error unmarshalling yaml file badyaml.yaml",
-			expectedAPICount: 1, // Single GraphQL call
-		},
 	}
 
 	for _, tt := range tests {

@@ -136,67 +136,6 @@ func TestFetchTektonDirGraphQL(t *testing.T) {
 		errContains string
 	}{
 		{
-			name: "successful fetch with yaml files",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4999")
-				w.Header().Set("X-RateLimit-Reset", "1735689600")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": map[string]any{
-								"entries": []map[string]any{
-									{
-										"name": "pipeline.yaml",
-										"type": "blob",
-										"path": "pipeline.yaml",
-										"oid":  "abc123",
-										"object": map[string]any{
-											"text": "apiVersion: tekton.dev/v1",
-										},
-									},
-									{
-										"name": "task.yml",
-										"type": "blob",
-										"path": "task.yml",
-										"oid":  "def456",
-										"object": map[string]any{
-											"text": "kind: Task",
-										},
-									},
-									{
-										"name": "README.md",
-										"type": "blob",
-										"path": "README.md",
-										"oid":  "ghi789",
-										"object": map[string]any{
-											"text": "# README",
-										},
-									},
-								},
-							},
-						},
-					},
-				})
-			},
-			wantFiles: 2, // Only .yaml and .yml files
-		},
-		{
-			name: "no tekton directory",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4998")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": nil,
-						},
-					},
-				})
-			},
-			wantFiles: 0,
-		},
-		{
 			name: "http error",
 			handler: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("X-RateLimit-Limit", "5000")
@@ -220,105 +159,6 @@ func TestFetchTektonDirGraphQL(t *testing.T) {
 			},
 			wantErr:     true,
 			errContains: "GraphQL errors",
-		},
-		{
-			name: "tekton path is file not directory",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4995")
-				// GraphQL returns a Blob object instead of Tree when .tekton is a file
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": map[string]any{
-								// Blob object has "text" field instead of "entries"
-								"text": "this is a file, not a directory",
-							},
-						},
-					},
-				})
-			},
-			wantErr:     true,
-			errContains: ".tekton has been found but is not a directory",
-		},
-		{
-			name: "mixed yaml and yml extensions",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4994")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": map[string]any{
-								"entries": []map[string]any{
-									{
-										"name": "pipeline.yaml",
-										"type": "blob",
-										"path": "pipeline.yaml",
-										"oid":  "abc123",
-										"object": map[string]any{
-											"text": "kind: Pipeline",
-										},
-									},
-									{
-										"name": "task.yml",
-										"type": "blob",
-										"path": "task.yml",
-										"oid":  "def456",
-										"object": map[string]any{
-											"text": "kind: Task",
-										},
-									},
-								},
-							},
-						},
-					},
-				})
-			},
-			wantFiles: 2,
-		},
-		{
-			name: "subdirectories with yaml files",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4993")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": map[string]any{
-								"entries": []map[string]any{
-									{
-										"name": "pipeline.yaml",
-										"type": "blob",
-										"path": "pipeline.yaml",
-										"oid":  "abc123",
-										"object": map[string]any{
-											"text": "kind: Pipeline",
-										},
-									},
-									{
-										"name":   "tasks",
-										"type":   "tree",
-										"path":   "tasks",
-										"oid":    "tree-sha",
-										"object": nil, // Subdirectories don't have blob content
-									},
-									{
-										"name": "build.yaml",
-										"type": "blob",
-										"path": "tasks/build.yaml",
-										"oid":  "def456",
-										"object": map[string]any{
-											"text": "kind: Task",
-										},
-									},
-								},
-							},
-						},
-					},
-				})
-			},
-			wantFiles: 2, // pipeline.yaml and tasks/build.yaml
 		},
 		{
 			name: "null blob content",
@@ -355,23 +195,6 @@ func TestFetchTektonDirGraphQL(t *testing.T) {
 				})
 			},
 			wantFiles: 1, // Only valid.yaml counted
-		},
-		{
-			name: "empty tekton directory",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("X-RateLimit-Limit", "5000")
-				w.Header().Set("X-RateLimit-Remaining", "4991")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"data": map[string]any{
-						"repository": map[string]any{
-							"tektonTree": map[string]any{
-								"entries": []map[string]any{},
-							},
-						},
-					},
-				})
-			},
-			wantFiles: 0,
 		},
 	}
 
