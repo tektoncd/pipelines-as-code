@@ -765,6 +765,34 @@ func TestGithubGHEPullRequestCelPrefix(t *testing.T) {
 	assert.NilError(t, err)
 }
 
+func TestGithubGHEPullRequestCELJoin(t *testing.T) {
+	ctx := context.Background()
+	g := &tgithub.PRTest{
+		Label:     "Github CEL String Join",
+		YamlFiles: []string{"testdata/pipelinerun-cel-string-join.yaml"},
+		GHE:       true,
+	}
+	g.RunPullRequest(ctx, t)
+	defer g.TearDown(ctx, t)
+
+	prs, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{})
+	assert.NilError(t, err)
+	assert.Assert(t, len(prs.Items) >= 1, "Expected at least one PipelineRun")
+
+	err = twait.RegexpMatchingInPodLog(
+		ctx,
+		g.Cnx,
+		g.TargetNamespace,
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=cel-string-join-test", prs.Items[0].Name),
+		"step-test-cel-string-join-values",
+		*regexp.MustCompile(".*tekton/pipelinerun-cel-string-join.yaml"),
+		"",
+		2,
+		nil,
+	)
+	assert.NilError(t, err)
+}
+
 // Local Variables:
 // compile-command: "go test -tags=e2e -v -info TestGithubPullRequest$ ."
 // End:

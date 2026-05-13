@@ -9,6 +9,7 @@ import (
 	"github.com/google/cel-go/common/decls"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/ext"
 )
 
 func evaluate(expr string, env *cel.Env, data map[string]any) (ref.Val, error) {
@@ -90,7 +91,10 @@ func Value(query string, body any, headers, pacParams map[string]string, changed
 			decls.NewVariable("pull_request_labels", types.StringType),
 			decls.NewVariable("pull_request_number", types.StringType),
 			decls.NewVariable("git_auth_secret", types.StringType),
-		))
+		),
+		ext.Strings(),
+		ext.Lists(),
+	)
 	val, err := evaluate(query, celDec, map[string]any{
 		"body":    jsonMap,
 		"pac":     pacParams,

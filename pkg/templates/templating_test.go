@@ -175,6 +175,53 @@ func TestReplacePlaceHoldersVariables(t *testing.T) {
 				"hello": "world",
 			},
 		},
+		{
+			name:     "Test CEL with string join",
+			template: `all files: {{ files.all.join(", ") }}`,
+			expected: `all files: file1.txt, file2.txt, file3.txt`,
+			dicto: map[string]string{
+				"revision": "main",
+			},
+			changedFiles: map[string]any{
+				"all": []string{"file1.txt", "file2.txt", "file3.txt"},
+			},
+			headers: http.Header{
+				"Test": []string{"value"},
+			},
+			rawEvent: map[string]any{
+				"hello": "world",
+			},
+		},
+		{
+			name:     "Test CEL with string replace",
+			template: `{{ cel: trigger_comment.replace("bad", "good") }}`,
+			expected: `a good comment!`,
+			dicto: map[string]string{
+				"trigger_comment": "a bad comment!",
+			},
+			changedFiles: map[string]any{},
+			headers: http.Header{
+				"Test": []string{"value"},
+			},
+			rawEvent: map[string]any{
+				"hello": "world",
+			},
+		},
+		{
+			name:     "Test CEL with string substring",
+			template: `{{ cel: "HELLOWORLD".substring(0, 5) }}`,
+			expected: `HELLO`,
+			dicto: map[string]string{
+				"trigger_comment": "a bad comment!",
+			},
+			changedFiles: map[string]any{},
+			headers: http.Header{
+				"Test": []string{"value"},
+			},
+			rawEvent: map[string]any{
+				"hello": "world",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
