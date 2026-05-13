@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/pipeline v1.9.2
+	github.com/tektoncd/pipeline v1.9.3
 	gitlab.com/gitlab-org/api/client-go v1.14.0
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.1
