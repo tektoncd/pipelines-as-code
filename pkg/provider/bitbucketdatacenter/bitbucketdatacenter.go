@@ -276,9 +276,6 @@ func removeLastSegment(urlStr string) string {
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, _ *events.EventEmitter) error {
-	if event.Provider.User == "" {
-		return fmt.Errorf("no spec.git_provider.user has been set in the repo crd")
-	}
 	if event.Provider.Token == "" {
 		return fmt.Errorf("no spec.git_provider.secret has been set in the repo crd")
 	}
@@ -317,13 +314,22 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 	v.run = run
 	v.repo = repo
 	v.triggerEvent = event.EventType
-	_, resp, err := v.Client().Users.FindLogin(ctx, event.Provider.User)
+
+	var resp *scm.Response
+	var err error
+	// we only need a valid token to access rest api
+	_, resp, err = v.Client().Users.Find(ctx)
 	if resp != nil && resp.Status == http.StatusUnauthorized {
-		return fmt.Errorf("cannot get user %s with token: %w", event.Provider.User, err)
+		return fmt.Errorf("token validation failed: unauthorized")
+	}
+	if resp != nil && resp.Status == http.StatusInternalServerError {
+		return fmt.Errorf("token validation failed: Internal Server Error")
 	}
 	if err != nil {
-		return fmt.Errorf("cannot get user %s: %w", event.Provider.User, err)
+		return fmt.Errorf("token validation failed: http status: %d : %w", resp.Status, err)
 	}
+
+	// the token must have admin permissions at project or repository level
 
 	return nil
 }

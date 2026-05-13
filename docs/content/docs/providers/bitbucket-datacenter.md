@@ -8,22 +8,27 @@ This page covers how to configure Pipelines-as-Code with [Bitbucket Data Center]
 ## Prerequisites
 
 - A running Pipelines-as-Code [installation]({{< relref "/docs/installation/installation" >}})
-- A Bitbucket Data Center personal access token with `PROJECT_ADMIN` and `REPOSITORY_ADMIN` permissions (see below)
+- A Bitbucket Data Center HTTP access token with `PROJECT_ADMIN` or `REPOSITORY_ADMIN` permissions (see below)
 - The public URL of your Pipelines-as-Code controller route or ingress endpoint
 
-## Create a Bitbucket Personal Access Token
+## Create a Bitbucket HTTP Access Token
 
-Generate a personal access token as the manager of the project by following the steps here:
+Generate an HTTP access token using one of the following token types:
 
-<https://confluence.atlassian.com/bitbucketserver/personal-access-tokens-939515499.html>
+- Personal HTTP access token
+- Repository HTTP access token
+- Project HTTP access token
 
-The token needs the `PROJECT_ADMIN` and `REPOSITORY_ADMIN` permissions. It also needs access to forked repositories in pull requests, otherwise Pipelines-as-Code cannot process and access the pull request.
+For detailed instructions on creating and managing access tokens, refer to the official Bitbucket Data Center documentation:
+<https://confluence.atlassian.com/bitbucketserver/http-access-tokens-939515499.html>
+
+The token must have either `PROJECT_ADMIN` or `REPOSITORY_ADMIN` permissions. If Pipelines-as-Code needs to process pull requests from forked repositories, the token must also have administrative access to those forked repositories. Without this access, Pipelines-as-Code cannot retrieve the required pull request information or interact with the forked repository.
 
 {{< callout type="info" >}}
 
-The service account user that owns the token must be a **licensed Bitbucket
+When using a personal HTTP token, the associated user must be a **licensed Bitbucket
 user** (i.e., granted the `LICENSED_USER` global permission) for group-based
-permission checks to work. If the service account is an unlicensed technical
+permission checks to work. If the user account is an unlicensed technical
 user, group membership cannot be resolved and users with group-only access
 will not be able to trigger builds. As a workaround, add those users
 individually to the project or repository permissions.

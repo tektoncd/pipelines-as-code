@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -309,13 +310,15 @@ func TestSetClient(t *testing.T) {
 		name          string
 		apiURL        string
 		opts          *info.Event
+		repo          *v1alpha1.Repository
 		wantErrSubstr string
+		muxToken      func(w http.ResponseWriter, r *http.Request)
 		muxUser       func(w http.ResponseWriter, r *http.Request)
 	}{
 		{
-			name:          "bad/no username",
+			name:          "bad/no token",
 			opts:          info.NewEvent(),
-			wantErrSubstr: "no spec.git_provider.user",
+			wantErrSubstr: "no spec.git_provider.secret",
 		},
 		{
 			name: "bad/no secret",
@@ -330,57 +333,125 @@ func TestSetClient(t *testing.T) {
 			name: "bad/no url",
 			opts: &info.Event{
 				Provider: &info.Provider{
-					User:  "foo",
 					Token: "bar",
 				},
 			},
 			wantErrSubstr: "no spec.git_provider.url",
 		},
 		{
-			name: "bad/invalid user",
+			name: "bad/invalid user in whomi",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"errors": [{"message": "Unauthorized"}]}`))
+			},
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: unauthorized",
+		},
+		{
+			name: "bad/invalid user at rest after whomi",
 			opts: &info.Event{
 				Provider: &info.Provider{
 					User:  "foo",
 					Token: "bar",
-					URL:   "https://foo.bar",
+					URL:   "https://fakebitbucketdc",
 				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(w, `foo`)
 			},
 			muxUser: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusUnauthorized)
 				_, _ = w.Write([]byte(`{"errors": [{"message": "Unauthorized"}]}`))
 			},
-			apiURL:        "https://foo.bar/rest",
-			wantErrSubstr: "cannot get user foo with token",
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: unauthorized",
 		},
 		{
-			name: "bad/unknown error",
+			name: "internal error at whoami",
 			opts: &info.Event{
 				Provider: &info.Provider{
 					User:  "foo",
 					Token: "bar",
-					URL:   "https://foo.bar",
+					URL:   "https://fakebitbucketdc",
 				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: Internal Server Error",
+		},
+		{
+			name: "not found at whoami",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					User:  "foo",
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			},
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: http status: 404 : ",
+		},
+		{
+			name: "not found at whoami with error message",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					User:  "foo",
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"errors": [{"message": "Not Found"}]}`))
+			},
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: http status: 404 : Not Found",
+		},
+		{
+			name: "internal error at users rest",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					User:  "foo",
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(w, `foo`)
 			},
 			muxUser: func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"errors": [{"message": "Internal Server Error"}]}`))
 			},
-			apiURL:        "https://foo.bar/rest",
-			wantErrSubstr: "cannot get user foo: Internal Server Error",
+			apiURL:        "https://fakebitbucketdc/rest",
+			wantErrSubstr: "token validation failed: Internal Server Error",
 		},
 		{
 			name: "good/url append /rest",
 			opts: &info.Event{
 				Provider: &info.Provider{
-					User:  "foo",
 					Token: "bar",
-					URL:   "https://foo.bar",
+					URL:   "https://fakebitbucketdc",
 				},
+			},
+			muxToken: func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(w, `foo`)
 			},
 			muxUser: func(w http.ResponseWriter, _ *http.Request) {
 				fmt.Fprint(w, `{"name": "foo"}`)
 			},
-			apiURL: "https://foo.bar/rest",
+			apiURL: "https://fakebitbucketdc/rest",
 		},
 	}
 	for _, tt := range tests {
@@ -395,11 +466,14 @@ func TestSetClient(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
 			defer tearDown()
+			if tt.muxToken != nil {
+				mux.HandleFunc("/whoami", tt.muxToken)
+			}
 			if tt.muxUser != nil {
 				mux.HandleFunc("/users/foo", tt.muxUser)
 			}
 			v := &Provider{client: client, baseURL: tURL}
-			err := v.SetClient(ctx, fakeRun, tt.opts, nil, nil)
+			err := v.SetClient(ctx, fakeRun, tt.opts, tt.repo, nil)
 			if tt.wantErrSubstr != "" {
 				assert.ErrorContains(t, err, tt.wantErrSubstr)
 				return

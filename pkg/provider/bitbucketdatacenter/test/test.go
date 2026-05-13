@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	defaultAPIURL = "/rest/api/1.0"
-	buildAPIURL   = "/rest/build-status/1.0"
+	defaultAPIURL      = "/rest/api/1.0"
+	buildAPIURL        = "/rest/build-status/1.0"
+	defaultApplinksURL = "/plugins/servlet/applinks"
 )
 
 func SetupBBDataCenterClient() (*scm.Client, *http.ServeMux, func(), string) {
@@ -30,6 +31,7 @@ func SetupBBDataCenterClient() (*scm.Client, *http.ServeMux, func(), string) {
 	apiHandler := http.NewServeMux()
 	apiHandler.Handle(defaultAPIURL+"/", http.StripPrefix(defaultAPIURL, mux))
 	apiHandler.Handle(buildAPIURL+"/", http.StripPrefix(buildAPIURL, mux))
+	apiHandler.Handle(defaultApplinksURL+"/", http.StripPrefix(defaultApplinksURL, mux))
 	apiHandler.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(os.Stderr, "FAIL: Client.BaseURL path prefix is not preserved in the request URL:")
 		fmt.Fprintln(os.Stderr)
