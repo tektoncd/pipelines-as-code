@@ -1,25 +1,108 @@
 package formatting
 
 import (
+	"slices"
 	"strings"
+	"unicode"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// CleanValueKubernetes conform a string to kubernetes naming convention
+var (
+	managedSpecialCharsMap = map[rune]string{
+		':': "-",
+		'/': "-",
+		' ': "_",
+		'[': "__",
+		']': "__",
+	}
+	allowedSpecialCharsRFC1123      = ".-_"
+	allowedSpecialCharsRFC1123Runes = []rune(allowedSpecialCharsRFC1123)
+
+	// Build the replacer starting from the managedSpecialCharsMap
+	managedSpecialCharsInLabelValueReplacer = strings.NewReplacer(pairs(managedSpecialCharsMap)...)
+)
+
+// CleanValueKubernetes conforms a string to kubernetes naming convention
 // see https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-subdomain-names
 // rules are:
 // • contain at most 63 characters
-// • contain only lowercase alphanumeric characters or '-'
+// • contain only alphanumeric characters or '-', '.', and '_'
 // • start with an alphanumeric character
 // • end with an alphanumeric character.
 func CleanValueKubernetes(s string) string {
-	if len(s) >= 63 {
-		// keep the last 62 characters
-		s = s[len(s)-62:]
+	// cut short if the string is already a valid label
+	if len(validation.IsValidLabelValue(s)) == 0 {
+		return s
 	}
 
-	replasoeur := strings.NewReplacer(":", "-", "/", "-", " ", "_", "[", "__", "]", "__")
-	s = strings.TrimRight(s, " .-_[]")
-	s = strings.TrimLeft(s, " .-_[]")
-	replaced := replasoeur.Replace(s)
-	return strings.TrimSpace(replaced)
+	// sanitize the input
+	sanitized := sanitizeLabelValue(s)
+
+	// replace the managed special symbols
+	replaced := managedSpecialCharsInLabelValueReplacer.Replace(sanitized)
+
+	// trim unwanted chars
+	trimmed := strings.Trim(replaced, allowedSpecialCharsRFC1123)
+
+	// cut to max length
+	cut := cutToLabelValueMaxLength(trimmed)
+
+	// trim left again to ensure no invalid values
+	// are at the edge after the cut
+	return strings.TrimLeft(cut, allowedSpecialCharsRFC1123)
+}
+
+// cutToLabelValueMaxLength cuts the provided string to the maximum length allowed
+// for a kubernetes label (63 chars)
+func cutToLabelValueMaxLength(s string) string {
+	if len(s) > validation.LabelValueMaxLength {
+		return s[len(s)-(validation.LabelValueMaxLength):]
+	}
+	return s
+}
+
+// sanitizeLabelValue removes all unmanaged characters from the input string
+func sanitizeLabelValue(s string) string {
+	b := strings.Builder{}
+	for _, r := range s {
+		if isSafe(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// pairs extracts all the key-value pairs from a rune-string map
+func pairs(m map[rune]string) []string {
+	ss := make([]string, 0, len(m)*2)
+	for k, v := range m {
+		ss = append(ss, string(k), v)
+	}
+	return ss
+}
+
+// isSafe is a helper to identify if the processed rune is safe to process
+// or should be dropped
+func isSafe(r rune) bool {
+	return !(unicode.IsSpace(r) && r != ' ') &&
+		(isAllowedSpecialCharRFC1123(r) || isAlphanumeric(r) || isManagedSpecialChar(r))
+}
+
+// isAlphanumeric returns true if the rune is an alphanumeric value
+func isAlphanumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+// isAllowedSpecialCharRFC1123 returns true if the rune is an allowed char as per
+// the RFC1123
+func isAllowedSpecialCharRFC1123(r rune) bool {
+	return slices.Contains(allowedSpecialCharsRFC1123Runes, r)
+}
+
+// isManagedSpecialChar returns true if the rune is a managed special char.
+// The normalization of the value will replace it with its counterpart.
+func isManagedSpecialChar(r rune) bool {
+	_, ok := managedSpecialCharsMap[r]
+	return ok
 }
