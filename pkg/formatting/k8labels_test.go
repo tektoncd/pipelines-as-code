@@ -57,6 +57,21 @@ func TestK8LabelsCleanup(t *testing.T) {
 			str:  "secret:name/with_underscores",
 			want: "secret-name-with_underscores",
 		},
+		{
+			name: "starts with a .",
+			str:  ".i-start-with-a-dot",
+			want: "i-start-with-a-dot",
+		},
+		{
+			name: "ends with a .",
+			str:  "i-end-with-a-dot.",
+			want: "i-end-with-a-dot",
+		},
+		{
+			name: "long value once cut starts with a .",
+			str:  "everythingbeforethedotisdropped.thesehereare61chars-62withdot-previouscharacterswillbedropped",
+			want: "thesehereare61chars-62withdot-previouscharacterswillbedropped",
+		},
 	}
 
 	for _, tt := range tests {

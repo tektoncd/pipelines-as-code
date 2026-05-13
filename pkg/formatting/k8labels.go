@@ -18,8 +18,8 @@ func CleanValueKubernetes(s string) string {
 	}
 
 	replasoeur := strings.NewReplacer(":", "-", "/", "-", " ", "_", "[", "__", "]", "__")
-	s = strings.TrimRight(s, " -_[]")
-	s = strings.TrimLeft(s, " -_[]")
+	s = strings.TrimRight(s, " .-_[]")
+	s = strings.TrimLeft(s, " .-_[]")
 	replaced := replasoeur.Replace(s)
 	return strings.TrimSpace(replaced)
 }
