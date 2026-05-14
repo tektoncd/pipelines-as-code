@@ -3,7 +3,6 @@ package formatting
 import (
 	"slices"
 	"strings"
-	"unicode"
 
 	"k8s.io/apimachinery/pkg/util/validation"
 )
@@ -84,8 +83,7 @@ func pairs(m map[rune]string) []string {
 
 // isSafe a helper to identify if a rune is safe to process or should be dropped.
 func isSafe(r rune) bool {
-	return !(unicode.IsSpace(r) && r != ' ') &&
-		(isAllowedSpecialCharLabelValue(r) || isAlphanumeric(r) || isManagedSpecialChar(r))
+	return isAllowedSpecialCharLabelValue(r) || isAlphanumeric(r) || isManagedSpecialChar(r)
 }
 
 // isAlphanumeric returns true if the rune is an alphanumeric value.
