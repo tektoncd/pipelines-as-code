@@ -16,8 +16,8 @@ var (
 		'[': "__",
 		']': "__",
 	}
-	allowedSpecialCharsRFC1123      = ".-_"
-	allowedSpecialCharsRFC1123Runes = []rune(allowedSpecialCharsRFC1123)
+	allowedSpecialCharsLabelValue      = ".-_"
+	allowedSpecialCharsLabelValueRunes = []rune(allowedSpecialCharsLabelValue)
 
 	// Build the replacer starting from the managedSpecialCharsMap
 	managedSpecialCharsInLabelValueReplacer = strings.NewReplacer(pairs(managedSpecialCharsMap)...)
@@ -43,14 +43,14 @@ func CleanValueKubernetes(s string) string {
 	replaced := managedSpecialCharsInLabelValueReplacer.Replace(sanitized)
 
 	// trim unwanted chars
-	trimmed := strings.Trim(replaced, allowedSpecialCharsRFC1123)
+	trimmed := strings.Trim(replaced, allowedSpecialCharsLabelValue)
 
 	// cut to max length
 	cut := cutToLabelValueMaxLength(trimmed)
 
 	// trim left again to ensure no invalid values
 	// are at the edge after the cut
-	return strings.TrimLeft(cut, allowedSpecialCharsRFC1123)
+	return strings.TrimLeft(cut, allowedSpecialCharsLabelValue)
 }
 
 // cutToLabelValueMaxLength cuts the provided string to the maximum length allowed
@@ -86,7 +86,7 @@ func pairs(m map[rune]string) []string {
 // or should be dropped
 func isSafe(r rune) bool {
 	return !(unicode.IsSpace(r) && r != ' ') &&
-		(isAllowedSpecialCharRFC1123(r) || isAlphanumeric(r) || isManagedSpecialChar(r))
+		(isAllowedSpecialCharLabelValue(r) || isAlphanumeric(r) || isManagedSpecialChar(r))
 }
 
 // isAlphanumeric returns true if the rune is an alphanumeric value
@@ -94,14 +94,14 @@ func isAlphanumeric(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
 
-// isAllowedSpecialCharRFC1123 returns true if the rune is an allowed char as per
-// the RFC1123
-func isAllowedSpecialCharRFC1123(r rune) bool {
-	return slices.Contains(allowedSpecialCharsRFC1123Runes, r)
+// isAllowedSpecialCharLabelValue returns true if the rune is an allowed char as per
+// Kubernetes Label Values
+func isAllowedSpecialCharLabelValue(r rune) bool {
+	return slices.Contains(allowedSpecialCharsLabelValueRunes, r)
 }
 
 // isManagedSpecialChar returns true if the rune is a managed special char.
-// The normalization of the value will replace it with its counterpart.
+// The normalization of the value will replace it with its counterpart
 func isManagedSpecialChar(r rune) bool {
 	_, ok := managedSpecialCharsMap[r]
 	return ok
