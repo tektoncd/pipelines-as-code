@@ -40,8 +40,8 @@ func TestK8LabelsCleanup(t *testing.T) {
 		},
 		{
 			name: "remove new line from the middle",
-			str:  "foo\nfoo",
-			want: "foofoo",
+			str:  "foo\nbar",
+			want: "foobar",
 		},
 		{
 			name: "secret name longer than 63 characters",
