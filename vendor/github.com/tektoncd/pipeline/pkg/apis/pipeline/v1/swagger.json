@@ -95,6 +95,10 @@
           "description": "HostNetwork specifies whether the pod may use the node network namespace",
           "type": "boolean"
         },
+        "hostUsers": {
+          "description": "HostUsers indicates whether the pod will use the host's user namespace. Optional: Default to true. If set to true or not present, the pod will be run in the host user namespace, useful for when the pod needs a feature only available to the host user namespace, such as loading a kernel module with CAP_SYS_MODULE. When set to false, a new user namespace is created for the pod. Setting false is useful to mitigating container breakout vulnerabilities such as allowing containers to run as root without their user having root privileges on the host. This field depends on the kubernetes feature gate UserNamespacesSupport being enabled.",
+          "type": "boolean"
+        },
         "imagePullSecrets": {
           "description": "ImagePullSecrets gives the name of the secret used by the pod to pull the image if specified",
           "type": "array",
@@ -661,6 +665,10 @@
       "description": "PipelineRunSpec defines the desired state of PipelineRun",
       "type": "object",
       "properties": {
+        "managedBy": {
+          "description": "ManagedBy indicates which controller is responsible for reconciling this resource. If unset or set to \"tekton.dev/pipeline\", the default Tekton controller will manage this resource. This field is immutable.",
+          "type": "string"
+        },
         "params": {
           "description": "Params is a list of parameter names and values.",
           "type": "array",
@@ -1493,6 +1501,10 @@
           "default": {},
           "$ref": "#/definitions/v1.ResourceRequirements"
         },
+        "displayName": {
+          "description": "DisplayName is a user-facing name of the step that may be used to populate a UI.",
+          "type": "string"
+        },
         "env": {
           "description": "List of environment variables to set in the Step. Cannot be updated.",
           "type": "array",
@@ -2048,6 +2060,10 @@
         },
         "debug": {
           "$ref": "#/definitions/v1.TaskRunDebug"
+        },
+        "managedBy": {
+          "description": "ManagedBy indicates which controller is responsible for reconciling this resource. If unset or set to \"tekton.dev/pipeline\", the default Tekton controller will manage this resource. This field is immutable.",
+          "type": "string"
         },
         "params": {
           "type": "array",
