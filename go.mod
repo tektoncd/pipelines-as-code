@@ -1,8 +1,6 @@
 module github.com/openshift-pipelines/pipelines-as-code
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.24.13
 
 require (
 	code.gitea.io/gitea v1.24.6
@@ -30,7 +28,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/pipeline v1.4.0
+	github.com/tektoncd/pipeline v1.6.2
 	gitlab.com/gitlab-org/api/client-go v0.145.0
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.0
