@@ -25,11 +25,14 @@ func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, n
 	}
 	for _, repo := range repositories.Items {
 		repo.Spec.URL = strings.TrimSuffix(repo.Spec.URL, "/")
-		if repo.Spec.URL == event.URL {
+		match, err := matchRepo(event.URL, repo.Spec.URL)
+		if err != nil {
+			return nil, err
+		}
+		if match {
 			return &repo, nil
 		}
 	}
-
 	return nil, nil
 }
 
@@ -88,4 +91,21 @@ func matchTarget(branch, target string) (bool, error) {
 	}
 
 	return g.Match(branch), nil
+}
+
+// matchTarget checks if a branch matches a target pattern using glob matching.
+// Supports both exact string matching and glob patterns.
+func matchRepo(repo, target string) (bool, error) {
+	if target == repo {
+		return true, nil
+	}
+	// Check unix glob match
+	globPattern, err := glob.Compile(target)
+	if err != nil {
+		return false, err
+	}
+	if globPattern.Match(repo) {
+		return true, nil
+	}
+	return false, nil
 }

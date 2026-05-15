@@ -468,6 +468,103 @@ func TestIncomingWebhookRule(t *testing.T) {
 	}
 }
 
+func TestMatchRepo(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventURL   string
+		repoURL    string
+		wantMatch  bool
+		wantError  bool
+		errorCheck string
+	}{
+		// Exact matching
+		{
+			name:      "exact match",
+			eventURL:  "https://github.com/tektoncd/pipelines-as-code",
+			repoURL:   "https://github.com/tektoncd/pipelines-as-code",
+			wantMatch: true,
+		},
+		{
+			name:      "no substring match",
+			eventURL:  "https://github.com/forked/pipelines-as-code",
+			repoURL:   "https://github.com/tektoncd/pipelines-as-code",
+			wantMatch: false,
+		},
+		// Wildcard * - matches zero or more characters
+		{
+			name:      "glob * - prefix pattern",
+			eventURL:  "https://github.com/tektoncd/pipelines-as-code",
+			repoURL:   "https://github.com/tektoncd/*",
+			wantMatch: true,
+		},
+		{
+			name:      "glob * - must match from start",
+			eventURL:  "https://gitlab.com/tektoncd/pipelines-as-code",
+			repoURL:   "https://github.com/tektoncd/*",
+			wantMatch: false,
+		},
+		{
+			name:      "glob * - substring match with wildcards",
+			eventURL:  "https://github.com/tektoncd/pipelines-as-code",
+			repoURL:   "*/tektoncd/*",
+			wantMatch: true,
+		},
+		{
+			name:      "glob * - catch-all",
+			eventURL:  "https://github.com/tektoncd/pipelines-as-code",
+			repoURL:   "*",
+			wantMatch: true,
+		},
+		// Wildcard ? - matches exactly one character
+		{
+			name:      "glob ? - single char match",
+			eventURL:  "https://github.com/tektoncd/pipelines-as-code-v2",
+			repoURL:   "https://github.com/tektoncd/pipelines-as-code-v?",
+			wantMatch: true,
+		},
+		// Character classes [...]
+		{
+			name:      "glob [range] - character class",
+			eventURL:  "https://gitlab.com/tektoncd/pipelines-as-code",
+			repoURL:   "https://[a-z]*.com/tektoncd/pipelines-as-code",
+			wantMatch: true,
+		},
+		// Error handling
+		{
+			name:       "invalid glob - unclosed bracket",
+			eventURL:   "https://github.com/tektoncd/pipelines-as-code",
+			repoURL:    "https://[github.com/tektoncd/pipelines-as-code",
+			wantMatch:  false,
+			wantError:  true,
+			errorCheck: "unexpected end of input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMatch, err := matchRepo(tt.eventURL, tt.repoURL)
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("matchRepo() expected error but got nil")
+					return
+				}
+				if tt.errorCheck != "" {
+					assert.ErrorContains(t, err, tt.errorCheck)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("matchRepo() unexpected error = %v", err)
+					return
+				}
+				if gotMatch != tt.wantMatch {
+					t.Errorf("matchRepo() gotMatch = %v, want %v for eventURL=%q, repoURL=%q", gotMatch, tt.wantMatch, tt.eventURL, tt.repoURL)
+				}
+			}
+		})
+	}
+}
+
 func TestMatchTarget(t *testing.T) {
 	tests := []struct {
 		name       string
