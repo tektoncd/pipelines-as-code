@@ -1220,6 +1220,187 @@ func TestGetCommitInfoPRLookupPopulatesURLs(t *testing.T) {
 	assert.Equal(t, "https://gitea.com/owner/repo", event.BaseURL, "BaseURL should be populated from PR lookup")
 }
 
+func TestSplitGiteaURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		wantOrg  string
+		wantRepo string
+		wantRef  string
+		wantPath string
+		wantErr  bool
+	}{
+		{
+			name:     "src branch URL",
+			url:      "https://gitea.example.com/owner/repo/src/branch/main/path/to/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "main",
+			wantPath: "path/to/task.yaml",
+		},
+		{
+			name:     "raw branch URL",
+			url:      "https://gitea.example.com/owner/repo/raw/branch/main/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "main",
+			wantPath: "task.yaml",
+		},
+		{
+			name:     "src tag URL",
+			url:      "https://gitea.example.com/owner/repo/src/tag/v1.0.0/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "v1.0.0",
+			wantPath: "task.yaml",
+		},
+		{
+			name:     "src commit URL",
+			url:      "https://gitea.example.com/owner/repo/src/commit/abc123def/path/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "abc123def",
+			wantPath: "path/task.yaml",
+		},
+		{
+			name:     "URL encoded branch name",
+			url:      "https://gitea.example.com/owner/repo/src/branch/feature%2Fbranch/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "feature/branch",
+			wantPath: "task.yaml",
+		},
+		{
+			name:     "raw commit URL",
+			url:      "https://gitea.example.com/owner/repo/raw/commit/abc123def/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "abc123def",
+			wantPath: "task.yaml",
+		},
+		{
+			name:     "raw tag URL",
+			url:      "https://gitea.example.com/owner/repo/raw/tag/v2.0/path/to/task.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "v2.0",
+			wantPath: "path/to/task.yaml",
+		},
+		{
+			name:     "URL encoded path",
+			url:      "https://gitea.example.com/owner/repo/src/branch/main/path%2Fto%2Ftask.yaml",
+			wantOrg:  "owner",
+			wantRepo: "repo",
+			wantRef:  "main",
+			wantPath: "path/to/task.yaml",
+		},
+		{
+			name:    "too short URL",
+			url:     "https://gitea.example.com/owner/repo",
+			wantErr: true,
+		},
+		{
+			name:    "invalid action segment",
+			url:     "https://gitea.example.com/owner/repo/blob/branch/main/task.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "invalid ref type",
+			url:     "https://gitea.example.com/owner/repo/src/invalid/main/task.yaml",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org, repo, path, ref, err := splitGiteaURL(tt.url)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantOrg, org)
+			assert.Equal(t, tt.wantRepo, repo)
+			assert.Equal(t, tt.wantRef, ref)
+			assert.Equal(t, tt.wantPath, path)
+		})
+	}
+}
+
+func TestGetTaskURI(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventURL   string
+		uri        string
+		wantRet    string
+		wantFound  bool
+		wantErr    bool
+		fileExists bool
+	}{
+		{
+			name:       "fetch task from src branch URL",
+			eventURL:   "https://gitea.example.com/owner/repo/pulls/1",
+			uri:        "https://gitea.example.com/owner/repo/src/branch/main/task.yaml",
+			wantRet:    "hello world",
+			wantFound:  true,
+			fileExists: true,
+		},
+		{
+			name:       "fetch task from raw branch URL",
+			eventURL:   "https://gitea.example.com/owner/repo/pulls/1",
+			uri:        "https://gitea.example.com/owner/repo/raw/branch/main/task.yaml",
+			wantRet:    "hello world",
+			wantFound:  true,
+			fileExists: true,
+		},
+		{
+			name:       "fetch task from tag URL",
+			eventURL:   "https://gitea.example.com/owner/repo/pulls/1",
+			uri:        "https://gitea.example.com/owner/repo/src/tag/v1.0/task.yaml",
+			wantRet:    "hello world",
+			wantFound:  true,
+			fileExists: true,
+		},
+		{
+			name:      "different host returns not found",
+			eventURL:  "https://gitea.example.com/owner/repo/pulls/1",
+			uri:       "https://other.example.com/owner/repo/src/branch/main/task.yaml",
+			wantFound: false,
+		},
+		{
+			name:     "bad URI format",
+			eventURL: "https://gitea.example.com/owner/repo/pulls/1",
+			uri:      "https://gitea.example.com/owner/repo",
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeclient, mux, teardown := tgitea.Setup(t)
+			defer teardown()
+
+			if tt.fileExists {
+				mux.HandleFunc("/repos/owner/repo/raw/", func(rw http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(rw, tt.wantRet)
+				})
+			}
+
+			p := &Provider{giteaClient: fakeclient}
+			event := info.NewEvent()
+			event.URL = tt.eventURL
+
+			found, content, err := p.GetTaskURI(context.Background(), event, tt.uri)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetTaskURI() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			assert.Equal(t, tt.wantFound, found)
+			if tt.wantFound {
+				assert.Equal(t, tt.wantRet, content)
+			}
+		})
+	}
+}
+
 func TestGetCommitStatuses(t *testing.T) {
 	tests := []struct {
 		name        string

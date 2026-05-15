@@ -1,0 +1,24 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: "pipelinerun-remote-task-on-gitea"
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+    pipelinesascode.tekton.dev/task: "[\\ .RemoteTaskBranchURL //]"
+    pipelinesascode.tekton.dev/task-1: "[\\ .RemoteTaskTagURL //]"
+    pipelinesascode.tekton.dev/task-2: "[\\ .RemoteTaskCommitURL //]"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task-from-branch
+        taskRef:
+          name: remote-task-gitea-branch
+      - name: task-from-tag
+        taskRef:
+          name: remote-task-gitea-tag
+      - name: task-from-commit
+        taskRef:
+          name: remote-task-gitea-commit

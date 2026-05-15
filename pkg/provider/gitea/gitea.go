@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strconv"
@@ -149,9 +150,65 @@ func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
 	v.pacInfo = pacInfo
 }
 
-// GetTaskURI TODO: Implement ME.
-func (v *Provider) GetTaskURI(_ context.Context, _ *info.Event, _ string) (bool, string, error) {
-	return false, "", nil
+// splitGiteaURL parses a Gitea/Forgejo URL and returns org, repo, path, and ref.
+func splitGiteaURL(uri string) (string, string, string, string, error) {
+	pURL, err := url.Parse(uri)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("URL %s is not a valid provider URL: %w", uri, err)
+	}
+	split := strings.Split(pURL.EscapedPath(), "/")
+	// minimum: /owner/repo/{src|raw}/{branch|tag|commit}/ref/filepath → 7 segments (split[0] is empty)
+	if len(split) < 7 {
+		return "", "", "", "", fmt.Errorf("URL %s does not seem to be a proper Gitea URL: not enough path segments", uri)
+	}
+
+	spOrg := split[1]
+	spRepo := split[2]
+
+	if split[3] != "src" && split[3] != "raw" {
+		return "", "", "", "", fmt.Errorf("cannot recognize URL as a Gitea URL to fetch: %s (expected 'src' or 'raw' in path)", uri)
+	}
+	if split[4] != "branch" && split[4] != "tag" && split[4] != "commit" {
+		return "", "", "", "", fmt.Errorf("cannot recognize URL as a Gitea URL to fetch: %s (expected 'branch', 'tag', or 'commit' in path)", uri)
+	}
+
+	spRef := split[5]
+	spPath := strings.Join(split[6:], "/")
+
+	if spRef, err = url.PathUnescape(spRef); err != nil {
+		return "", "", "", "", fmt.Errorf("cannot decode ref: %w", err)
+	}
+	if spPath, err = url.PathUnescape(spPath); err != nil {
+		return "", "", "", "", fmt.Errorf("cannot decode path: %w", err)
+	}
+	if spOrg, err = url.PathUnescape(spOrg); err != nil {
+		return "", "", "", "", fmt.Errorf("cannot decode org: %w", err)
+	}
+	if spRepo, err = url.PathUnescape(spRepo); err != nil {
+		return "", "", "", "", fmt.Errorf("cannot decode repo: %w", err)
+	}
+
+	return spOrg, spRepo, spPath, spRef, nil
+}
+
+func (v *Provider) GetTaskURI(_ context.Context, event *info.Event, uri string) (bool, string, error) {
+	if v.giteaClient == nil {
+		return false, "", fmt.Errorf("no gitea client has been initialized")
+	}
+	if ret := provider.CompareHostOfURLS(uri, event.URL); !ret {
+		return false, "", nil
+	}
+
+	spOrg, spRepo, spPath, spRef, err := splitGiteaURL(uri)
+	if err != nil {
+		return false, "", err
+	}
+
+	data, _, err := v.Client().GetFile(spOrg, spRepo, spRef, spPath)
+	if err != nil {
+		return false, "", err
+	}
+	return true, string(data), nil
 }
 
 func (v *Provider) SetLogger(logger *zap.SugaredLogger) {
