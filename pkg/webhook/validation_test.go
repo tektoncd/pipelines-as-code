@@ -220,3 +220,66 @@ func TestReconcilerAdmit(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchRepo(t *testing.T) {
+	tests := []struct {
+		name       string
+		url        string
+		wantError  bool
+		errorCheck string
+	}{
+		// Exact matching
+		{
+			name:      "std https",
+			url:       "https://github.com/tektoncd/pipelines-as-code",
+			wantError: false,
+		},
+		{
+			name:      "std http",
+			url:       "http://github.com/tektoncd/pipelines-as-code",
+			wantError: false,
+		},
+		// Wildcard * - matches zero or more characters
+		{
+			name:      "glob * - prefix pattern",
+			url:       "https://github.com/tektoncd/*",
+			wantError: false,
+		},
+		{
+			name:      "glob * - domain",
+			url:       "https://*/tektoncd/pipelines-as-code",
+			wantError: false,
+		},
+		{
+			name:      "std not github ",
+			url:       "https://gitlab.com/tektoncd/pipelines-as-code",
+			wantError: false,
+		},
+		{
+			name:      "std not github deep path",
+			url:       "https://gitlab.com/tektoncd/group/pipelines-as-code",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRepositoryURL(tt.url, "")
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("validateRepositoryURL() expected error but got nil")
+					return
+				}
+				if tt.errorCheck != "" {
+					assert.ErrorContains(t, err, tt.errorCheck)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("validateRepositoryURL() unexpected error = %v", err)
+					return
+				}
+			}
+		})
+	}
+}
