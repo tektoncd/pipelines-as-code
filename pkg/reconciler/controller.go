@@ -100,6 +100,10 @@ func ctrlOpts() func(impl *controller.Impl) controller.Options {
 	return func(_ *controller.Impl) controller.Options {
 		return controller.Options{
 			FinalizerName: path.Join(pipelinesascode.GroupName, pipelinesascode.FinalizerName),
+			// The watcher observes PipelineRun status but never owns it. Skipping
+			// generated status sync avoids doing UpdateStatus() calls when
+			// informer transforms trim cached status fields.
+			SkipStatusUpdates: true,
 			PromoteFilterFunc: func(obj any) bool {
 				_, exist := obj.(*tektonv1.PipelineRun).GetAnnotations()[keys.State]
 				return exist
