@@ -27,7 +27,7 @@ linters:
     - gocritic
     - godot
     - goheader
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - gosmopolitan
@@ -57,6 +57,9 @@ linters:
     - whitespace
     - zerologlint
   settings:
+    govet:
+      disable:
+        - inline
     misspell:
       ignore-rules:
         - cancelled
