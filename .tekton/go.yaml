@@ -126,7 +126,7 @@ spec:
                 chmod +x ./codecov
                 ./codecov -P $GITHUB_PULL_REQUEST_ID -C {{revision}} -v
             - name: lint
-              image: docker.io/golangci/golangci-lint:v2.10.1
+              image: docker.io/golangci/golangci-lint:v2.12.2
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
