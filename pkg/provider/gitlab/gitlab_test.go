@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -2299,4 +2300,165 @@ func TestGitLabCreateCommentPaging(t *testing.T) {
 	err := p.CreateComment(context.Background(), event, commit, updateMarker)
 	assert.NilError(t, err)
 	assert.Assert(t, updated == true, "comment update handler has not been called")
+}
+
+func TestSetClientSourceRepoAccessPostsComment(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.DebugLevel)
+	fakelogger := zap.New(observer).Sugar()
+	run := &params.Run{
+		Clients: clients.Clients{
+			Log: fakelogger,
+		},
+	}
+
+	tests := []struct {
+		name              string
+		triggerTarget     triggertype.Trigger
+		sourceProjectID   int64
+		targetProjectID   int64
+		pullRequestNumber int
+		setupMockResponse func(*http.ServeMux, *bool)
+		expectedError     string
+		expectComment     bool
+	}{
+		{
+			name:              "404 on source project posts MR comment",
+			triggerTarget:     triggertype.PullRequest,
+			sourceProjectID:   456,
+			targetProjectID:   789,
+			pullRequestNumber: 42,
+			setupMockResponse: func(mux *http.ServeMux, commentPosted *bool) {
+				mux.HandleFunc("/projects/456", func(rw http.ResponseWriter, _ *http.Request) {
+					rw.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(rw, `{"message": "404 Project Not Found"}`)
+				})
+				mux.HandleFunc("/projects/789/merge_requests/42/notes", func(rw http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						fmt.Fprint(rw, `[]`)
+						return
+					}
+					if r.Method == http.MethodPost {
+						body, _ := io.ReadAll(r.Body)
+						bodyStr := string(body)
+						assert.Assert(t, strings.Contains(bodyStr, "source repository"), "comment should mention source repository, got: %s", bodyStr)
+						assert.Assert(t, strings.Contains(bodyStr, "read_repository"), "comment should mention read_repository scope, got: %s", bodyStr)
+						*commentPosted = true
+					}
+					fmt.Fprint(rw, `{}`)
+				})
+			},
+			expectedError: "failed to access GitLab source repository ID 456: please ensure token has 'read_repository' scope on that repository",
+			expectComment: true,
+		},
+		{
+			name:              "403 on source project posts MR comment",
+			triggerTarget:     triggertype.PullRequest,
+			sourceProjectID:   456,
+			targetProjectID:   789,
+			pullRequestNumber: 42,
+			setupMockResponse: func(mux *http.ServeMux, commentPosted *bool) {
+				mux.HandleFunc("/projects/456", func(rw http.ResponseWriter, _ *http.Request) {
+					rw.WriteHeader(http.StatusForbidden)
+					fmt.Fprint(rw, `{"message": "403 Forbidden"}`)
+				})
+				mux.HandleFunc("/projects/789/merge_requests/42/notes", func(rw http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						fmt.Fprint(rw, `[]`)
+						return
+					}
+					if r.Method == http.MethodPost {
+						*commentPosted = true
+					}
+					fmt.Fprint(rw, `{}`)
+				})
+			},
+			expectedError: "failed to access GitLab source repository ID 456: please ensure token has 'read_repository' scope on that repository",
+			expectComment: true,
+		},
+		{
+			name:              "Comment posting failure is non-fatal",
+			triggerTarget:     triggertype.PullRequest,
+			sourceProjectID:   456,
+			targetProjectID:   789,
+			pullRequestNumber: 42,
+			setupMockResponse: func(mux *http.ServeMux, _ *bool) {
+				mux.HandleFunc("/projects/456", func(rw http.ResponseWriter, _ *http.Request) {
+					rw.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(rw, `{"message": "404 Project Not Found"}`)
+				})
+				mux.HandleFunc("/projects/789/merge_requests/42/notes", func(rw http.ResponseWriter, _ *http.Request) {
+					rw.WriteHeader(http.StatusInternalServerError)
+					fmt.Fprint(rw, `{"message": "500 Internal Server Error"}`)
+				})
+			},
+			expectedError: "failed to access GitLab source repository ID 456",
+			expectComment: false,
+		},
+		{
+			name:              "Successful access posts no comment",
+			triggerTarget:     triggertype.PullRequest,
+			sourceProjectID:   456,
+			targetProjectID:   789,
+			pullRequestNumber: 42,
+			setupMockResponse: func(mux *http.ServeMux, _ *bool) {
+				mux.HandleFunc("/projects/456", func(rw http.ResponseWriter, _ *http.Request) {
+					rw.WriteHeader(http.StatusOK)
+					fmt.Fprint(rw, `{"id": 456, "name": "test-repo"}`)
+				})
+			},
+			expectedError: "",
+			expectComment: false,
+		},
+		{
+			name:              "Push event skips source project check entirely",
+			triggerTarget:     triggertype.Push,
+			sourceProjectID:   456,
+			targetProjectID:   789,
+			pullRequestNumber: 0,
+			setupMockResponse: func(mux *http.ServeMux, _ *bool) {
+				mux.HandleFunc("/projects/456", func(rw http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(rw, `{"id": 456, "name": "test-repo"}`)
+				})
+			},
+			expectedError: "",
+			expectComment: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient, mux, tearDown := thelp.Setup(t)
+			defer tearDown()
+
+			commentPosted := false
+			if tt.setupMockResponse != nil {
+				tt.setupMockResponse(mux, &commentPosted)
+			}
+
+			v := &Provider{gitlabClient: mockClient}
+			event := &info.Event{
+				Provider: &info.Provider{
+					Token: "test-token",
+				},
+				Organization:      "test-org",
+				Repository:        "test-repo",
+				TriggerTarget:     tt.triggerTarget,
+				SourceProjectID:   tt.sourceProjectID,
+				TargetProjectID:   tt.targetProjectID,
+				PullRequestNumber: tt.pullRequestNumber,
+			}
+
+			err := v.SetClient(ctx, run, event, nil, nil)
+
+			if tt.expectedError != "" {
+				assert.Assert(t, err != nil, "expected error but got none")
+				assert.ErrorContains(t, err, tt.expectedError)
+			} else {
+				assert.NilError(t, err)
+			}
+
+			assert.Equal(t, tt.expectComment, commentPosted, "comment posted mismatch")
+		})
+	}
 }

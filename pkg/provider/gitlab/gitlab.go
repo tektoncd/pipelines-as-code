@@ -215,7 +215,7 @@ func (v *Provider) GetConfig() *info.ProviderConfig {
 	}
 }
 
-func (v *Provider) SetClient(_ context.Context, run *params.Run, runevent *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
+func (v *Provider) SetClient(ctx context.Context, run *params.Run, runevent *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
 	var err error
 	if runevent.Provider.Token == "" {
 		return fmt.Errorf("no git_provider.secret has been set in the repo crd")
@@ -273,11 +273,23 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, runevent *info.
 		_, resp, err := v.Client().Projects.GetProject(runevent.SourceProjectID, &gitlab.GetProjectOptions{})
 		errmsg := fmt.Sprintf("failed to access GitLab source repository ID %d: please ensure token has 'read_repository' scope on that repository",
 			runevent.SourceProjectID)
+
+		var returnErr error
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
-			return fmt.Errorf("%s", errmsg)
+			returnErr = fmt.Errorf("%s", errmsg)
+		} else if err != nil {
+			returnErr = fmt.Errorf("%s: %w", errmsg, err)
 		}
-		if err != nil {
-			return fmt.Errorf("%s: %w", errmsg, err)
+
+		if returnErr != nil {
+			if runevent.PullRequestNumber > 0 {
+				marker := "<!-- pac-source-repo-inaccessible -->"
+				comment := fmt.Sprintf("%s\n%s", marker, formatSourceRepoInaccessibleComment(runevent.SourceProjectID))
+				if commentErr := v.CreateComment(ctx, runevent, comment, marker); commentErr != nil {
+					run.Clients.Log.Warnf("failed to post source repository access error as MR comment: %v", commentErr)
+				}
+			}
+			return returnErr
 		}
 	}
 
@@ -862,6 +874,13 @@ func (v *Provider) isHeadCommitOfBranch(runevent *info.Event, branchName string)
 	}
 
 	return fmt.Errorf("provided SHA %s is not the HEAD commit of the branch %s", runevent.SHA, branchName)
+}
+
+func formatSourceRepoInaccessibleComment(sourceProjectID int64) string {
+	return fmt.Sprintf("**Could not access source repository (project ID: %d)**\n\n"+
+		"Ensure the token has `read_repository` scope on the source project, "+
+		"or use a branch in the same repository instead of a fork.",
+		sourceProjectID)
 }
 
 func (v *Provider) GetTemplate(commentType provider.CommentType) string {
