@@ -183,6 +183,7 @@ func (l *listener) detectIncoming(ctx context.Context, event *info.Event, req *h
 			return false, nil, err
 		}
 		event.Provider.URL = enterpriseURL
+		event.GHEURL = enterpriseURL
 		event.Provider.Token = token
 		event.InstallationID = installationID
 		// Github app is not installed for provided repository url

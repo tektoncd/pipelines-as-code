@@ -266,6 +266,76 @@ func TestGetAndUpdateInstallationID(t *testing.T) {
 	assert.Equal(t, token, wantToken)
 }
 
+func TestGetAndUpdateInstallationIDIgnoresEnterpriseHostHeader(t *testing.T) {
+	tdata := testclient.Data{
+		Namespaces: []*corev1.Namespace{testNamespace},
+		Secret:     []*corev1.Secret{validSecret},
+	}
+	wantToken := "GOODTOKEN"
+	wantID := int64(120)
+	orgName := "org"
+	repoName := "repo"
+
+	fakeghclient, mux, serverURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+	logger, _ := logger.GetLogger()
+	run := &params.Run{
+		Clients: clients.Clients{
+			Log:            logger,
+			PipelineAsCode: stdata.PipelineAsCode,
+			Kube:           stdata.Kube,
+		},
+		Info: info.Info{
+			Pac: &info.PacOpts{
+				Settings: settings.Settings{},
+			},
+			Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
+		},
+	}
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	ctx = info.StoreNS(ctx, testNamespace.GetName())
+
+	gh := github.New()
+	gh.Run = run
+	jwtToken, err := gh.GenerateJWT(ctx, testNamespace.GetName(), stdata.Kube)
+	assert.NilError(t, err)
+
+	mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/installation", orgName, repoName), func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"id": %d}`, wantID)
+	})
+	mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", wantID), func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r)
+		w.Header().Set("Authorization", "Bearer "+jwtToken)
+		w.Header().Set("Accept", "application/vnd.github+json")
+		_, _ = fmt.Fprintf(w, `{"token": "%s"}`, wantToken)
+	})
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "repo",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL: fmt.Sprintf("https://github.com/%s/%s", orgName, repoName),
+		},
+	}
+
+	gprovider := &github.Provider{APIURL: &serverURL, Run: run}
+	gprovider.SetGithubClient(fakeghclient)
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", strings.NewReader(""))
+	req.Header.Set("X-GitHub-Enterprise-Host", "127.0.0.1:1")
+	ip := NewInstallation(req, run, repo, gprovider, testNamespace.GetName())
+	enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+	assert.NilError(t, err)
+	assert.Equal(t, enterpriseURL, "")
+	assert.Equal(t, installationID, wantID)
+	assert.Equal(t, token, wantToken)
+}
+
 func testMethod(t *testing.T, r *http.Request) {
 	want := "POST"
 	t.Helper()
@@ -293,6 +363,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 		wantErr             bool
 		wantInstallationID  int64
 		wantToken           string
+		wantEnterpriseHost  string
 		skip                bool
 		expectedErrorString string
 	}{
@@ -316,6 +387,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			wantErr:            false,
 			wantInstallationID: orgID,
 			wantToken:          wantToken,
+			wantEnterpriseHost: "matched",
 		},
 		{
 			name:    "repo and org installation fail, user installation succeeds",
@@ -340,6 +412,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			wantErr:            false,
 			wantInstallationID: userID,
 			wantToken:          wantToken,
+			wantEnterpriseHost: "matched",
 		},
 		{
 			name:    "all installations fail",
@@ -416,7 +489,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL)
 
 			ip := NewInstallation(httptest.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", strings.NewReader("")), run, repo, gprovider, testNamespace.GetName())
-			_, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+			enterpriseHost, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
 
 			if tt.wantErr {
 				assert.Assert(t, err != nil)
@@ -429,6 +502,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			assert.NilError(t, err)
 			assert.Equal(t, installationID, tt.wantInstallationID)
 			assert.Equal(t, token, tt.wantToken)
+			assert.Equal(t, enterpriseHost, tt.wantEnterpriseHost)
 		})
 	}
 }
