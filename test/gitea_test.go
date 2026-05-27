@@ -160,6 +160,42 @@ func TestGiteaGetTaskURI(t *testing.T) {
 	}
 }
 
+func TestGiteaRemoteTasksURLAllowlist(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	topts := &tgitea.TestOpts{
+		TargetEvent: triggertype.PullRequest.String(),
+		YAMLFiles: map[string]string{
+			".tekton/pipeline.yaml":                        "testdata/pipeline_in_tektondir.yaml",
+			".other-tasks/task-referenced-internally.yaml": "testdata/task_referenced_internally.yaml",
+			".tekton/pr.yaml":                              "testdata/pipelinerun_remote_task_annotations.yaml",
+		},
+		CheckForStatus:  "failure",
+		ExpectEvents:    true,
+		SkipEventsCheck: true,
+		ExtraArgs: map[string]string{
+			"RemoteTaskURL":  options.RemoteTaskURL,
+			"RemoteTaskName": options.RemoteTaskName,
+		},
+	}
+	topts.TargetRefName = names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
+	topts.TargetNS = topts.TargetRefName
+	topts.ParamsRun, topts.Opts, topts.GiteaCNX, _ = tgitea.Setup(ctx)
+	assert.NilError(t, topts.ParamsRun.Clients.NewClients(ctx, &topts.ParamsRun.Info))
+	ctx, err := cctx.GetControllerCtxInfo(ctx, topts.ParamsRun)
+	assert.NilError(t, err)
+	assert.NilError(t, pacrepo.CreateNS(ctx, topts.TargetNS, topts.ParamsRun))
+	cfgMapData := map[string]string{
+		"remote-tasks-url-allowlist": "nonexistent.invalid",
+	}
+	defer configmap.ChangeGlobalConfig(ctx, t, topts.ParamsRun, "pipelines-as-code", cfgMapData)()
+
+	_, f := tgitea.TestPR(t, topts)
+	defer f()
+
+	topts.Regexp = regexp.MustCompile(`not in the allowlist`)
+	tgitea.WaitForPullRequestCommentMatch(t, topts)
+}
+
 func TestGiteaUseDisplayName(t *testing.T) {
 	topts := &tgitea.TestOpts{
 		Regexp:      regexp.MustCompile(`.*The Task name is Task.*`),
