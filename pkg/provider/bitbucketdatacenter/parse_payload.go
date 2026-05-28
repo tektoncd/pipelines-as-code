@@ -107,7 +107,7 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 
 	switch e := eventPayload.(type) {
 	case *types.PullRequestEvent:
-		if provider.Valid(eventType, []string{"pr:from_ref_updated", "pr:opened", "pr:merged"}) {
+		if provider.Valid(eventType, []string{"pr:from_ref_updated", "pr:opened", "pr:merged", "pr:modified"}) {
 			processedEvent.TriggerTarget = triggertype.PullRequest
 			processedEvent.EventType = triggertype.PullRequest.String()
 		} else if provider.Valid(eventType, []string{"pr:comment:added", "pr:comment:edited"}) {
@@ -232,7 +232,7 @@ func parsePayloadType(event string) (any, error) {
 	var localEvent string
 	if strings.HasPrefix(event, "pr:") {
 		if !provider.Valid(event, []string{
-			"pr:from_ref_updated", "pr:opened", "pr:comment:added", "pr:comment:edited", "pr:merged",
+			"pr:from_ref_updated", "pr:opened", "pr:comment:added", "pr:comment:edited", "pr:merged", "pr:modified",
 		}) {
 			return nil, fmt.Errorf("event \"%s\" is not supported", event)
 		}

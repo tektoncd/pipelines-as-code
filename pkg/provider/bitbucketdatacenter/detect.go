@@ -38,7 +38,7 @@ func (v *Provider) Detect(req *http.Request, payload string, logger *zap.Sugared
 
 	switch e := eventPayload.(type) {
 	case *types.PullRequestEvent:
-		if provider.Valid(event, []string{"pr:from_ref_updated", "pr:opened", "pr:merged"}) {
+		if provider.Valid(event, []string{"pr:from_ref_updated", "pr:opened", "pr:merged", "pr:modified"}) {
 			return setLoggerAndProceed(true, "", nil)
 		}
 		if provider.Valid(event, []string{"pr:comment:added"}) {

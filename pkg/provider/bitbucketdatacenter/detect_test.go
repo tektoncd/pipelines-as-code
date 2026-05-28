@@ -73,6 +73,13 @@ func TestProviderDetect(t *testing.T) {
 			processReq: true,
 		},
 		{
+			name:       "pull_request modified event",
+			event:      types.PullRequestEvent{},
+			eventType:  "pr:modified",
+			isBS:       true,
+			processReq: true,
+		},
+		{
 			name: "retest comment",
 			event: types.PullRequestEvent{
 				Comment: types.ActivityComment{Text: "/retest"},
