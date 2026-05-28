@@ -61,6 +61,7 @@ Create a webhook on the repository following this guide:
   - Pull Request -> Opened
   - Pull Request -> Source branch updated
   - Pull Request -> Comments added
+  - Pull Request -> Merged
 
 ### Create the Secret
 
