@@ -124,6 +124,13 @@ func TestProviderDetect(t *testing.T) {
 			isBS:       true,
 			processReq: true,
 		},
+		{
+			name:       "pull_request user approval event",
+			event:      types.PullRequestEvent{},
+			eventType:  "pr:reviewer:approved",
+			isBS:       true,
+			processReq: true,
+		},
 	}
 
 	for _, tt := range tests {
