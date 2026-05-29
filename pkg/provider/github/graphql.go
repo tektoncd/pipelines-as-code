@@ -2,18 +2,13 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"maps"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v85/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
 	"go.uber.org/zap"
 )
 
@@ -87,38 +82,62 @@ func buildGraphQLEndpoint(p *Provider) (string, error) {
 	return parsedURL.String(), nil
 }
 
-// buildGraphQLQuery constructs a GraphQL query string with aliases for batch fetching multiple files.
-func buildGraphQLQuery(ref string, paths []string) string {
-	// Escape ref for GraphQL string (escape quotes and backslashes)
-	escapedRef := strings.ReplaceAll(ref, `\`, `\\`)
-	escapedRef = strings.ReplaceAll(escapedRef, `"`, `\"`)
-
-	aliases := make([]string, 0, len(paths))
-	for i, path := range paths {
-		// Escape path for GraphQL string (escape quotes and backslashes)
-		escapedPath := strings.ReplaceAll(path, `\`, `\\`)
-		escapedPath = strings.ReplaceAll(escapedPath, `"`, `\"`)
-		aliases = append(aliases, fmt.Sprintf(`    file%d: object(expression: "%s:%s") {
-      ... on Blob {
-        text
-      }
-    }`, i, escapedRef, escapedPath))
-	}
-
-	query := fmt.Sprintf(`query($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) {
-%s
-  }
-}`, strings.Join(aliases, "\n"))
-
-	return query
+// TektonDirResult holds the result of fetching tekton directory via GraphQL.
+type TektonDirResult struct {
+	SHA          string            // Resolved SHA
+	FileContents map[string][]byte // YAML file contents by path (only .yaml/.yml blobs)
 }
 
-// graphQLResponse represents the structure of a GraphQL API response.
-type graphQLResponse struct {
+// buildTektonDirQuery constructs a GraphQL query for fetching tekton directory tree + blob contents.
+// Uses the provided SHA to fetch the .tekton tree with inline blob contents.
+func buildTektonDirQuery(sha, path string) (query string, variables map[string]any) {
+	tektonExpr := sha + ":" + path
+
+	query = `query($owner: String!, $name: String!, $tektonExpr: String!) {
+  repository(owner: $owner, name: $name) {
+    tektonTree: object(expression: $tektonExpr) {
+      ... on Tree {
+        entries {
+          name
+          type
+          path
+          oid
+          object {
+            ... on Blob {
+              text
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+
+	variables = map[string]any{
+		"tektonExpr": tektonExpr,
+	}
+
+	return query, variables
+}
+
+// tektonDirResponse represents the GraphQL response structure for tekton directory fetch.
+type tektonDirResponse struct {
 	Data struct {
-		Repository map[string]struct {
-			Text *string `json:"text"`
+		Repository struct {
+			TektonTree *struct {
+				// Tree response has entries field
+				Entries []struct {
+					Name   string `json:"name"`
+					Type   string `json:"type"`
+					Path   string `json:"path"`
+					Oid    string `json:"oid"`
+					Object *struct {
+						Text *string `json:"text"`
+					} `json:"object,omitempty"`
+				} `json:"entries,omitempty"`
+				// Blob response has text field (indicates .tekton is a file, not directory)
+				Text *string `json:"text,omitempty"`
+			} `json:"tektonTree"`
 		} `json:"repository"`
 	} `json:"data"`
 	Errors []struct {
@@ -126,55 +145,12 @@ type graphQLResponse struct {
 	} `json:"errors,omitempty"`
 }
 
-type rateLimitHeaders struct {
-	limit     string
-	remaining string
-	reset     string
-}
-
-func getRateLimitHeaders(header http.Header) rateLimitHeaders {
-	return rateLimitHeaders{
-		limit:     header.Get("X-RateLimit-Limit"),
-		remaining: header.Get("X-RateLimit-Remaining"),
-		reset:     header.Get("X-RateLimit-Reset"),
-	}
-}
-
-// fetchFiles fetches multiple file contents using GraphQL batch queries.
-// Returns a map of path -> content.
-func (c *graphQLClient) fetchFiles(ctx context.Context, owner, repo, ref string, paths []string) (map[string][]byte, error) {
-	if len(paths) == 0 {
-		return make(map[string][]byte), nil
-	}
-
-	// Limit batch size to avoid query complexity issues
-	const maxBatchSize = 50
-	result := make(map[string][]byte, len(paths))
-	for start := 0; start < len(paths); start += maxBatchSize {
-		end := min(start+maxBatchSize, len(paths))
-		batch := paths[start:end]
-		batchResult, err := c.fetchFilesBatch(ctx, owner, repo, ref, batch)
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(result, batchResult)
-	}
-
-	return result, nil
-}
-
-// fetchFilesBatch fetches multiple file contents in a single GraphQL query.
-// Returns a map of path -> content.
-func (c *graphQLClient) fetchFilesBatch(ctx context.Context, owner, repo, ref string, paths []string) (map[string][]byte, error) {
-	if len(paths) == 0 {
-		return make(map[string][]byte), nil
-	}
-
-	query := buildGraphQLQuery(ref, paths)
-	variables := map[string]any{
-		"owner": owner,
-		"name":  repo,
-	}
+// fetchTektonDirGraphQL fetches the tekton directory tree + blob contents using GraphQL.
+// Fetches the .tekton tree at the given SHA with inline blob contents in a single request.
+func (c *graphQLClient) fetchTektonDirGraphQL(ctx context.Context, owner, repo, sha, path string) (*TektonDirResult, error) {
+	query, variables := buildTektonDirQuery(sha, path)
+	variables["owner"] = owner
+	variables["name"] = repo
 
 	requestBody := map[string]any{
 		"query":     query,
@@ -185,51 +161,18 @@ func (c *graphQLClient) fetchFilesBatch(ctx context.Context, owner, repo, ref st
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphQL request: %w", err)
 	}
-	req = req.WithContext(ctx)
 
-	// Record metrics for GraphQL API call
-	if c.logger != nil {
-		providerMetrics.RecordAPIUsage(c.logger, c.provider.providerName, c.triggerEvent, c.repo)
-	}
-
-	start := time.Now()
-	resp, err := c.httpClient.Do(req)
-	duration := time.Since(start)
-
+	graphQLResp, resp, err := wrapAPI(c.provider, "graphql_get_tekton_dir", func() (tektonDirResponse, *github.Response, error) {
+		var graphQLResp tektonDirResponse
+		resp, err := c.ghClient.Do(ctx, req.WithContext(ctx), &graphQLResp)
+		return graphQLResp, resp, err
+	})
 	if err != nil {
-		if c.logger != nil {
-			c.logger.Debugw("GraphQL request failed",
-				"error", err.Error(),
-				"duration_ms", duration.Milliseconds(),
-			)
-		}
-		return nil, fmt.Errorf("GraphQL request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	rateLimit := getRateLimitHeaders(resp.Header)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read GraphQL response: %w", err)
+		return nil, fmt.Errorf("error fetching tekton directory using GraphQL: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if c.logger != nil {
-			c.logger.Debugw("GraphQL request returned non-200 status",
-				"status_code", resp.StatusCode,
-				"response", string(body),
-				"rate_limit", rateLimit.limit,
-				"rate_limit_remaining", rateLimit.remaining,
-				"rate_limit_reset", rateLimit.reset,
-			)
-		}
-		return nil, fmt.Errorf("GraphQL request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var graphQLResp graphQLResponse
-	if err := json.Unmarshal(body, &graphQLResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal GraphQL response: %w", err)
+		return nil, fmt.Errorf("GraphQL request failed with status %d: %w", resp.StatusCode, err)
 	}
 
 	if len(graphQLResp.Errors) > 0 {
@@ -238,36 +181,40 @@ func (c *graphQLClient) fetchFilesBatch(ctx context.Context, owner, repo, ref st
 			errorMsgs[i] = e.Message
 		}
 		if c.logger != nil {
-			c.logger.Debugw("GraphQL returned errors",
+			c.logger.Debugw("GraphQL tekton dir returned errors",
 				"errors", strings.Join(errorMsgs, "; "),
 			)
 		}
 		return nil, fmt.Errorf("GraphQL errors: %s", strings.Join(errorMsgs, "; "))
 	}
 
-	result := make(map[string][]byte, len(paths))
-	for i, path := range paths {
-		alias := fmt.Sprintf("file%d", i)
-		blobData, ok := graphQLResp.Data.Repository[alias]
-		if !ok {
-			return nil, fmt.Errorf("file %s (alias %s) not found in GraphQL response", path, alias)
-		}
-
-		if blobData.Text == nil {
-			return nil, fmt.Errorf("file %s returned null content (may be binary)", path)
-		}
-
-		result[path] = []byte(*blobData.Text)
+	result := &TektonDirResult{
+		SHA:          sha,
+		FileContents: make(map[string][]byte),
 	}
 
-	if c.logger != nil {
-		c.logger.Debugw("GraphQL batch fetch completed",
-			"files_requested", len(paths),
-			"duration_ms", duration.Milliseconds(),
-			"rate_limit", rateLimit.limit,
-			"rate_limit_remaining", rateLimit.remaining,
-			"rate_limit_reset", rateLimit.reset,
-		)
+	// Check if tektonTree exists and what type it is
+	if graphQLResp.Data.Repository.TektonTree != nil {
+		// If TektonTree has Text field, it's a Blob (file), not a Tree (directory)
+		if graphQLResp.Data.Repository.TektonTree.Text != nil {
+			return nil, fmt.Errorf("%s has been found but is not a directory", path)
+		}
+
+		// Extract YAML blob contents from Tree entries (filter for .yaml/.yml files during parsing)
+		for _, entry := range graphQLResp.Data.Repository.TektonTree.Entries {
+			// Only process yaml/yml blobs
+			if entry.Type != "blob" {
+				continue
+			}
+			if !strings.HasSuffix(entry.Path, ".yaml") && !strings.HasSuffix(entry.Path, ".yml") {
+				continue
+			}
+
+			// Extract blob content
+			if entry.Object != nil && entry.Object.Text != nil {
+				result.FileContents[entry.Path] = []byte(*entry.Object.Text)
+			}
+		}
 	}
 
 	return result, nil

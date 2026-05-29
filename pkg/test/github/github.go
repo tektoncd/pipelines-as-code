@@ -68,6 +68,107 @@ type graphQLFileMapType map[string]struct {
 	isdir     bool
 }
 
+// graphQLRequest represents a GraphQL request structure.
+type graphQLRequest struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
+}
+
+// handleTektonTreeQuery handles the new GraphQL query format for fetching tekton tree with inline blobs.
+func handleTektonTreeQuery(w http.ResponseWriter, graphQLReq graphQLRequest, allFiles graphQLFileMapType) {
+	// Extract tektonExpr from variables (e.g., "sha123:.tekton")
+	tektonExpr, ok := graphQLReq.Variables["tektonExpr"].(string)
+	if !ok {
+		http.Error(w, "Missing tektonExpr variable", http.StatusBadRequest)
+		return
+	}
+
+	// Parse tektonExpr: "ref:path" -> extract path
+	parts := strings.SplitN(tektonExpr, ":", 2)
+	if len(parts) != 2 {
+		http.Error(w, "Invalid tektonExpr format", http.StatusBadRequest)
+		return
+	}
+	tektonPath := parts[1]
+
+	// Check if .tekton itself is a file in allFiles
+	if fileInfo, exists := allFiles[tektonPath]; exists {
+		// .tekton is a file, not a directory - return Blob response (no entries field)
+		content, err := os.ReadFile(fileInfo.name)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to read file: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Return Blob object response (this will cause the implementation to see no Tree)
+		responseData := map[string]any{
+			"data": map[string]any{
+				"repository": map[string]any{
+					"tektonTree": map[string]any{
+						"text": string(content), // Blob has text field, not entries
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(responseData)
+		return
+	}
+
+	// Build tree entries for all files under the tekton path
+	entries := []map[string]any{}
+	for relPath, fileInfo := range allFiles {
+		// Check if file is under the tekton path
+		// For .tekton directory, files should be like "pipeline.yaml", "task.yaml", "subdir/file.yaml"
+		if !strings.HasPrefix(relPath, tektonPath+"/") && relPath != tektonPath {
+			continue
+		}
+
+		// Extract path relative to tekton directory
+		pathInTekton := strings.TrimPrefix(relPath, tektonPath+"/")
+		if pathInTekton == "" {
+			continue
+		}
+
+		// Read file content
+		content, err := os.ReadFile(fileInfo.name)
+		if err != nil {
+			continue
+		}
+
+		// Only include .yaml and .yml files (matching implementation behavior)
+		if !strings.HasSuffix(relPath, ".yaml") && !strings.HasSuffix(relPath, ".yml") {
+			continue
+		}
+
+		entry := map[string]any{
+			"name": filepath.Base(pathInTekton),
+			"type": "blob",
+			"path": pathInTekton,
+			"oid":  fileInfo.sha,
+			"object": map[string]any{
+				"text": string(content),
+			},
+		}
+		entries = append(entries, entry)
+	}
+
+	// Build response
+	responseData := map[string]any{
+		"data": map[string]any{
+			"repository": map[string]any{
+				"tektonTree": map[string]any{
+					"entries": entries,
+				},
+			},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(responseData)
+}
+
 // SetupGitTree Take a dir and fake a full GitTree GitHub api calls reply recursively over a muxer.
 func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Event, recursive bool) {
 	type file struct {
@@ -155,7 +256,7 @@ func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Even
 		fmt.Fprint(rw, string(b))
 	})
 
-	// Setup GraphQL endpoint handler for batch file fetching (only once per mux)
+	// Setup GraphQL endpoint handler for tekton directory fetching (only once per mux)
 	// Only register GraphQL handler once (at the root level, when recursive=false)
 	if !recursive {
 		// Walk the entire directory tree to collect all files for the GraphQL handler
@@ -184,90 +285,13 @@ func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Even
 					return
 				}
 
-				var graphQLReq struct {
-					Query     string         `json:"query"`
-					Variables map[string]any `json:"variables"`
-				}
+				var graphQLReq graphQLRequest
 				if err := json.NewDecoder(r.Body).Decode(&graphQLReq); err != nil {
 					http.Error(w, fmt.Sprintf("Invalid GraphQL request: %v", err), http.StatusBadRequest)
 					return
 				}
 
-				// Build response with file contents
-				repositoryData := make(map[string]any)
-
-				// Parse query to extract aliases and paths
-				queryLines := strings.SplitSeq(graphQLReq.Query, "\n")
-				for line := range queryLines {
-					line = strings.TrimSpace(line)
-					if strings.Contains(line, ": object(expression:") && strings.Contains(line, "file") {
-						// Extract alias (e.g., "file0")
-						aliasEnd := strings.Index(line, ":")
-						if aliasEnd <= 0 {
-							continue
-						}
-						alias := strings.TrimSpace(line[:aliasEnd])
-
-						// Extract expression value between quotes: "ref:path"
-						exprStart := strings.Index(line, `expression: "`)
-						if exprStart < 0 {
-							continue
-						}
-						exprStart += len(`expression: "`)
-						exprEnd := strings.Index(line[exprStart:], `"`)
-						if exprEnd < 0 {
-							continue
-						}
-						expr := line[exprStart : exprStart+exprEnd]
-						// Unescape the expression (handle \" and \\)
-						expr = strings.ReplaceAll(expr, `\"`, `"`)
-						expr = strings.ReplaceAll(expr, `\\`, `\`)
-						// Split "ref:path" and take path
-						parts := strings.SplitN(expr, ":", 2)
-						if len(parts) != 2 {
-							continue
-						}
-						path := parts[1]
-
-						// Look up file by path in the file map
-						var foundFile struct {
-							sha, name string
-							isdir     bool
-						}
-						var found bool
-						if f, ok := allFiles[path]; ok {
-							foundFile = f
-							found = true
-						} else {
-							// Try to find by matching the end of the path or other variations
-							for k, f := range allFiles {
-								if strings.HasSuffix(k, "/"+path) || k == path {
-									foundFile = f
-									found = true
-									break
-								}
-							}
-						}
-
-						if found {
-							content, err := os.ReadFile(foundFile.name)
-							if err == nil {
-								repositoryData[alias] = map[string]any{
-									"text": string(content),
-								}
-							}
-						}
-					}
-				}
-
-				responseData := map[string]any{
-					"data": map[string]any{
-						"repository": repositoryData,
-					},
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(responseData)
+				handleTektonTreeQuery(w, graphQLReq, allFiles)
 			})
 		}
 	}

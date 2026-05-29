@@ -252,10 +252,8 @@ func TestGetTektonDir(t *testing.T) {
 			expectedString:       "PipelineRun",
 			treepath:             "testdata/tree/simple",
 			filterMessageSnippet: "Using PipelineRun definition from source pull_request tekton/cat#0",
-			// 1. Get Repo root objects
-			// 2. Get Tekton Dir objects
-			// 3. GraphQL batch fetch for 2 files (replaces 2 REST calls)
-			expectedGHApiCalls: 3,
+			// 1. Single GraphQL call fetches tekton tree + inline blobs
+			expectedGHApiCalls: 1,
 		},
 		{
 			name: "test no subtree on push",
@@ -268,10 +266,8 @@ func TestGetTektonDir(t *testing.T) {
 			expectedString:       "PipelineRun",
 			treepath:             "testdata/tree/simple",
 			filterMessageSnippet: "Using PipelineRun definition from source push",
-			// 1. Get Repo root objects
-			// 2. Get Tekton Dir objects
-			// 3. GraphQL batch fetch for 2 files (replaces 2 REST calls)
-			expectedGHApiCalls: 3,
+			// 1. Single GraphQL call fetches tekton tree + inline blobs
+			expectedGHApiCalls: 1,
 		},
 		{
 			name: "test provenance default_branch ",
@@ -285,10 +281,8 @@ func TestGetTektonDir(t *testing.T) {
 			provenance:           "default_branch",
 			filterMessageSnippet: "Using PipelineRun definition from default_branch: main",
 			// 1. Resolve default branch to a commit SHA
-			// 2. Get Repo root objects
-			// 3. Get Tekton Dir objects
-			// 4. GraphQL batch fetch for 2 files
-			expectedGHApiCalls: 4,
+			// 2. Single GraphQL call fetches tekton tree + inline blobs
+			expectedGHApiCalls: 2,
 		},
 		{
 			name: "test with subtree",
@@ -299,10 +293,8 @@ func TestGetTektonDir(t *testing.T) {
 			},
 			expectedString: "FROMSUBTREE",
 			treepath:       "testdata/tree/subdir",
-			// 1. Get Repo root objects
-			// 2. Get Tekton Dir objects
-			// 3-5. Get object content for each object (foo/bar/pipeline.yaml)
-			expectedGHApiCalls: 3,
+			// 1. Single GraphQL call fetches tekton tree + inline blobs (including subdirs)
+			expectedGHApiCalls: 1,
 		},
 		{
 			name: "test with badly formatted yaml",
@@ -314,10 +306,9 @@ func TestGetTektonDir(t *testing.T) {
 			expectedString: "FROMSUBTREE",
 			treepath:       "testdata/tree/badyaml",
 			wantErr:        "error unmarshalling yaml file badyaml.yaml: yaml: line 2: did not find expected key",
-			// 1. Get Repo root objects
-			// 2. Get Tekton Dir objects
-			// 3. Get object content for object (badyaml.yaml)
-			expectedGHApiCalls: 3,
+			// 1. Single GraphQL call fetches tekton tree + inline blobs
+			// Error occurs during YAML validation after fetch
+			expectedGHApiCalls: 1,
 		},
 		{
 			name: "test no tekton directory",
@@ -432,15 +423,48 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 		skipSetupGitTree bool
 	}{
 		{
-			name: "graphql batch fetch reduces api calls",
+			name: "graphql fetch tekton dir with inline blobs",
 			event: &info.Event{
 				Organization:  "tekton",
 				Repository:    "cat",
 				TriggerTarget: triggertype.PullRequest,
 			},
-			treepath:         "testdata/tree/simple",
-			wantLogSnippet:   "GraphQL batch fetch",
-			expectedAPICount: 3,
+			skipSetupGitTree: true,
+			setup: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				shaDir := fmt.Sprintf("%x", sha256.Sum256([]byte("testdata/tree/simple")))
+				event.SHA = shaDir
+
+				// Setup GraphQL endpoint with inline blob contents
+				mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"data": map[string]any{
+							"repository": map[string]any{
+								"tektonTree": map[string]any{
+									"entries": []map[string]any{
+										{
+											"name":   "pipeline.yaml",
+											"type":   "blob",
+											"path":   "pipeline.yaml",
+											"oid":    "pipeline-sha",
+											"object": map[string]any{"text": "kind: Pipeline\nmetadata:\n  name: test\n"},
+										},
+										{
+											"name":   "task.yaml",
+											"type":   "blob",
+											"path":   "task.yaml",
+											"oid":    "task-sha",
+											"object": map[string]any{"text": "kind: Task\nmetadata:\n  name: test\n"},
+										},
+									},
+								},
+							},
+						},
+					})
+				})
+			},
+			wantLogSnippet:   "GitHub API call completed",
+			expectedAPICount: 1, // Single GraphQL call fetches tree + blobs
 		},
 		{
 			name: "graphql error handling",
@@ -500,7 +524,7 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 					http.Error(w, "GraphQL endpoint not available", http.StatusNotFound)
 				})
 			},
-			wantErr: "failed to fetch .tekton files via GraphQL",
+			wantErr: "GraphQL request failed with status 404",
 		},
 		{
 			name: "default branch uses resolved sha for graphql",
@@ -514,7 +538,6 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 			setup: func(t *testing.T, mux *http.ServeMux, _ *info.Event) {
 				t.Helper()
 				resolvedSHA := "resolved-default-branch-sha"
-				tektonDirSHA := "tektondirsha"
 
 				mux.HandleFunc("/repos/tekton/cat/branches/main", func(rw http.ResponseWriter, _ *http.Request) {
 					branch := &github.Branch{
@@ -526,58 +549,44 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 					b, _ := json.Marshal(branch)
 					fmt.Fprint(rw, string(b))
 				})
-				mux.HandleFunc("/repos/tekton/cat/git/trees/"+resolvedSHA, func(rw http.ResponseWriter, _ *http.Request) {
-					tree := &github.Tree{
-						SHA: github.Ptr(resolvedSHA),
-						Entries: []*github.TreeEntry{
-							{
-								Path: github.Ptr(".tekton"),
-								Type: github.Ptr("tree"),
-								SHA:  github.Ptr(tektonDirSHA),
-							},
-						},
-					}
-					b, _ := json.Marshal(tree)
-					fmt.Fprint(rw, string(b))
-				})
-				mux.HandleFunc("/repos/tekton/cat/git/trees/"+tektonDirSHA, func(rw http.ResponseWriter, _ *http.Request) {
-					tree := &github.Tree{
-						SHA: github.Ptr(tektonDirSHA),
-						Entries: []*github.TreeEntry{
-							{
-								Path: github.Ptr("pipeline.yaml"),
-								Type: github.Ptr("blob"),
-								SHA:  github.Ptr("pipeline-sha"),
-							},
-							{
-								Path: github.Ptr("pipelinerun.yaml"),
-								Type: github.Ptr("blob"),
-								SHA:  github.Ptr("pipelinerun-sha"),
-							},
-						},
-					}
-					b, _ := json.Marshal(tree)
-					fmt.Fprint(rw, string(b))
-				})
 				mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, r *http.Request) {
 					var graphQLReq struct {
-						Query string `json:"query"`
+						Query     string         `json:"query"`
+						Variables map[string]any `json:"variables"`
 					}
 					assert.NilError(t, json.NewDecoder(r.Body).Decode(&graphQLReq))
-					assert.Assert(t, strings.Contains(graphQLReq.Query, resolvedSHA+":.tekton/pipeline.yaml"), graphQLReq.Query)
-					assert.Assert(t, !strings.Contains(graphQLReq.Query, `main:.tekton/pipeline.yaml`), graphQLReq.Query)
+					// New implementation uses tektonExpr variable: "resolvedSHA:.tekton"
+					assert.Assert(t, strings.Contains(graphQLReq.Query, "tektonTree:"), graphQLReq.Query)
+					assert.Assert(t, graphQLReq.Variables["tektonExpr"] == resolvedSHA+":.tekton", "expected tektonExpr=%s:.tekton, got %v", resolvedSHA, graphQLReq.Variables["tektonExpr"])
 
+					// Return tree structure with inline blob contents
 					_ = json.NewEncoder(w).Encode(map[string]any{
 						"data": map[string]any{
 							"repository": map[string]any{
-								"file0": map[string]any{"text": "kind: Pipeline\nmetadata:\n  name: pipeline\n"},
-								"file1": map[string]any{"text": "kind: PipelineRun\nmetadata:\n  name: run\n"},
+								"tektonTree": map[string]any{
+									"entries": []map[string]any{
+										{
+											"name":   "pipeline.yaml",
+											"type":   "blob",
+											"path":   "pipeline.yaml",
+											"oid":    "pipeline-sha",
+											"object": map[string]any{"text": "kind: Pipeline\nmetadata:\n  name: pipeline\n"},
+										},
+										{
+											"name":   "pipelinerun.yaml",
+											"type":   "blob",
+											"path":   "pipelinerun.yaml",
+											"oid":    "pipelinerun-sha",
+											"object": map[string]any{"text": "kind: PipelineRun\nmetadata:\n  name: run\n"},
+										},
+									},
+								},
 							},
 						},
 					})
 				})
 			},
-			expectedAPICount: 4,
+			expectedAPICount: 2, // 1 for get_default_branch + 1 for GraphQL
 		},
 	}
 
