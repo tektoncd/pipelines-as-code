@@ -5,7 +5,7 @@ weight: 1
 
 This page covers how to write PipelineRun definitions that Pipelines-as-Code picks up from your `.tekton/` directory. Use it when you need to define CI/CD pipelines triggered by Git events.
 
-Pipelines-as-Code follows the standard Tekton template format as closely as possible. You write your templates as `.yaml` files in the `.tekton/` directory at the top level of your repository, and Pipelines-as-Code runs them. You can reference YAML files in other repositories using [remote HTTP URLs]({{< relref "/docs/guides/pipeline-resolution#remote-http-url" >}}), but PipelineRuns only trigger from events in the repository that contains the `.tekton/` directory.
+Pipelines-as-Code follows the standard Tekton template format as closely as possible. You write your templates as `.yaml` files in the `.tekton/` directory at the top level of your repository, and Pipelines-as-Code runs them. You can reference YAML files in other repositories using [remote URLs]({{< relref "/docs/guides/pipeline-resolution#remote-url" >}}), but PipelineRuns only trigger from events in the repository that contains the `.tekton/` directory.
 
 Using its [resolver]({{< relref "/docs/guides/pipeline-resolution" >}}), Pipelines-as-Code bundles each PipelineRun with all its referenced Tasks into a single self-contained PipelineRun with no external dependencies.
 

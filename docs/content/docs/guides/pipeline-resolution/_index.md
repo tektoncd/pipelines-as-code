@@ -3,7 +3,7 @@ title: Resolver
 weight: 3
 ---
 
-This page explains how the Pipelines-as-Code resolver processes your `.tekton/` directory and assembles self-contained PipelineRuns. It covers the overall resolution process and the `pipelinesascode.tekton.dev/task` annotation for fetching tasks from Artifact Hub, HTTP URLs, or your repository. For the `pipelinesascode.tekton.dev/pipeline` annotation that references remote Pipelines, see [Remote Pipelines]({{< relref "remote-pipelines" >}}).
+This page explains how the Pipelines-as-Code resolver processes your `.tekton/` directory and assembles self-contained PipelineRuns. It covers the overall resolution process and the `pipelinesascode.tekton.dev/task` annotation for fetching tasks from Artifact Hub, remote URLs, or your repository. For the `pipelinesascode.tekton.dev/pipeline` annotation that references remote Pipelines, see [Remote Pipelines]({{< relref "remote-pipelines" >}}).
 
 The resolver exists to solve a practical problem: Tekton PipelineRuns can reference external Tasks and Pipelines by name, but those references must be available on the cluster at runtime. Rather than requiring you to pre-install every Task, Pipelines-as-Code resolves all references at submission time and embeds everything into a single PipelineRun. This ensures your pipeline is fully self-contained and portable.
 
@@ -36,7 +36,7 @@ If you need to test your PipelineRun locally before sending it in a pull request
 
 ## Remote task annotations
 
-Remote task annotations let you pull Task and Pipeline definitions from external sources -- such as Artifact Hub, HTTP URLs, or other repositories -- without committing them to your `.tekton/` directory. Pipelines-as-Code fetches and inlines them during resolution.
+Remote task annotations let you pull Task and Pipeline definitions from external sources -- such as Artifact Hub, remote URLs, or other repositories -- without committing them to your `.tekton/` directory. Pipelines-as-Code fetches and inlines them during resolution.
 
 If the resolver finds a PipelineRun referencing a remote task or Pipeline through an annotation, it automatically fetches and inlines the resource.
 
@@ -57,7 +57,7 @@ pipelinesascode.tekton.dev/task: "[git-clone, pylint]"
 ### Hub support for tasks
 
 {{< callout type="warning" >}}
-**Deprecated**: Tekton Hub integration (the `tektonhub` catalog type) is deprecated and will be removed in a future release. If you are using a self-hosted Tekton Hub instance, please migrate to [Artifact Hub](https://artifacthub.io) or fetch tasks directly from a [remote URL](#remote-http-url) or [git repository](#tasks-inside-the-repository). The default Artifact Hub integration is unaffected.
+**Deprecated**: Tekton Hub integration (the `tektonhub` catalog type) is deprecated and will be removed in a future release. If you are using a self-hosted Tekton Hub instance, please migrate to [Artifact Hub](https://artifacthub.io) or fetch tasks directly from a [remote URL](#remote-url) or [git repository](#tasks-inside-the-repository). The default Artifact Hub integration is unaffected.
 {{< /callout >}}
 
 [Artifact Hub](https://artifacthub.io/packages/search?kind=7&kind=11) is a public registry where the Tekton community publishes reusable Tasks and Pipelines. When you reference a task by name alone, Pipelines-as-Code fetches it from Artifact Hub by default.
@@ -108,15 +108,17 @@ There is no fallback between different hubs. If Pipelines-as-Code does not find 
 
 There is no support for custom hubs from the CLI when using the `tkn pac resolve` command.
 
-### Remote HTTP URL
+### Remote URL
 
-If the annotation value starts with `http://` or `https://`, Pipelines-as-Code fetches the task directly from that remote URL:
+If the annotation value starts with `https://`, Pipelines-as-Code fetches the task directly after applying the remote URL safety checks.
+
+Plaintext `http://` URLs are disabled by default. A cluster operator can opt in for a specific host by adding an `http://` entry to `remote-tasks-url-allowlist`.
 
 ```yaml
   pipelinesascode.tekton.dev/task: "[https://remote.url/task.yaml]"
 ```
 
-### Remote HTTP URL from a private repository
+### Remote URLs from a private repository
 
 If you use the GitHub or GitLab provider and the remote task URL uses the same host as the Repository CR, Pipelines-as-Code uses the provided token to fetch the URL through the GitHub or GitLab API. This lets you reference tasks from private repositories without exposing credentials.
 
@@ -126,11 +128,11 @@ When you use the GitHub provider and your repository URL looks like this:
 
 <https://github.com/organization/repository>
 
-and the remote HTTP URL is a GitHub "blob" URL:
+and the remote URL is a GitHub "blob" URL:
 
 <https://github.com/organization/repository/blob/mainbranch/path/file>
 
-If the remote HTTP URL has a slash (`/`) in the branch name, you need to URL-encode it with the `%2F` character:
+If the remote URL has a slash (`/`) in the branch name, you need to URL-encode it with the `%2F` character:
 
 <https://github.com/organization/repository/blob/feature%2Fmainbranch/path/file>
 

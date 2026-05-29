@@ -116,6 +116,33 @@ remote-tasks: "true"
 
 {{< /param >}}
 
+{{< param name="remote-tasks-url-allowlist" type="string" default="" id="param-remote-tasks-url-allowlist" >}}
+Restricts remote annotation URLs to a comma-separated list of hosts. Leave empty to allow HTTPS fetches from any public host after IP-range safety checks. Bare hosts and `https://` entries allow HTTPS; plaintext HTTP requires an explicit `http://` entry for the host. Wildcards such as `*.example.com` match host suffixes; broad patterns such as `*.com` are allowed but risky and should be used only when the operator intends that scope.
+
+```yaml
+remote-tasks-url-allowlist: "raw.githubusercontent.com,https://gitlab.example.com,http://internal.example.com"
+```
+
+{{< /param >}}
+
+{{< param name="remote-tasks-url-blocked-cidrs" type="string" default="" id="param-remote-tasks-url-blocked-cidrs" >}}
+Adds comma-separated CIDRs that remote annotation URLs must not reach. Pipelines-as-Code always blocks loopback, link-local, private, multicast, unspecified, and shared address space. These built-in checks block typical Kubernetes service targets when they resolve to private cluster IPs; use this setting for any additional cluster-specific pod or service CIDRs.
+
+```yaml
+remote-tasks-url-blocked-cidrs: "10.128.0.0/14,172.30.0.0/16"
+```
+
+{{< /param >}}
+
+{{< param name="remote-tasks-url-max-response-size" type="integer" default="1048576" id="param-remote-tasks-url-max-response-size" >}}
+Maximum response size, in bytes, for remote annotation fetches.
+
+```yaml
+remote-tasks-url-max-response-size: "1048576"
+```
+
+{{< /param >}}
+
 ### Dashboard Integration
 
 {{< param name="tekton-dashboard-url" type="string" id="param-tekton-dashboard-url" >}}
@@ -364,6 +391,9 @@ data:
   hub-url: "https://artifacthub.io/api/v1"
   hub-catalog-type: "artifacthub"
   remote-tasks: "true"
+  remote-tasks-url-allowlist: ""
+  remote-tasks-url-blocked-cidrs: ""
+  remote-tasks-url-max-response-size: "1048576"
 
   tekton-dashboard-url: "https://tekton.example.com"
 

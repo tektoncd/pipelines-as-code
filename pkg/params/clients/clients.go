@@ -26,6 +26,8 @@ const (
 	// of 100 seconds so using that value.
 	ConnectMaxWaitTime = 100 * time.Second
 	RequestMaxWaitTime = 100 * time.Second
+
+	DefaultRemoteResourceMaxResponseBytes int64 = 1024 * 1024
 )
 
 type Clients struct {
