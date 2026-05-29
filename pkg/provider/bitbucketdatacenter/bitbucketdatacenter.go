@@ -276,9 +276,6 @@ func removeLastSegment(urlStr string) string {
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, _ *events.EventEmitter) error {
-	if event.Provider.User == "" {
-		return fmt.Errorf("no spec.git_provider.user has been set in the repo crd")
-	}
 	if event.Provider.Token == "" {
 		return fmt.Errorf("no spec.git_provider.secret has been set in the repo crd")
 	}
@@ -317,12 +314,31 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 	v.run = run
 	v.repo = repo
 	v.triggerEvent = event.EventType
-	_, resp, err := v.Client().Users.FindLogin(ctx, event.Provider.User)
+
+	var resp *scm.Response
+	var err error
+	if event.Provider.User != "" {
+		_, resp, err = v.Client().Users.FindLogin(ctx, event.Provider.User)
+	} else {
+		if repo == nil {
+			return fmt.Errorf("cannot find repository CR")
+		}
+		in := &scm.Request{
+			Method: "GET",
+			Path:   repo.Spec.URL,
+			Header: nil, // transport will inject Authorization header
+			Body:   nil,
+		}
+		resp, err = v.Client().Do(ctx, in)
+	}
 	if resp != nil && resp.Status == http.StatusUnauthorized {
-		return fmt.Errorf("cannot get user %s with token: %w", event.Provider.User, err)
+		if event.Provider.User != "" {
+			return fmt.Errorf("failed validation of user %s with provided token: %w", event.Provider.User, err)
+		}
+		return fmt.Errorf("token validation failed: unauthorized")
 	}
 	if err != nil {
-		return fmt.Errorf("cannot get user %s: %w", event.Provider.User, err)
+		return fmt.Errorf("user validation failed with: %w", err)
 	}
 
 	return nil

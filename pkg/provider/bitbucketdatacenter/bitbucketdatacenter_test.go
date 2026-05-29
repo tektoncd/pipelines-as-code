@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -309,13 +310,14 @@ func TestSetClient(t *testing.T) {
 		name          string
 		apiURL        string
 		opts          *info.Event
+		repo          *v1alpha1.Repository
 		wantErrSubstr string
 		muxUser       func(w http.ResponseWriter, r *http.Request)
 	}{
 		{
-			name:          "bad/no username",
+			name:          "bad/no token",
 			opts:          info.NewEvent(),
-			wantErrSubstr: "no spec.git_provider.user",
+			wantErrSubstr: "no spec.git_provider.secret",
 		},
 		{
 			name: "bad/no secret",
@@ -350,7 +352,26 @@ func TestSetClient(t *testing.T) {
 				_, _ = w.Write([]byte(`{"errors": [{"message": "Unauthorized"}]}`))
 			},
 			apiURL:        "https://foo.bar/rest",
-			wantErrSubstr: "cannot get user foo with token",
+			wantErrSubstr: "failed validation of user foo with provided token: Unauthorized",
+		},
+		{
+			name: "bad/invalid secret",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					Token: "bar",
+					URL:   "https://foo.bar",
+				},
+			},
+			repo: &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					URL: "rest/api/1.0/users/foo",
+				},
+			},
+			muxUser: func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusUnauthorized)
+			},
+			apiURL:        "https://foo.bar",
+			wantErrSubstr: "token validation failed: unauthorized",
 		},
 		{
 			name: "bad/unknown error",
@@ -366,7 +387,7 @@ func TestSetClient(t *testing.T) {
 				_, _ = w.Write([]byte(`{"errors": [{"message": "Internal Server Error"}]}`))
 			},
 			apiURL:        "https://foo.bar/rest",
-			wantErrSubstr: "cannot get user foo: Internal Server Error",
+			wantErrSubstr: "user validation failed with: Internal Server Error",
 		},
 		{
 			name: "good/url append /rest",
@@ -399,7 +420,7 @@ func TestSetClient(t *testing.T) {
 				mux.HandleFunc("/users/foo", tt.muxUser)
 			}
 			v := &Provider{client: client, baseURL: tURL}
-			err := v.SetClient(ctx, fakeRun, tt.opts, nil, nil)
+			err := v.SetClient(ctx, fakeRun, tt.opts, tt.repo, nil)
 			if tt.wantErrSubstr != "" {
 				assert.ErrorContains(t, err, tt.wantErrSubstr)
 				return
