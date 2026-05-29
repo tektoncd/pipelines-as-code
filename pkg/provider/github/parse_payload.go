@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -110,6 +112,29 @@ func (v *Provider) initGitHubWebhookClient(ctx context.Context, event *info.Even
 	return gitclient.SetupAuthenticatedClient(ctx, v, kint, v.Run, event, repo, nil, v.pacInfo, v.Logger)
 }
 
+func validateAppWebhookSignature(ctx context.Context, run *params.Run, event *info.Event) error {
+	signature := event.Request.Header.Get(github.SHA256SignatureHeader)
+	if signature == "" {
+		signature = event.Request.Header.Get(github.SHA1SignatureHeader)
+	}
+	if signature == "" || signature == "sha1=" {
+		return fmt.Errorf("no signature has been detected, for security reason we are not allowing webhooks that has no secret")
+	}
+
+	kint, err := kubeinteraction.NewKubernetesInteraction(run)
+	if err != nil {
+		return err
+	}
+	event.Provider.WebhookSecret, err = secrets.GetCurrentNSWebhookSecret(ctx, kint, run)
+	if err != nil {
+		return err
+	}
+	if event.Provider.WebhookSecret == "" {
+		return fmt.Errorf("no webhook secret has been set in controller secret")
+	}
+	return github.ValidateSignature(signature, event.Request.Payload, []byte(event.Provider.WebhookSecret))
+}
+
 func (v *Provider) parseEventType(request *http.Request, event *info.Event) error {
 	event.EventType = request.Header.Get("X-GitHub-Event")
 	if event.EventType == "" {
@@ -131,6 +156,9 @@ type Payload struct {
 	Installation struct {
 		ID *int64 `json:"id"`
 	} `json:"installation"`
+	Repository struct {
+		HTMLURL string `json:"html_url"`
+	} `json:"repository"`
 }
 
 func getInstallationIDFromPayload(payload string) (int64, error) {
@@ -143,6 +171,51 @@ func getInstallationIDFromPayload(payload string) (int64, error) {
 		return *data.Installation.ID, nil
 	}
 	return -1, nil
+}
+
+func validateEnterpriseHostMatchesPayload(gheURL, payload string) error {
+	if gheURL == "" {
+		return nil
+	}
+	if !strings.HasPrefix(gheURL, "https://") && !strings.HasPrefix(gheURL, "http://") {
+		gheURL = "https://" + gheURL
+	}
+	enterpriseURL, err := url.Parse(gheURL)
+	if err != nil || enterpriseURL.Host == "" {
+		return fmt.Errorf("invalid X-GitHub-Enterprise-Host header")
+	}
+
+	var data Payload
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return err
+	}
+	if data.Repository.HTMLURL == "" {
+		return nil
+	}
+	repoURL, err := url.Parse(data.Repository.HTMLURL)
+	if err != nil || repoURL.Host == "" {
+		return fmt.Errorf("invalid repository URL in GitHub payload")
+	}
+	if !strings.EqualFold(enterpriseURL.Host, repoURL.Host) {
+		return fmt.Errorf("github enterprise host %q does not match repository host %q", enterpriseURL.Host, repoURL.Host)
+	}
+	return nil
+}
+
+func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *info.Event, installationID int64, reason string, err error) {
+	if v.Logger == nil {
+		return
+	}
+	v.Logger.Errorw("[SECURITY][CRITICAL] Averted GitHub App credential exfiltration attempt before token minting",
+		"severity", "critical",
+		"security-impact", "github-app-jwt-exfiltration-blocked",
+		"reason", reason,
+		"error", err,
+		"event-type", event.EventType,
+		"installation-id", installationID,
+		"github-enterprise-host-present", request.Header.Get("X-GitHub-Enterprise-Host") != "",
+		"remote-addr", request.RemoteAddr,
+	)
 }
 
 // ParsePayload will parse the payload and return the event
@@ -159,10 +232,8 @@ func getInstallationIDFromPayload(payload string) (int64, error) {
 // app on a github org which has a mixed of private and public repos and some of
 // the public users should not have access to the private repos.
 //
-// Another thing: The payload is protected by the webhook signature so it cannot be tempered but even tho if it's
-// tempered with and somehow a malicious user found the token and set their own github endpoint to hijack and
-// exfiltrate the token, it would fail since the jwt token generation will fail, so we are safe here.
-// a bit too far fetched but i don't see any way we can exploit this.
+// Validate the webhook signature before generating an app token because the token
+// request signs a GitHub App JWT locally and sends it to the selected API host.
 func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *http.Request, payload string) (*info.Event, error) {
 	// ParsePayload is really happening before SetClient so let's set this at first here.
 	// Only apply for GitHub provider since we do fancy token creation at payload parsing
@@ -183,6 +254,14 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 	}
 	if installationIDFrompayload != -1 {
 		var err error
+		if err := validateAppWebhookSignature(ctx, run, event); err != nil {
+			v.logBlockedGitHubAppTokenMint(request, event, installationIDFrompayload, "webhook-signature-validation-failed", err)
+			return nil, err
+		}
+		if err := validateEnterpriseHostMatchesPayload(event.Provider.URL, payload); err != nil {
+			v.logBlockedGitHubAppTokenMint(request, event, installationIDFrompayload, "enterprise-host-validation-failed", err)
+			return nil, err
+		}
 		// TODO: move this out of here when we move al config inside context
 		if event.Provider.Token, err = v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, installationIDFrompayload, systemNS); err != nil {
 			return nil, err
