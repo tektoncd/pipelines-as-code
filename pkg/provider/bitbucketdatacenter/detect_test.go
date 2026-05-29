@@ -66,6 +66,20 @@ func TestProviderDetect(t *testing.T) {
 			processReq: true,
 		},
 		{
+			name:       "pull_request merged event",
+			event:      types.PullRequestEvent{},
+			eventType:  "pr:merged",
+			isBS:       true,
+			processReq: true,
+		},
+		{
+			name:       "pull_request modified event",
+			event:      types.PullRequestEvent{},
+			eventType:  "pr:modified",
+			isBS:       true,
+			processReq: true,
+		},
+		{
 			name: "retest comment",
 			event: types.PullRequestEvent{
 				Comment: types.ActivityComment{Text: "/retest"},
@@ -107,6 +121,13 @@ func TestProviderDetect(t *testing.T) {
 				Comment: types.ActivityComment{Text: "/cancel dummy"},
 			},
 			eventType:  "pr:comment:added",
+			isBS:       true,
+			processReq: true,
+		},
+		{
+			name:       "pull_request user approval event",
+			event:      types.PullRequestEvent{},
+			eventType:  "pr:reviewer:approved",
 			isBS:       true,
 			processReq: true,
 		},
