@@ -2,6 +2,9 @@ package github
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,7 +12,6 @@ import (
 
 	"github.com/google/go-github/v81/github"
 	"gotest.tools/v3/assert"
-	"gotest.tools/v3/env"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
@@ -68,6 +70,12 @@ var samplePRevent = github.PullRequestEvent{
 		Title: github.Ptr("my first PR"),
 	},
 	Repo: sampleRepo,
+}
+
+func githubSHA256Signature(secret string, payload []byte) string {
+	hm := hmac.New(sha256.New, []byte(secret))
+	hm.Write(payload)
+	return "sha256=" + hex.EncodeToString(hm.Sum(nil))
 }
 
 var samplePR = github.PullRequest{
@@ -1200,6 +1208,7 @@ func TestAppTokenGeneration(t *testing.T) {
 	secretName := "pipelines-as-code-secret"
 
 	ctx, _ := rtesting.SetupFakeContext(t)
+	webhookSecret := "webhook-secret"
 	vaildSecret, _ := testclient.SeedTestData(t, ctx, testclient.Data{
 		Secret: []*corev1.Secret{
 			{
@@ -1210,6 +1219,7 @@ func TestAppTokenGeneration(t *testing.T) {
 				Data: map[string][]byte{
 					"github-application-id": []byte("12345"),
 					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
 				},
 			},
 		},
@@ -1226,6 +1236,7 @@ func TestAppTokenGeneration(t *testing.T) {
 				Data: map[string][]byte{
 					"github-application-id": []byte("abcd"),
 					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
 				},
 			},
 		},
@@ -1242,26 +1253,59 @@ func TestAppTokenGeneration(t *testing.T) {
 				Data: map[string][]byte{
 					"github-application-id": []byte("12345"),
 					"github-private-key":    []byte("invalid-key"),
+					"webhook.secret":        []byte(webhookSecret),
 				},
 			},
 		},
 	})
 
 	tests := []struct {
-		ctx          context.Context
-		ctxNS        string
-		name         string
-		wantErrSubst string
-		nilClient    bool
-		seedData     testclient.Clients
-		envs         map[string]string
+		ctx            context.Context
+		ctxNS          string
+		name           string
+		wantErrSubst   string
+		nilClient      bool
+		seedData       testclient.Clients
+		omitSignature  bool
+		enterpriseHost string
+		payload        string
+		wantLogMessage string
 	}{
 		{
-			name:         "secret not found",
-			ctx:          ctxNoSecret,
-			ctxNS:        "foo",
-			seedData:     noSecret,
-			wantErrSubst: `secrets "pipelines-as-code-secret" not found`,
+			name:           "secret not found",
+			ctx:            ctxNoSecret,
+			ctxNS:          "foo",
+			seedData:       noSecret,
+			wantErrSubst:   `secrets "pipelines-as-code-secret" not found`,
+			wantLogMessage: githubAppTokenMintBlockedLog,
+		},
+		{
+			ctx:            ctx,
+			name:           "missing webhook signature",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			omitSignature:  true,
+			wantErrSubst:   "no signature has been detected",
+			wantLogMessage: githubAppTokenMintBlockedLog,
+		},
+		{
+			ctx:            ctx,
+			name:           "enterprise host does not match signed repository payload",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			enterpriseHost: "127.0.0.1:1",
+			wantErrSubst:   `github enterprise host "127.0.0.1:1" does not match repository host "github.com"`,
+			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+		},
+		{
+			ctx:            ctx,
+			name:           "enterprise host with missing repository HTML URL",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			enterpriseHost: "127.0.0.1:1",
+			payload:        fmt.Sprintf(`{"installation":{"id":%d},"repository":{}}`, testInstallationID),
+			wantErrSubst:   "repository HTML URL is missing in payload, cannot validate enterprise host",
+			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
 		},
 		{
 			ctx:       ctx,
@@ -1292,8 +1336,6 @@ func TestAppTokenGeneration(t *testing.T) {
 			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = fmt.Fprint(w, "{}")
 			})
-			envRemove := env.PatchAll(t, tt.envs)
-			defer envRemove()
 
 			// adding installation id to event to enforce client creation
 			samplePRevent.Installation = &github.Installation{
@@ -1301,24 +1343,21 @@ func TestAppTokenGeneration(t *testing.T) {
 			}
 
 			jeez, _ := json.Marshal(samplePRevent)
-			logger, _ := logger.GetLogger()
+			if tt.payload != "" {
+				jeez = []byte(tt.payload)
+			}
+			testLogger, observedLogs := logger.GetLogger()
 			gprovider := Provider{
-				Logger:   logger,
+				Logger:   testLogger,
 				ghClient: fakeghclient,
 				pacInfo: &info.PacOpts{
 					Settings: settings.Settings{},
 				},
 			}
-			request := &http.Request{Header: map[string][]string{}}
-			request.Header.Set("X-GitHub-Event", "pull_request")
-			// a bit of a pain but works
-			request.Header.Set("X-GitHub-Enterprise-Host", serverURL)
-			tt.envs = make(map[string]string)
-			tt.envs["PAC_GIT_PROVIDER_TOKEN_APIURL"] = serverURL + "/api/v3"
 
 			run := &params.Run{
 				Clients: clients.Clients{
-					Log:  logger,
+					Log:  testLogger,
 					Kube: tt.seedData.Kube,
 				},
 
@@ -1327,6 +1366,16 @@ func TestAppTokenGeneration(t *testing.T) {
 				},
 			}
 
+			request := &http.Request{Header: map[string][]string{}}
+			request.Header.Set("X-GitHub-Event", "pull_request")
+			if !tt.omitSignature {
+				request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature(webhookSecret, jeez))
+			}
+			if tt.enterpriseHost != "" {
+				request.Header.Set("X-GitHub-Enterprise-Host", tt.enterpriseHost)
+			}
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
 			tt.ctx = info.StoreCurrentControllerName(tt.ctx, "default")
 			tt.ctx = info.StoreNS(tt.ctx, tt.ctxNS)
 
@@ -1334,6 +1383,16 @@ func TestAppTokenGeneration(t *testing.T) {
 			if tt.wantErrSubst != "" {
 				assert.Assert(t, err != nil)
 				assert.ErrorContains(t, err, tt.wantErrSubst)
+				if tt.wantLogMessage != "" {
+					found := false
+					for _, entry := range observedLogs.All() {
+						if entry.Message == tt.wantLogMessage {
+							found = true
+							break
+						}
+					}
+					assert.Assert(t, found, "expected log message %q for blocked GitHub App token mint", tt.wantLogMessage)
+				}
 				return
 			}
 			assert.NilError(t, err)
