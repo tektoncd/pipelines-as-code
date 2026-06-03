@@ -66,12 +66,7 @@ func (s *sinker) processEventPayload(ctx context.Context, request *http.Request)
 }
 
 func (s *sinker) processEvent(ctx context.Context, request *http.Request) error {
-	if s.event.EventType == "incoming" {
-		if request.Header.Get("X-GitHub-Enterprise-Host") != "" {
-			s.event.Provider.URL = request.Header.Get("X-GitHub-Enterprise-Host")
-			s.event.GHEURL = request.Header.Get("X-GitHub-Enterprise-Host")
-		}
-	} else {
+	if s.event.EventType != "incoming" {
 		if err := s.processEventPayload(ctx, request); err != nil {
 			return err
 		}
