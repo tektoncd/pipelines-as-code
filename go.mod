@@ -10,7 +10,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/fvbommel/sortorder v1.1.0
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.26.1
+	github.com/google/cel-go v0.27.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260114152324-5458fbc09dc5
 	github.com/google/go-github/v75 v75.0.0
@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/pipeline v1.7.0
+	github.com/tektoncd/pipeline v1.9.3
 	gitlab.com/gitlab-org/api/client-go v1.14.0
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.1
@@ -136,7 +136,6 @@ require (
 	github.com/prometheus/statsd_exporter v0.28.0 // indirect
 	github.com/rickb777/date v1.22.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/xlzd/gotp v0.1.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
