@@ -1,9 +1,10 @@
 package adapter
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -32,6 +33,13 @@ import (
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 )
+
+func newRequest(t *testing.T, method, target string, body io.Reader) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), method, target, body)
+	assert.NilError(t, err)
+	return req
+}
 
 const fakePrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIICXAIBAAKBgQC6GorZBeri0eVERMZQDFh5E1RMPjFk9AevaWr27yJse6eiUlos
@@ -682,7 +690,7 @@ func Test_listener_detectIncoming(t *testing.T) {
 			}
 
 			// make a new request
-			req := httptest.NewRequest(tt.args.method,
+			req := newRequest(t, tt.args.method,
 				fmt.Sprintf("http://localhost%s?repository=%s&secret=%s&pipelinerun=%s&branch=%s", tt.args.queryURL,
 					tt.args.queryRepository, tt.args.querySecret, tt.args.queryPipelineRun, tt.args.queryBranch),
 				strings.NewReader(tt.args.incomingBody))
