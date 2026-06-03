@@ -106,7 +106,7 @@ func BuildPrompt(request *ltypes.AnalysisRequest) (string, error) {
 		promptBuilder.WriteString("Context Information:\n")
 
 		for key, value := range request.Context {
-			promptBuilder.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(key)))
+			fmt.Fprintf(&promptBuilder, "=== %s ===\n", strings.ToUpper(key))
 
 			switch v := value.(type) {
 			case string:
@@ -118,7 +118,7 @@ func BuildPrompt(request *ltypes.AnalysisRequest) (string, error) {
 				}
 				promptBuilder.Write(jsonData)
 			default:
-				promptBuilder.WriteString(fmt.Sprintf("%v", v))
+				fmt.Fprintf(&promptBuilder, "%v", v)
 			}
 
 			promptBuilder.WriteString("\n\n")
