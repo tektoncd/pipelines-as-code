@@ -157,7 +157,7 @@ require (
 )
 
 replace (
-	github.com/go-jose/go-jose/v4 => github.com/go-jose/go-jose/v4 v4.0.5
+	github.com/go-jose/go-jose/v4 => github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/gnostic-models => github.com/google/gnostic-models v0.6.9
 	k8s.io/api => k8s.io/api v0.32.8
 	k8s.io/apimachinery => k8s.io/apimachinery v0.32.8
