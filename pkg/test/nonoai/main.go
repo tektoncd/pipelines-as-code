@@ -216,7 +216,7 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 
 func openaiHandler(w http.ResponseWriter, r *http.Request) {
 	if *verbose {
-		log.Printf("📨 OpenAI request from %s", r.RemoteAddr)
+		log.Printf("📨 OpenAI request from %q", r.RemoteAddr) //nolint:gosec // Test server logs request source for debugging.
 	}
 
 	// Check authorization header
@@ -314,7 +314,7 @@ func openaiHandler(w http.ResponseWriter, r *http.Request) {
 
 func geminiHandler(w http.ResponseWriter, r *http.Request) {
 	if *verbose {
-		log.Printf("📨 Gemini request from %s", r.RemoteAddr)
+		log.Printf("📨 Gemini request from %q", r.RemoteAddr) //nolint:gosec // Test server logs request source for debugging.
 	}
 
 	// Simulate latency

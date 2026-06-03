@@ -243,7 +243,7 @@ func parseAPICallLog(logLine string) *InstrumentationAPICall {
 // outputTestResultToFile writes the test result to a JSON file.
 func (g *PRTest) outputTestResultToFile(outputDir string, apiCalls []string, lastOAuth2Index, totalLines int) {
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil { //nolint:gosec // E2E instrumentation writes to a caller-provided artifact directory.
 		g.Logger.Warnf("Failed to create output directory %s: %v", outputDir, err)
 		return
 	}
@@ -287,7 +287,7 @@ func (g *PRTest) outputTestResultToFile(outputDir string, apiCalls []string, las
 		return
 	}
 
-	if err := os.WriteFile(filepath, jsonData, 0o600); err != nil {
+	if err := os.WriteFile(filepath, jsonData, 0o600); err != nil { //nolint:gosec // E2E instrumentation writes a generated artifact filename under outputDir.
 		g.Logger.Warnf("Failed to write test result to file %s: %v", filepath, err)
 		return
 	}
