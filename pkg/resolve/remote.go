@@ -50,7 +50,7 @@ func getRemotes(ctx context.Context, rt *matcher.RemoteTasks, types TektonTypes)
 				rt.Logger.Debugf("skipping already fetched task %s in annotations on pipelinerun %s", task.GetName(), pipelinerun.GetName())
 				continue
 			}
-			remoteType.Tasks = append(remoteType.Tasks, task)
+			remoteType.Tasks = append(remoteType.Tasks, task.DeepCopy())
 		}
 
 		// get the pipeline from the remote annotation if any
@@ -60,7 +60,7 @@ func getRemotes(ctx context.Context, rt *matcher.RemoteTasks, types TektonTypes)
 		}
 
 		if remotePipeline != nil {
-			remoteType.Pipelines = append(remoteType.Pipelines, remotePipeline)
+			remoteType.Pipelines = append(remoteType.Pipelines, remotePipeline.DeepCopy())
 		}
 	}
 
@@ -79,7 +79,7 @@ func getRemotes(ctx context.Context, rt *matcher.RemoteTasks, types TektonTypes)
 				rt.Logger.Infof("skipping remote task %s from remote pipeline %s as already defined in pipelinerun", remoteTask.GetName(), pipeline.GetName())
 				continue
 			}
-			remoteType.Tasks = append(remoteType.Tasks, remoteTask)
+			remoteType.Tasks = append(remoteType.Tasks, remoteTask.DeepCopy())
 		}
 	}
 
