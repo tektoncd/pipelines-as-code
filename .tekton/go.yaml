@@ -62,6 +62,8 @@ spec:
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
+                - name: GOTOOLCHAIN
+                  value: go1.25.0
               workingDir: $(workspaces.source.path)
               script: |
                 #!/usr/bin/env bash
@@ -82,6 +84,8 @@ spec:
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
+                - name: GOTOOLCHAIN
+                  value: go1.25.0
                 - name: GITHUB_REPOSITORY
                   value: "{{repo_owner}}/{{repo_name}}"
                 - name: GITHUB_PULL_REQUEST_ID
@@ -97,13 +101,15 @@ spec:
                 chmod +x ./codecov
                 ./codecov -P $GITHUB_PULL_REQUEST_ID -C {{revision}} -v
             - name: lint
-              image: docker.io/golangci/golangci-lint:v2.10.1
+              image: docker.io/golang:1.25
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
+                - name: GOTOOLCHAIN
+                  value: go1.25.0
                 - name: GOLANGCILINT_CACHE
                   value: $(workspaces.source.path)/go-build-cache/golangci-cache
               script: |

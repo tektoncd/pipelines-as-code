@@ -57,6 +57,9 @@ linters:
     - whitespace
     - zerologlint
   settings:
+    govet:
+      disable:
+        - inline
     misspell:
       ignore-rules:
         - cancelled
