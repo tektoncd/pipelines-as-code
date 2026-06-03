@@ -14,6 +14,9 @@ run:
   build-tags:
     - e2e
 linters-settings:
+  govet:
+    disable:
+      - inline
   gocritic:
     disabled-checks:
       - unlambda
@@ -50,7 +53,7 @@ linters:
     # - execinquery
     - exhaustive
     #- exhaustruct
-    - exportloopref
+    - copyloopvar
     - forbidigo
     - forcetypeassert
     #- funlen
