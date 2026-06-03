@@ -42,17 +42,16 @@ main() {
     echo "Processing provider: ${provider} (${provider_dir})"
 
     local failed_tests=""
-    if [[ -f "${provider_dir}/e2e-test-output.log" ]]; then
-      echo "  Found e2e-test-output.log"
-      failed_tests=$(grep -E "^--- FAIL:" "${provider_dir}/e2e-test-output.log" 2>/dev/null |
-        sed 's/--- FAIL: //' | cut -d' ' -f1 | sort -u || true)
+    if [[ -f "${provider_dir}/e2e-test-output.json" ]]; then
+      echo "  Found e2e-test-output.json"
+      failed_tests=$(jq -r 'select(.Action == "fail" and .Test != null) | .Test' "${provider_dir}/e2e-test-output.json" 2>/dev/null | sort -u || true)
       if [[ -n "${failed_tests}" ]]; then
         echo "  Failed tests: ${failed_tests}"
       else
-        echo "  No failed tests found in log"
+        echo "  No failed tests found in JSON output"
       fi
     else
-      echo "  No e2e-test-output.log found"
+      echo "  No e2e-test-output.json found"
       ls -la "${provider_dir}" 2>/dev/null || true
     fi
 
