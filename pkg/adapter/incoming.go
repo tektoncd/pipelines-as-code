@@ -62,6 +62,8 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 		return false, nil, nil
 	}
 
+	l.logger.Infof("incoming request has been requested: %v", req.URL.Path)
+
 	// If not all required query params are present, try to parse from JSON body
 	if repository == "" || branch == "" || pipelineRun == "" || querySecret == "" {
 		if req.Method == http.MethodPost && req.Header.Get("Content-Type") == "application/json" && len(payloadBody) > 0 {
@@ -90,8 +92,6 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 	if legacyMode {
 		l.logger.Warnf("[SECURITY] Incoming webhook used legacy URL-based secret passing. This is insecure and will be deprecated. Please use POST body instead.")
 	}
-
-	l.logger.Infof("incoming request has been requested: %v", req.URL)
 	if pipelineRun == "" || repository == "" || querySecret == "" || branch == "" {
 		err := fmt.Errorf("missing query URL argument: pipelinerun, branch, repository, secret: '%s' '%s' '%s' '%s'", pipelineRun, branch, repository, querySecret)
 		return false, nil, err
