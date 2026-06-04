@@ -117,7 +117,7 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 		return false, nil, nil
 	}
 
-	l.logger.Infof("incoming request has been requested: %v", req.URL)
+	l.logger.Infof("incoming request has been requested: %v", req.URL.Path)
 	payload, err := parseIncomingPayload(req, payloadBody)
 	if payload.legacyMode {
 		// Log this, even if the request is invalid
