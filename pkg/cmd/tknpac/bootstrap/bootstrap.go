@@ -271,7 +271,7 @@ func DetectPacInstallation(ctx context.Context, wantedNS string, run *params.Run
 	if err == nil {
 		return installed, cm.Namespace, nil
 	}
-	return installed, "", fmt.Errorf("could not detect Pipelines as Code configmap on the cluster, please specify the namespace in which pac is installed: %s", err.Error())
+	return installed, "", fmt.Errorf("could not detect Pipelines as Code configmap on the cluster, please specify the namespace in which pac is installed: %w", err)
 }
 
 func getConfigMap(ctx context.Context, run *params.Run) (*corev1.ConfigMap, error) {
