@@ -121,7 +121,7 @@ func (l *listener) detectIncoming(ctx context.Context, event *info.Event, req *h
 	payload, err := parseIncomingPayload(req, payloadBody)
 	if payload.legacyMode {
 		// Log this, even if the request is invalid
-		l.logger.Warnf("[SECURITY] Incoming webhook used legacy URL-based secret passing. This is insecure and will be deprecated. Please use POST body instead.")
+		l.logger.Warnf("[SECURITY] Incoming webhook used deprecated URL-based secret passing. This method is insecure and will be removed in upcoming releases. Please use POST body instead.")
 	}
 	if err != nil {
 		return false, nil, err

@@ -1164,7 +1164,7 @@ func TestDetectIncomingLegacyWarning(t *testing.T) {
 			assert.Assert(t, got)
 			found := false
 			for _, entry := range observedLogs.All() {
-				if strings.Contains(entry.Message, "[SECURITY] Incoming webhook used legacy URL-based secret passing") {
+				if strings.Contains(entry.Message, "[SECURITY] Incoming webhook used deprecated URL-based secret passing") {
 					found = true
 					break
 				}
