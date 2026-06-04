@@ -79,6 +79,8 @@ func (w *Options) Install(ctx context.Context, providerType string) error {
 		webhookProvider = &gitLabConfig{IOStream: w.IOStreams}
 	case "bitbucket-cloud":
 		webhookProvider = &bitbucketCloudConfig{IOStream: w.IOStreams}
+	case "gitea", "forgejo":
+		webhookProvider = &forgejoConfig{IOStream: w.IOStreams}
 	default:
 		return fmt.Errorf("invalid webhook provider")
 	}
@@ -114,12 +116,16 @@ func GetProviderName(url string) (string, error) {
 		providerName = "gitlab"
 	case strings.Contains(url, "bitbucket-cloud"):
 		providerName = "bitbucket-cloud"
+	case strings.Contains(url, "gitea"):
+		providerName = "gitea"
+	case strings.Contains(url, "forgejo"):
+		providerName = "forgejo"
 	default:
 		msg := "Please select the type of the git platform to setup webhook:"
 		if err = prompt.SurveyAskOne(
 			&survey.Select{
 				Message: msg,
-				Options: []string{"github", "gitlab", "bitbucket-cloud"},
+				Options: []string{"github", "gitlab", "bitbucket-cloud", "gitea", "forgejo"},
 				Default: 0,
 			}, &providerName,
 		); err != nil {
