@@ -21,7 +21,11 @@ name):
 
 <https://your.forgejo.domain/user/settings/applications>
 
-When creating the token, select these scopes:
+{{< callout type="info" >}}
+If using the CLI, the token needs to be created with access to **All (public, private, and limited)** repositories.
+{{< /callout >}}
+
+You should also select these scopes:
 
 ### Required Scopes
 
@@ -42,11 +46,35 @@ unless you plan to use `settings.policy.ok_to_test` or
 
 Store the generated token in a safe place, or you will have to recreate it.
 
-## Webhook Configuration (Manual)
+## Webhook Configuration using the CLI
 
 {{< callout type="info" >}}
-The `tkn pac create repo` and `tkn pac webhook` commands do not currently support Forgejo. You must configure the webhook manually.
+The CLI uses your Forgejo token to create the webhook and also stores it for runtime
+use. To use a token with tighter repository access, follow the manual
+configuration steps instead.
 {{< /callout >}}
+
+Use [`tkn pac create repo`]({{< relref "/docs/cli" >}}) to create the
+Repository CR, create the Kubernetes secret, and configure the Forgejo webhook:
+
+```shell
+tkn pac create repo
+```
+
+The command prompts for the Forgejo repository URL, controller URL, webhook
+secret, Forgejo token, and Forgejo instance URL.
+
+For an existing Repository CR, use `tkn pac webhook add` to create the Forgejo
+webhook and update the webhook secret:
+
+```shell
+tkn pac webhook add -n target-namespace my-repo
+```
+
+If the Repository CR does not reference a `git_provider` secret yet, the command
+creates one and updates the Repository CR.
+
+## Webhook Configuration (Manual)
 
 1. From your Forgejo repository, go to **Settings** -> **Webhooks** and click **Add Webhook** -> **Forgejo**.
 
