@@ -58,7 +58,7 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 	if req.URL.Path != "/incoming" {
 		return false, nil, nil
 	}
-	l.logger.Infof("incoming request has been requested: %v", req.URL)
+	l.logger.Infof("incoming request has been requested: %v", req.URL.Path)
 	if pipelineRun == "" || repository == "" || querySecret == "" || branch == "" {
 		err := fmt.Errorf("missing query URL argument: pipelinerun, branch, repository, secret: '%s' '%s' '%s' '%s'", pipelineRun, branch, repository, querySecret)
 		return false, nil, err
@@ -112,6 +112,7 @@ func (l *listener) detectIncoming(ctx context.Context, req *http.Request, payloa
 			return false, nil, err
 		}
 		l.event.Provider.URL = enterpriseURL
+		l.event.GHEURL = enterpriseURL
 		l.event.Provider.Token = token
 		l.event.InstallationID = installationID
 		// Github app is not installed for provided repository url

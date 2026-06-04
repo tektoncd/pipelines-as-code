@@ -1,5 +1,6 @@
 TARGET_NAMESPACE=pipelines-as-code
-GOLANGCI_LINT=golangci-lint
+GOLANGCI_LINT_VERSION ?= v1.59.1
+GO_TOOLCHAIN ?= go1.21.13
 GOFUMPT=gofumpt
 TKN_BINARY_NAME := tkn
 TKN_BINARY_URL := https://tekton.dev/docs/cli/\#installation
@@ -9,7 +10,18 @@ GO           = go
 TIMEOUT_UNIT = 20m
 TIMEOUT_E2E  = 45m
 GO_TEST_FLAGS +=
+GOTOOLCHAIN ?= $(GO_TOOLCHAIN)
+export GOTOOLCHAIN
 SHELL := bash
+TOPDIR := $(shell git rev-parse --show-toplevel)
+TMPDIR := $(TOPDIR)/tmp
+GOLANGCI_LINT_OS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+GOLANGCI_LINT_ARCH ?= $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+GOLANGCI_LINT_PACKAGE := golangci-lint-$(patsubst v%,%,$(GOLANGCI_LINT_VERSION))-$(GOLANGCI_LINT_OS)-$(GOLANGCI_LINT_ARCH)
+GOLANGCI_LINT_DIR := $(TMPDIR)/golangci-lint/$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT_BIN := $(GOLANGCI_LINT_DIR)/golangci-lint
+GOLANGCI_LINT ?= $(GOLANGCI_LINT_BIN)
+GOLANGCI_LINT_EXTRA_ARGS ?= --concurrency=1
 
 PY_FILES := $(shell find . -type f -regex ".*\.py" -print)
 SH_FILES := $(shell find hack/ -type f -regex ".*\.sh" -print)
@@ -80,12 +92,20 @@ html-coverage: ## generate html coverage
 lint: lint-go lint-yaml lint-md lint-python lint-shell ## run all linters
 
 .PHONY: lint-go
-lint-go: ## runs go linter on all go files
+lint-go: golangci-lint ## runs go linter on all go files
 	@echo "Linting go files..."
-	@$(GOLANGCI_LINT) run ./... --modules-download-mode=vendor \
+	@$(GOLANGCI_LINT) run $(GOLANGCI_LINT_EXTRA_ARGS) ./... --modules-download-mode=vendor \
 							--max-issues-per-linter=0 \
 							--max-same-issues=0 \
 							--timeout $(TIMEOUT_UNIT)
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT_BIN) ## download pinned golangci-lint into tmp
+
+$(GOLANGCI_LINT_BIN):
+	@mkdir -p $(GOLANGCI_LINT_DIR)
+	@echo "Downloading golangci-lint $(GOLANGCI_LINT_VERSION) for $(GOLANGCI_LINT_OS)-$(GOLANGCI_LINT_ARCH)"
+	@curl -fsSL "https://github.com/golangci/golangci-lint/releases/download/$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_PACKAGE).tar.gz" | tar -xz -C "$(GOLANGCI_LINT_DIR)" --strip-components=1 "$(GOLANGCI_LINT_PACKAGE)/golangci-lint"
 
 .PHONY: lint-yaml
 lint-yaml: ${YAML_FILES} ## runs yamllint on all yaml files
@@ -192,5 +212,3 @@ generated: update-golden fumpt ## generate all files that needs to be generated
 .PHONY: clean
 clean: ## clean build artifacts
 	rm -fR bin
-
-

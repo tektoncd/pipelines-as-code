@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	gt "github.com/google/go-github/v61/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
@@ -47,11 +50,20 @@ func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, stri
 		return "", "", 0, err
 	}
 
+	if ip.ghClient.APIURL == nil {
+		return "", "", 0, fmt.Errorf("github client APIURL is nil")
+	}
 	apiURL := *ip.ghClient.APIURL
-	enterpriseHost = ip.request.Header.Get("X-GitHub-Enterprise-Host")
-	if enterpriseHost != "" {
-		// NOTE: Hopefully this works even when the ghe URL is on another host than the api URL
-		apiURL = "https://" + enterpriseHost + "/api/v3"
+	repoURL, err := url.Parse(ip.repo.Spec.URL)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("failed to parse repository URL: %w", err)
+	}
+	enterpriseHost = ""
+	if repoURL.Host != "" && repoURL.Host != "github.com" {
+		enterpriseHost = repoURL.Host
+		if apiURL == keys.PublicGithubAPIURL {
+			apiURL = fmt.Sprintf("https://%s/api/v3", strings.TrimSuffix(enterpriseHost, "/"))
+		}
 	}
 
 	logger := logging.FromContext(ctx)
