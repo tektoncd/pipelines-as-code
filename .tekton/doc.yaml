@@ -36,10 +36,18 @@ spec:
           steps:
             - name: fetch-repo
               ref:
-                resolver: http
+                resolver: hub
                 params:
-                  - name: url
-                    value: https://raw.githubusercontent.com/tektoncd/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                  - name: catalog
+                    value: git-clone-stepaction
+                  - name: type
+                    value: artifact
+                  - name: kind
+                    value: stepaction
+                  - name: name
+                    value: git-clone
+                  - name: version
+                    value: "1.7.0"
               params:
                 - name: output-path
                   value: $(workspaces.source.path)
