@@ -20,17 +20,17 @@ import (
 )
 
 func Setup(ctx context.Context) (context.Context, *params.Run, options.E2E, *scm.Client, error) {
-	bitbucketDataCenterUser := os.Getenv("TEST_BITBUCKET_SERVER_USER")
-	bitbucketDataCenterToken := os.Getenv("TEST_BITBUCKET_SERVER_TOKEN")
-	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_SERVER_E2E_REPOSITORY")
-	bitbucketDataCenterAPIURL := os.Getenv("TEST_BITBUCKET_SERVER_API_URL")
+	bitbucketDataCenterUser := os.Getenv("TEST_BITBUCKET_DATA_CENTER_USER")
+	bitbucketDataCenterToken := os.Getenv("TEST_BITBUCKET_DATA_CENTER_TOKEN")
+	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY")
+	bitbucketDataCenterAPIURL := os.Getenv("TEST_BITBUCKET_DATA_CENTER_API_URL")
 
 	if err := setup.RequireEnvs(
-		"TEST_BITBUCKET_SERVER_USER",
-		"TEST_BITBUCKET_SERVER_TOKEN",
-		"TEST_BITBUCKET_SERVER_E2E_REPOSITORY",
-		"TEST_BITBUCKET_SERVER_API_URL",
-		"TEST_BITBUCKET_SERVER_WEBHOOK_SECRET",
+		"TEST_BITBUCKET_DATA_CENTER_USER",
+		"TEST_BITBUCKET_DATA_CENTER_TOKEN",
+		"TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY",
+		"TEST_BITBUCKET_DATA_CENTER_API_URL",
+		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET",
 	); err != nil {
 		return ctx, nil, options.E2E{}, nil, err
 	}
