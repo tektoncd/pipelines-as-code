@@ -19,7 +19,7 @@ import (
 func TestBitbucketDataCenterPullRequest(t *testing.T) {
 	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
 	ctx := context.Background()
-	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_SERVER_E2E_REPOSITORY")
+	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY")
 
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
@@ -50,7 +50,7 @@ func TestBitbucketDataCenterPullRequest(t *testing.T) {
 func TestBitbucketDataCenterCELPathChangeInPullRequest(t *testing.T) {
 	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
 	ctx := context.Background()
-	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_SERVER_E2E_REPOSITORY")
+	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY")
 
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
