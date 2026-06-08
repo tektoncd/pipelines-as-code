@@ -138,7 +138,7 @@ get_tests() {
   github_second_controller)
     printf '%s\n' "${all_tests}" | grep -iP 'GithubGHE' | grep -ivP 'Concurrency'
     ;;
-  github_ghe)
+  github_ghe | github_ghe_1 | github_ghe_2 | github_ghe_3)
     printf '%s\n' "${all_tests}" | grep -iP 'GithubGHE' | grep -ivP 'Concurrency'
     ;;
   gitlab_bitbucket)
@@ -305,6 +305,9 @@ collect_logs)
   ;;
 output_logs)
   output_logs
+  ;;
+generate_github_summary)
+  echo "generate_github_summary: skipped on backport branch"
   ;;
 print_tests)
   set +x
