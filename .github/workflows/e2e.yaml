@@ -291,7 +291,7 @@ jobs:
 
       - name: Run gosmee for main controller
         run: |
-          nohup gosmee client --saveDir /tmp/gosmee-replay ${{ secrets.PYSMEE_URL }} "http://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify  --saveDir /tmp/gosmee-replay ${{ secrets.PYSMEE_URL }} "http://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
 
       - name: Generate unique gosmee URL for Gitea tests
         if: startsWith(matrix.provider, 'gitea') || matrix.provider == 'concurrency'
