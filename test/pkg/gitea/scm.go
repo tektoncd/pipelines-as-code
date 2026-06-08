@@ -112,12 +112,29 @@ func CreateGiteaRepo(giteaClient *gitea.Client, user, name, defaultBranch, hookU
 	// Create a new repo
 	if onOrg {
 		logger.Infof("Creating org %s", name)
+		adminUser := user
 		user = "org-" + name
 		_, _, err := giteaClient.CreateOrg(gitea.CreateOrgOption{
 			Name: user,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create org: %w", err)
+		}
+		teams, _, listErr := giteaClient.ListOrgTeams(user, gitea.ListTeamsOptions{})
+		if listErr != nil {
+			logger.Warnf("failed to list org teams for %s: %v", user, listErr)
+		} else {
+			for _, team := range teams {
+				if team.Name == "Owners" {
+					_, addErr := giteaClient.AddTeamMember(team.ID, adminUser)
+					if addErr != nil {
+						logger.Warnf("failed to add user %s to Owners team in org %s: %v", adminUser, user, addErr)
+					} else {
+						logger.Infof("added user %s to Owners team in org %s", adminUser, user)
+					}
+					break
+				}
+			}
 		}
 		logger.Infof("Creating gitea repository on org %s", name)
 		repo, _, err = giteaClient.CreateOrgRepo(user, gitea.CreateRepoOption{
