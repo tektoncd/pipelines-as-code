@@ -319,6 +319,28 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 		}
 	}
 
+	if event.InstallationID > 0 {
+		token := ""
+		if repo != nil && v.pacInfo != nil && v.Logger != nil && v.eventEmitter != nil {
+			v.Logger.Debugf("setupAuthenticatedClient: scoping github app token")
+			scopedToken, err := ScopeTokenToListOfRepos(ctx, v, v.pacInfo, repo, run, event, v.eventEmitter, v.Logger)
+			if err != nil {
+				return fmt.Errorf("failed to scope token: %w", err)
+			}
+			token = scopedToken
+		}
+		if token != "" {
+			event.Provider.Token = token
+		} else if len(v.RepositoryIDs) > 0 {
+			ns := info.GetNS(ctx)
+			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+			if err != nil {
+				return fmt.Errorf("failed to scope token to triggering repository: %w", err)
+			}
+			event.Provider.Token = scopedToken
+		}
+	}
+
 	return nil
 }
 
