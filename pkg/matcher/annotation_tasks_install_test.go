@@ -234,45 +234,76 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 			Type:  hubtype.ArtifactHubType,
 		})
 	tests := []struct {
-		task                   string
-		filesInsideRepo        map[string]string
-		gotTaskName            string
-		name                   string
-		remoteURLS             map[string]map[string]string
-		runevent               info.Event
-		wantErr                string
-		wantLog                string
-		wantProviderRemoteTask bool
-		wantDeprecated         bool
+		task                    string
+		filesInsideRepo         map[string]string
+		gotTaskName             string
+		name                    string
+		remoteURLS              map[string]map[string]string
+		runevent                info.Event
+		wantErr                 string
+		wantLog                 string
+		remoteTasksURLAllowlist string
+		remoteTasksURLMaxSize   int
+		providerRemoteTask      string
+		wantProviderRemoteTask  bool
+		wantDeprecated          bool
 	}{
 		{
-			name: "test-annotations-error-remote-http-not-k8",
-			task: "http://remote.task",
+			name:                   "blocked/remote task http before provider",
+			task:                   "http://provider/remote.task",
+			wantProviderRemoteTask: true,
+			wantErr:                "scheme \"http\" is not allowed",
+		},
+		{
+			name:                   "blocked/remote task uppercase http before provider",
+			task:                   "HTTP://provider/remote.task",
+			wantProviderRemoteTask: true,
+			wantErr:                "scheme \"http\" is not allowed",
+		},
+		{
+			name:                    "test-annotations-remote-http-with-allowlist",
+			task:                    "http://93.184.216.34/remote.task",
+			gotTaskName:             "task",
+			remoteTasksURLAllowlist: "http://93.184.216.34",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.task": {
-					"body": "",
+				"http://93.184.216.34/remote.task": {
+					"body": readTDfile(t, "task-good"),
 					"code": "200",
 				},
 			},
-			wantErr: "not found",
+		},
+		{
+			name:                    "test-provider-remote-http-with-allowlist",
+			task:                    "http://93.184.216.34/provider/remote.task",
+			gotTaskName:             "task",
+			remoteTasksURLAllowlist: "http://93.184.216.34",
+			providerRemoteTask:      readTDfile(t, "task-good"),
+			wantProviderRemoteTask:  true,
 		},
 		{
 			name:                   "test-good-coming-from-provider",
-			task:                   "http://provider/remote.task",
+			task:                   "https://93.184.216.34/provider/remote.task",
 			wantProviderRemoteTask: true,
 			wantErr:                "not found",
 		},
 		{
+			name:                   "test-provider-remote-https-with-loopback-dns",
+			task:                   "https://localhost/provider/remote.task",
+			gotTaskName:            "task",
+			providerRemoteTask:     readTDfile(t, "task-good"),
+			wantProviderRemoteTask: true,
+		},
+		{
 			name:                   "test-bad-coming-from-provider",
-			task:                   "http://provider/remote.task",
+			task:                   "https://93.184.216.34/provider/remote.task",
 			wantProviderRemoteTask: false,
 			wantErr:                "error getting remote task",
 		},
 		{
-			name: "test-annotations-remote-http",
-			task: "http://remote.task",
+			name: "test-annotations-remote-https",
+			task: "https://93.184.216.34/remote.task",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.task": {
+				"https://93.184.216.34/remote.task": {
 					"body": readTDfile(t, "task-good"),
 					"code": "200",
 				},
@@ -294,26 +325,47 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 		// 	wantErr: "cannot be validated properly",
 		// },
 		{
-			name:        "test-annotations-remote-https",
-			task:        "https://remote.task",
+			name:        "test-annotations-remote-https-hostname",
+			task:        "https://93.184.216.34/task.yaml",
 			gotTaskName: "task",
 			remoteURLS: map[string]map[string]string{
-				"https://remote.task": {
+				"https://93.184.216.34/task.yaml": {
 					"body": readTDfile(t, "task-good"),
 					"code": "200",
 				},
 			},
 		},
 		{
+			name:    "blocked/remote task loopback",
+			task:    "https://127.0.0.1/task.yaml",
+			wantErr: "loopback",
+		},
+		{
+			name:                    "blocked/provider remote task by allowlist",
+			task:                    "https://93.184.216.34/provider/remote.task",
+			remoteTasksURLAllowlist: "example.com",
+			providerRemoteTask:      readTDfile(t, "task-good"),
+			wantProviderRemoteTask:  true,
+			wantErr:                 "not in the allowlist",
+		},
+		{
+			name:                   "blocked/provider remote task response too large",
+			task:                   "https://93.184.216.34/provider/remote.task",
+			remoteTasksURLMaxSize:  5,
+			providerRemoteTask:     "123456",
+			wantProviderRemoteTask: true,
+			wantErr:                "exceeds 5 bytes",
+		},
+		{
 			name: "bad/not a tasl",
-			task: "http://remote.task",
+			task: "https://93.184.216.34/not-a-task.yaml",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.task": {
+				"https://93.184.216.34/not-a-task.yaml": {
 					"body": readTDfile(t, "pipeline-good"),
 					"code": "200",
 				},
 			},
-			wantErr: "remote task from URI http://remote.task has not been recognized as a Tekton task",
+			wantErr: "remote task from URI https://93.184.216.34/not-a-task.yaml has not been recognized as a Tekton task",
 		},
 		{
 			name:        "test-annotations-inside-repo",
@@ -431,7 +483,7 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpTestClient := httptesthelper.MakeHTTPTestClient(tt.remoteURLS)
+			httpTestClient := httptesthelper.MakeHTTPTransportTestClient(t, tt.remoteURLS)
 			observer, fakelog := zapobserver.New(zap.InfoLevel)
 			logger := zap.New(observer).Sugar()
 			cs := &params.Run{
@@ -442,7 +494,9 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 				Info: info.Info{
 					Pac: &info.PacOpts{
 						Settings: settings.Settings{
-							HubCatalogs: &hubCatalogs,
+							HubCatalogs:                   &hubCatalogs,
+							RemoteTasksURLAllowlist:       tt.remoteTasksURLAllowlist,
+							RemoteTasksURLMaxResponseSize: tt.remoteTasksURLMaxSize,
 						},
 					},
 				},
@@ -453,6 +507,7 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 				Logger: logger,
 				ProviderInterface: &provider.TestProviderImp{
 					FilesInsideRepo:        tt.filesInsideRepo,
+					ProviderRemoteTask:     tt.providerRemoteTask,
 					WantProviderRemoteTask: tt.wantProviderRemoteTask,
 				},
 				Event: &tt.runevent,
@@ -514,22 +569,25 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 			Type:  hubtype.ArtifactHubType,
 		})
 	tests := []struct {
-		pipeline        string
-		filesInsideRepo map[string]string
-		gotPipelineName string
-		name            string
-		remoteURLS      map[string]map[string]string
-		runevent        info.Event
-		wantErr         string
-		wantLog         string
-		wantDeprecated  bool
+		pipeline                string
+		filesInsideRepo         map[string]string
+		gotPipelineName         string
+		name                    string
+		remoteURLS              map[string]map[string]string
+		runevent                info.Event
+		wantErr                 string
+		wantLog                 string
+		remoteTasksURLAllowlist string
+		providerRemoteTask      string
+		wantProviderRemoteTask  bool
+		wantDeprecated          bool
 	}{
 		{
-			name:            "good/fetching from remote http",
+			name:            "good/fetching from remote https",
 			gotPipelineName: "pipeline",
-			pipeline:        "http://remote.pipeline",
+			pipeline:        "https://93.184.216.34/remote.pipeline",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.pipeline": {
+				"https://93.184.216.34/remote.pipeline": {
 					"body": readTDfile(t, "pipeline-good"),
 					"code": "200",
 				},
@@ -538,13 +596,32 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 		{
 			name:            "good/fetching with bundle",
 			gotPipelineName: "pipeline",
-			pipeline:        "http://remote.pipeline",
+			pipeline:        "https://93.184.216.34/remote-pipeline-bundle",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.pipeline": {
+				"https://93.184.216.34/remote-pipeline-bundle": {
 					"body": readTDfile(t, "pipeline-good-bundle"),
 					"code": "200",
 				},
 			},
+		},
+		{
+			name:                   "blocked/remote pipeline http before provider",
+			pipeline:               "http://provider/remote.pipeline",
+			providerRemoteTask:     readTDfile(t, "pipeline-good"),
+			wantProviderRemoteTask: true,
+			wantErr:                "scheme \"http\" is not allowed",
+		},
+		{
+			name:            "good/fetching from remote http with allowlist",
+			gotPipelineName: "pipeline",
+			pipeline:        "http://93.184.216.34/remote.pipeline",
+			remoteURLS: map[string]map[string]string{
+				"http://93.184.216.34/remote.pipeline": {
+					"body": readTDfile(t, "pipeline-good"),
+					"code": "200",
+				},
+			},
+			remoteTasksURLAllowlist: "http://93.184.216.34",
 		},
 		// TODO: to uncomment in the future when fixing the Valdiate bug issue
 		// {
@@ -575,9 +652,9 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 		// },
 		{
 			name:     "bad/error getting pipeline",
-			pipeline: "http://remote.pipeline",
+			pipeline: "https://93.184.216.34/error.pipeline",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.pipeline": {
+				"https://93.184.216.34/error.pipeline": {
 					"code": "501",
 				},
 			},
@@ -585,25 +662,30 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 		},
 		{
 			name:     "bad/not a pipeline",
-			pipeline: "http://remote.pipeline",
+			pipeline: "https://93.184.216.34/not-a-pipeline.yaml",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.pipeline": {
+				"https://93.184.216.34/not-a-pipeline.yaml": {
 					"body": readTDfile(t, "task-good"),
 					"code": "200",
 				},
 			},
-			wantErr: "remote pipeline from URI http://remote.pipeline has not been recognized as a Tekton pipeline",
+			wantErr: "remote pipeline from URI https://93.184.216.34/not-a-pipeline.yaml has not been recognized as a Tekton pipeline",
 		},
 		{
 			name:     "bad/could not get remote",
-			pipeline: "http://nowhere.pipeline",
+			pipeline: "https://93.184.216.34/nowhere.pipeline",
 			wantErr:  "error getting remote pipeline",
 		},
 		{
+			name:     "blocked/remote pipeline loopback",
+			pipeline: "https://127.0.0.1/pipeline.yaml",
+			wantErr:  "loopback",
+		},
+		{
 			name:     "bad/not found",
-			pipeline: "http://remote.pipeline",
+			pipeline: "https://93.184.216.34/not-found.pipeline",
 			remoteURLS: map[string]map[string]string{
-				"http://remote.pipeline": {
+				"https://93.184.216.34/not-found.pipeline": {
 					"body": "",
 					"code": "200",
 				},
@@ -701,7 +783,7 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpTestClient := httptesthelper.MakeHTTPTestClient(tt.remoteURLS)
+			httpTestClient := httptesthelper.MakeHTTPTransportTestClient(t, tt.remoteURLS)
 			observer, fakelog := zapobserver.New(zap.InfoLevel)
 			logger := zap.New(observer).Sugar()
 
@@ -713,7 +795,8 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 				Info: info.Info{
 					Pac: &info.PacOpts{
 						Settings: settings.Settings{
-							HubCatalogs: &hubCatalogs,
+							HubCatalogs:             &hubCatalogs,
+							RemoteTasksURLAllowlist: tt.remoteTasksURLAllowlist,
 						},
 					},
 				},
@@ -723,7 +806,9 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 				Run:    cs,
 				Logger: logger,
 				ProviderInterface: &provider.TestProviderImp{
-					FilesInsideRepo: tt.filesInsideRepo,
+					FilesInsideRepo:        tt.filesInsideRepo,
+					ProviderRemoteTask:     tt.providerRemoteTask,
+					WantProviderRemoteTask: tt.wantProviderRemoteTask,
 				},
 				Event: &tt.runevent,
 			}

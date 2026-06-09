@@ -70,6 +70,23 @@ data:
   # Allow fetching remote tasks
   remote-tasks: "true"
 
+  # Optional comma-separated host allowlist for remote annotation URLs. Bare
+  # hosts and https:// hosts allow HTTPS fetches. HTTP fetches are disabled
+  # unless the host is explicitly listed with http://.
+  # Wildcards such as "*.example.com" match host suffixes; broad patterns such
+  # as "*.com" are allowed but risky.
+  remote-tasks-url-allowlist: ""
+
+  # Optional comma-separated CIDRs to block in addition to built-in unsafe
+  # ranges such as loopback, link-local, private, multicast, and shared address
+  # space. These built-in checks block typical Kubernetes service targets when
+  # they resolve to private cluster IPs. Use this to block additional
+  # cluster-specific service and pod CIDRs.
+  remote-tasks-url-blocked-cidrs: ""
+
+  # Maximum response size, in bytes, for remote annotation fetches.
+  remote-tasks-url-max-response-size: "1048576"
+
   # Using the URL of the Tekton dashboard, Pipelines-as-Code generates a URL to the
   # PipelineRun on the Tekton dashboard
   tekton-dashboard-url: ""

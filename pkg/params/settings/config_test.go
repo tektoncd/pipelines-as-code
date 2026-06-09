@@ -25,6 +25,9 @@ func TestSyncConfig(t *testing.T) {
 				ApplicationName:                      "Pipelines as Code CI",
 				HubCatalogs:                          nil,
 				RemoteTasks:                          true,
+				RemoteTasksURLAllowlist:              "",
+				RemoteTasksURLBlockedCIDRs:           "",
+				RemoteTasksURLMaxResponseSize:        1048576,
 				MaxKeepRunsUpperLimit:                0,
 				DefaultMaxKeepRuns:                   0,
 				BitbucketCloudCheckSourceIP:          true,
@@ -56,6 +59,9 @@ func TestSyncConfig(t *testing.T) {
 			configMap: map[string]string{
 				"application-name":                        "pac-pac",
 				"remote-tasks":                            "false",
+				"remote-tasks-url-allowlist":              "raw.githubusercontent.com,https://*.example.com,http://internal.example.com",
+				"remote-tasks-url-blocked-cidrs":          "10.0.0.0/8,fd00::/8",
+				"remote-tasks-url-max-response-size":      "2048",
 				"max-keep-run-upper-limit":                "10",
 				"default-max-keep-runs":                   "5",
 				"bitbucket-cloud-check-source-ip":         "false",
@@ -84,6 +90,9 @@ func TestSyncConfig(t *testing.T) {
 				ApplicationName:                      "pac-pac",
 				HubCatalogs:                          nil,
 				RemoteTasks:                          false,
+				RemoteTasksURLAllowlist:              "raw.githubusercontent.com,https://*.example.com,http://internal.example.com",
+				RemoteTasksURLBlockedCIDRs:           "10.0.0.0/8,fd00::/8",
+				RemoteTasksURLMaxResponseSize:        2048,
 				MaxKeepRunsUpperLimit:                10,
 				DefaultMaxKeepRuns:                   5,
 				BitbucketCloudCheckSourceIP:          false,
@@ -125,6 +134,34 @@ func TestSyncConfig(t *testing.T) {
 				"max-keep-run-upper-limit": "invalid",
 			},
 			expectedError: "invalid value for int field MaxKeepRunsUpperLimit: strconv.ParseInt: parsing \"invalid\": invalid syntax",
+		},
+		{
+			name: "invalid remote tasks url max response size",
+			configMap: map[string]string{
+				"remote-tasks-url-max-response-size": "0",
+			},
+			expectedError: "custom validation failed for field RemoteTasksURLMaxResponseSize: remote tasks URL max response size must be greater than 0",
+		},
+		{
+			name: "invalid remote tasks url blocked cidrs",
+			configMap: map[string]string{
+				"remote-tasks-url-blocked-cidrs": "10.0.0.0/99",
+			},
+			expectedError: "custom validation failed for field RemoteTasksURLBlockedCIDRs: invalid CIDR",
+		},
+		{
+			name: "invalid remote tasks url allowlist scheme",
+			configMap: map[string]string{
+				"remote-tasks-url-allowlist": "ftp://example.com",
+			},
+			expectedError: "custom validation failed for field RemoteTasksURLAllowlist: host \"ftp://example.com\" must use http:// or https:// when including a URL scheme",
+		},
+		{
+			name: "invalid remote tasks url allowlist path",
+			configMap: map[string]string{
+				"remote-tasks-url-allowlist": "http://example.com/path",
+			},
+			expectedError: "custom validation failed for field RemoteTasksURLAllowlist: host \"http://example.com/path\" must not include a URL path, query, fragment, or userinfo",
 		},
 		{
 			name: "invalid value regex",

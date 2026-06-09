@@ -2,7 +2,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    pipelinesascode.tekton.dev/pipeline: http://remote/remote-pipeline-1
+    pipelinesascode.tekton.dev/pipeline: https://93.184.216.34/remote-pipeline-1
   generateName: pipelinerun-abc-
 spec:
   pipelineSpec:
