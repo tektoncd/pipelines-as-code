@@ -26,9 +26,9 @@ import (
 )
 
 const (
-	githubAppTokenMintBlockedLog        = "[SECURITY] Blocked GitHub App token minting before webhook signature validation completed"
+	githubAppTokenMintBlockedLog         = "[SECURITY] Blocked GitHub App token minting before webhook signature validation completed"
 	githubAppTokenExfiltrationBlockedLog = "[SECURITY][CRITICAL] Averted GitHub App credential exfiltration attempt before token minting"
-	controllerWebhookSecretKey          = "webhook.secret"
+	controllerWebhookSecretKey           = "webhook.secret"
 )
 
 // GetAppIDAndPrivateKey retrieves the GitHub application ID and private key from a secret in the specified namespace.
