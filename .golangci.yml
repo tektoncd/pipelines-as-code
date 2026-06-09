@@ -57,6 +57,9 @@ linters:
     - whitespace
     - zerologlint
   settings:
+    govet:
+      disable:
+        - inline
     errcheck:
       exclude-functions:
         - (*github.com/tektoncd/pipeline/vendor/go.uber.org/zap.SugaredLogger).Sync

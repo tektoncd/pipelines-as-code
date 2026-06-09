@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -682,7 +683,7 @@ func Test_listener_detectIncoming(t *testing.T) {
 			}
 
 			// make a new request
-			req := httptest.NewRequest(tt.args.method,
+			req := httptest.NewRequestWithContext(context.Background(), tt.args.method,
 				fmt.Sprintf("http://localhost%s?repository=%s&secret=%s&pipelinerun=%s&branch=%s", tt.args.queryURL,
 					tt.args.queryRepository, tt.args.querySecret, tt.args.queryPipelineRun, tt.args.queryBranch),
 				strings.NewReader(tt.args.incomingBody))
@@ -956,7 +957,7 @@ func Test_detectIncoming_legacy_warning(t *testing.T) {
 	}{
 		{
 			name: "legacy mode - params in URL",
-			req: httptest.NewRequest(http.MethodPost,
+			req: httptest.NewRequestWithContext(context.Background(), http.MethodPost,
 				"http://localhost/incoming?repository=test-good&secret=verysecrete&pipelinerun=pipelinerun1&branch=main",
 				strings.NewReader("")),
 			body:          nil,
@@ -972,7 +973,7 @@ func Test_detectIncoming_legacy_warning(t *testing.T) {
 					"secret": "verysecrete",
 					"params": {"foo": "bar"}
 				}`
-				r := httptest.NewRequest(http.MethodPost,
+				r := httptest.NewRequestWithContext(context.Background(), http.MethodPost,
 					"http://localhost/incoming",
 					strings.NewReader(payload))
 				r.Header.Set("Content-Type", "application/json")
@@ -1054,7 +1055,7 @@ func Test_detectIncoming_body_params_are_parsed(t *testing.T) {
 		"secret": "verysecrete",
 		"params": {"foo": "bar", "bar": "baz"}
 	}`
-	req := httptest.NewRequest(http.MethodPost,
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost,
 		"http://localhost/incoming",
 		strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
