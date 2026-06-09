@@ -213,6 +213,8 @@ run_e2e_tests() {
 
   mkdir -p /tmp/logs
 
+  check_github_rate_limit
+
   local test_pattern
   local test_status=0
   local raw_output=/tmp/logs/e2e-test-output.json
@@ -227,6 +229,47 @@ run_e2e_tests() {
     echo "::warning::testrr upload failed; continuing without failing GitHub Actions"
   fi
   return "${test_status}"
+}
+
+check_github_rate_limit() {
+  set +x
+  local token="${TEST_GITHUB_TOKEN:-}"
+  local api_url="${TEST_GITHUB_API_URL:-api.github.com}"
+  local rate_limit_url="${GITHUB_RATE_LIMIT_URL:-https://${api_url}/rate_limit}"
+  local min_remaining="${GITHUB_RATE_LIMIT_MIN_REMAINING:-30}"
+
+  if [[ -z "${token}" ]]; then
+    echo "TEST_GITHUB_TOKEN is not set; skipping GitHub API rate limit preflight."
+    return 0
+  fi
+
+  if [[ ! "${min_remaining}" =~ ^[0-9]+$ ]]; then
+    echo "GITHUB_RATE_LIMIT_MIN_REMAINING must be a non-negative integer, got '${min_remaining}'" >&2
+    return 1
+  fi
+
+  local response_headers
+  local remaining
+  if ! response_headers="$(curl -fsS -D - -o /dev/null \
+    -H "Authorization: Bearer ${token}" \
+    -H "Accept: application/vnd.github.v3+json" \
+    "${rate_limit_url}")"; then
+    echo "Unable to query GitHub API rate limit endpoint: ${rate_limit_url}" >&2
+    return 1
+  fi
+
+  remaining="$(awk -F': ' 'tolower($1) == "x-ratelimit-remaining" { gsub(/\r/, "", $2); print $2; exit }' <<<"${response_headers}")"
+  if [[ ! "${remaining}" =~ ^[0-9]+$ ]]; then
+    echo "Unable to determine GitHub API rate limit remaining from ${rate_limit_url}" >&2
+    return 1
+  fi
+
+  if ((remaining < min_remaining)); then
+    echo "GitHub API token is rate limited: ${remaining} requests remaining, minimum required is ${min_remaining}." >&2
+    return 1
+  fi
+
+  echo "GitHub API rate limit preflight passed: ${remaining} requests remaining."
 }
 
 output_logs() {
@@ -337,6 +380,10 @@ help() {
     Run the e2e tests
     Required env vars: TEST_PROVIDER plus many test-specific environment variables
 
+  check_github_rate_limit
+    Check TEST_GITHUB_TOKEN has enough remaining GitHub API quota before e2e tests
+    Optional env vars: GITHUB_RATE_LIMIT_MIN_REMAINING, GITHUB_RATE_LIMIT_URL
+
   collect_logs
     Collect logs from the cluster
     Optional env vars: TEST_GITEA_SMEEURL, TEST_GITHUB_SECOND_SMEE_URL (for scrubbing URLs from logs)
@@ -364,6 +411,9 @@ create_second_github_app_controller_on_ghe)
   ;;
 run_e2e_tests)
   run_e2e_tests
+  ;;
+check_github_rate_limit)
+  check_github_rate_limit
   ;;
 collect_logs)
   collect_logs
