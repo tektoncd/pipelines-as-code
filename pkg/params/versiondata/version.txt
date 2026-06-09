@@ -1,1 +1,1 @@
-nightly
+nightly-cbd582d0e-20260609
