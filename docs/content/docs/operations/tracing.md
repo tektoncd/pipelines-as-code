@@ -7,35 +7,24 @@ This page describes how to enable OpenTelemetry distributed tracing for Pipeline
 
 ## Enabling tracing
 
-The ConfigMap `pipelines-as-code-config-observability` controls tracing configuration. It must exist in the same namespace as the Pipelines-as-Code controller and watcher deployments. See [config/305-config-observability.yaml](https://github.com/tektoncd/pipelines-as-code/blob/main/config/305-config-observability.yaml) for the full example.
+Pipelines-as-Code reads tracing configuration from standard OpenTelemetry environment variables on the controller and watcher pods:
 
-It contains the following tracing fields:
+* `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP collector endpoint URL. Required to enable tracing.
+* `OTEL_TRACES_SAMPLER`: Sampler family. Required to enable tracing. Supported values: `always_on`, `always_off`, `traceidratio`, `parentbased_always_on`, `parentbased_always_off`, `parentbased_traceidratio`.
+* `OTEL_TRACES_SAMPLER_ARG`: Numeric argument for ratio-based samplers. Set to `0.1` with `OTEL_TRACES_SAMPLER=parentbased_traceidratio` to sample 10% of root traces while keeping the chain coherent on those that are kept.
+* `OTEL_EXPORTER_OTLP_PROTOCOL` (or traces-specific `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL`): OTLP transport. Supported values: `grpc`, `http/protobuf`. Default: `grpc`.
 
-* `tracing-protocol`: Export protocol. Supported values: `grpc`, `http/protobuf`, `none`. Default is `none` (tracing disabled).
-* `tracing-endpoint`: OTLP collector endpoint. Required when protocol is not `none`. The `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable takes precedence if set.
-* `tracing-sampling-rate`: Fraction of traces to sample. `0.0` = none, `1.0` = all. Default is `0`.
+Both `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_TRACES_SAMPLER` must be set to opt in to tracing. If either is unset PaC falls back to a noop tracer that emits no spans and incurs no exporter cost. Changes to any of these env vars take effect on the next pod restart.
 
-### Example
+PaC honors inbound `traceparent` headers on incoming webhook requests via the W3C TraceContext propagator. OTel Baggage is intentionally not honored: every emission point in PaC already has the attributes it needs from the local PipelineRun and webhook event, so no cross-service attribute propagation channel is needed.
 
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: pipelines-as-code-config-observability
-  namespace: pipelines-as-code
-data:
-  tracing-protocol: grpc
-  tracing-endpoint: "http://otel-collector.observability.svc.cluster.local:4317"
-  tracing-sampling-rate: "1.0"
-```
+### Sampler choice and chain coherency
 
-Changes to `tracing-protocol`, `tracing-endpoint`, and `tracing-sampling-rate` require restarting the controller and watcher pods. The trace exporter is created once at startup from the ConfigMap values at that time. Set `tracing-protocol` to `none` or remove the tracing keys to disable tracing.
-
-The controller and watcher locate this ConfigMap by name via the `CONFIG_OBSERVABILITY_NAME` environment variable set in their deployment manifests. Operator-based installations may manage this differently; consult the operator documentation for details.
+The `parentbased_*` sampler family honors the parent span's sample decision carried in the W3C `traceparent` flag bit. When every service in the delivery chain uses parent-based samplers, the root span's sampling decision propagates end to end: each service either keeps its spans or drops them based on what the root chose. Flat-rate samplers (`traceidratio` without parent-based) cause each service to roll independently, which at fractional sampling fragments the chain into orphaned spans whose `parent_spanID` references a span that was dropped. `parentbased_always_on` keeps everything; `parentbased_traceidratio` with a numeric argument samples a coherent fraction.
 
 ## Emitted spans
 
-The controller emits a `PipelinesAsCode:ProcessEvent` span for each webhook event. The watcher emits `waitDuration` and `executeDuration` spans for completed PipelineRuns.
+The controller emits a `PipelinesAsCode:ProcessEvent` span for each webhook event. The watcher emits `waitDuration` and `executeDuration` spans for completed PipelineRuns. The OTel resource attribute `service.name` on all emitted spans is `pipelines-as-code`.
 
 ### Webhook event span (`PipelinesAsCode:ProcessEvent`)
 
@@ -109,7 +98,7 @@ If Tekton Pipelines is also configured with tracing pointing at the same collect
 
 ## Deploying a trace collector
 
-Pipelines-as-Code exports traces using the standard OpenTelemetry Protocol (OTLP). You need a running OTLP-compatible collector for the `tracing-endpoint` to point to. Common options include:
+Pipelines-as-Code exports traces using the standard OpenTelemetry Protocol (OTLP). You need a running OTLP-compatible collector for `OTEL_EXPORTER_OTLP_ENDPOINT` to point to. Common options include:
 
 * [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) -- the vendor-neutral reference collector
 * [Jaeger](https://www.jaegertracing.io/docs/latest/getting-started/) -- supports OTLP ingestion natively since v1.35

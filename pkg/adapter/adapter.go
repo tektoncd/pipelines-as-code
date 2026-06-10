@@ -79,6 +79,13 @@ func New(run *params.Run, k *kubeinteraction.Interaction) adapter.AdapterConstru
 }
 
 func (l *listener) Start(ctx context.Context) error {
+	tp := tracing.New(l.logger)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tp.Shutdown(shutdownCtx)
+	}()
+
 	adapterPort := globalAdapterPort
 	envAdapterPort := os.Getenv("PAC_CONTROLLER_PORT")
 	if envAdapterPort != "" {
