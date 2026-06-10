@@ -110,6 +110,40 @@ func TestCheckPolicyAllowing(t *testing.T) {
 	}
 }
 
+func TestCheckPolicyAllowingCaching(t *testing.T) {
+	fakeclient, mux, teardown := tgitea.Setup(t)
+	defer teardown()
+
+	apiCallCount := 0
+	event := &info.Event{
+		Organization: "myorg",
+		Sender:       "allowedUser",
+	}
+
+	mux.HandleFunc("/orgs/myorg/teams", func(rw http.ResponseWriter, _ *http.Request) {
+		apiCallCount++
+		fmt.Fprint(rw, `[{"name": "team1", "id": 1}]`)
+	})
+	mux.HandleFunc("/teams/1/members/allowedUser", func(rw http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(rw, `{"id": 2}`)
+	})
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+	gprovider := Provider{giteaClient: fakeclient, Logger: logger}
+
+	allowed1, reason1 := gprovider.CheckPolicyAllowing(ctx, event, []string{"team1"})
+	assert.Assert(t, allowed1)
+	assert.Equal(t, "allowing user: allowedUser as a member of the team: team1", reason1)
+
+	allowed2, reason2 := gprovider.CheckPolicyAllowing(ctx, event, []string{"team1"})
+	assert.Assert(t, allowed2)
+	assert.Equal(t, "allowing user: allowedUser as a member of the team: team1", reason2)
+
+	assert.Equal(t, 1, apiCallCount)
+}
+
 func TestOkToTestComment(t *testing.T) {
 	issueCommentPayload := &forgejostructs.IssueCommentPayload{
 		Comment: &forgejostructs.Comment{

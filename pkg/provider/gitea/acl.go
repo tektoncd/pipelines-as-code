@@ -17,20 +17,12 @@ func (v *Provider) CheckPolicyAllowing(_ context.Context, event *info.Event, all
 	if event.Organization == event.Repository {
 		return true, ""
 	}
-	// TODO: caching
-	orgTeams, resp, err := v.Client().ListOrgTeams(event.Organization, forgejo.ListTeamsOptions{})
-	if resp.StatusCode == http.StatusNotFound {
-		// we explicitly disallow the policy when there is no team on org
-		return false, fmt.Sprintf("no teams on org %s", event.Organization)
-	}
-	if resp.StatusCode == http.StatusForbidden {
-		v.Logger.Warnf("policy check: ListOrgTeams returned 403 for org %s, sender %s: %v", event.Organization, event.Sender, err)
-		return false, fmt.Sprintf("unable to list teams on org %s: the token used doesn't have permission to list teams in this org, make sure the token owner is a member of the org", event.Organization)
-	}
+
+	orgTeams, err := v.listOrgTeams(event.Organization, event.Sender)
 	if err != nil {
-		// probably a 500 or another api error, no need to try again and again with other teams
-		return false, fmt.Sprintf("error while getting org team, error: %s", err.Error())
+		return false, err.Error()
 	}
+
 	for _, allowedTeam := range allowedTeams {
 		for _, orgTeam := range orgTeams {
 			if orgTeam.Name == allowedTeam {
@@ -205,6 +197,32 @@ func (v *Provider) IsAllowedOwnersFile(ctx context.Context, rev *info.Event) (bo
 	}
 
 	return acl.UserInOwnerFile(ownerContent, ownerAliasesContent, rev.Sender)
+}
+
+func (v *Provider) listOrgTeams(org, sender string) ([]*forgejo.Team, error) {
+	if v.cachedOrgTeams == nil {
+		v.cachedOrgTeams = make(map[string][]*forgejo.Team)
+	}
+	if teams, ok := v.cachedOrgTeams[org]; ok {
+		return teams, nil
+	}
+
+	teams, resp, err := v.Client().ListOrgTeams(org, forgejo.ListTeamsOptions{})
+	if err != nil {
+		if resp != nil && resp.Response != nil {
+			switch resp.StatusCode {
+			case http.StatusNotFound:
+				return nil, fmt.Errorf("no teams on org %s", org)
+			case http.StatusForbidden:
+				v.Logger.Warnf("policy check: ListOrgTeams returned 403 for org %s, sender %s: %v", org, sender, err)
+				return nil, fmt.Errorf("unable to list teams on org %s: the token used doesn't have permission to list teams in this org, make sure the token owner is a member of the org", org)
+			}
+		}
+		return nil, fmt.Errorf("error while getting org team, error: %w", err)
+	}
+
+	v.cachedOrgTeams[org] = teams
+	return teams, nil
 }
 
 func (v *Provider) checkSenderRepoMembership(_ context.Context, runevent *info.Event) (bool, error) {
