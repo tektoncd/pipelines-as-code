@@ -70,6 +70,7 @@ type Provider struct {
 	triggerEvent       string
 	pacUserID          int64 // user login used by PAC
 	cachedChangedFiles *changedfiles.ChangedFiles
+	cachedOrgTeams     map[string][]*forgejo.Team
 	clock              clockwork.Clock
 }
 
