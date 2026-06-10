@@ -133,10 +133,14 @@ func (v *Provider) logAPICall(operation string, duration time.Duration, resp *gi
 		}
 	}
 
-	// Log based on success/failure with appropriate level
+	// Plausible replacement for the if err != nil
 	if err != nil {
 		logFields = append(logFields, "error", err.Error())
-		v.Logger.Errorw("GitHub API call failed", logFields...)
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			v.Logger.Debugw("GitHub API call returned not found", logFields...)
+		} else {
+			v.Logger.Errorw("GitHub API call failed", logFields...)
+		}
 	} else {
 		v.Logger.Debugw("GitHub API call completed", logFields...)
 	}
