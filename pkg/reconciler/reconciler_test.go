@@ -803,3 +803,142 @@ func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
 	logEntries := log.FilterMessageSnippet("failed to create secret for pipelineRun").TakeAll()
 	assert.Equal(t, len(logEntries), 0)
 }
+
+func TestReconcileKindClearsPendingAfterSecretCreationForStartedState(t *testing.T) {
+	tests := []struct {
+		name                  string
+		state                 string
+		specStatus            tektonv1.PipelineRunSpecStatus
+		expectPendingCleared  bool
+		expectSecretCreated   bool
+		expectSCMStartedAdded bool
+	}{
+		{
+			name:                  "secret-pending PR (state=started, pending) - pending cleared after secret creation",
+			state:                 kubeinteraction.StateStarted,
+			specStatus:            tektonv1.PipelineRunSpecStatusPending,
+			expectPendingCleared:  true,
+			expectSecretCreated:   true,
+			expectSCMStartedAdded: true,
+		},
+		{
+			name:                  "concurrency-pending PR (state=queued, pending) - pending NOT cleared",
+			state:                 kubeinteraction.StateQueued,
+			specStatus:            tektonv1.PipelineRunSpecStatusPending,
+			expectPendingCleared:  false,
+			expectSecretCreated:   true,
+			expectSCMStartedAdded: false,
+		},
+		{
+			name:                  "already running PR (state=started, no pending) - no change to status",
+			state:                 kubeinteraction.StateStarted,
+			specStatus:            "",
+			expectPendingCleared:  false, // was not pending, nothing to clear
+			expectSecretCreated:   true,
+			expectSCMStartedAdded: false, // updatePipelineRunState not called
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			ctx, _ := rtesting.SetupFakeContext(t)
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-ns",
+					Name:      "test-pr",
+					Annotations: map[string]string{
+						keys.State:         tt.state,
+						keys.Repository:    "test-repo",
+						keys.SecretCreated: "false",
+						keys.GitAuthSecret: "pac-git-basic-auth-owner-repo",
+						keys.GitProvider:   "github",
+						keys.RepoURL:       "https://github.com/org/repo",
+						keys.URLOrg:        "org",
+						keys.URLRepository: "repo",
+						keys.SHA:           "abc123",
+					},
+				},
+				Spec: tektonv1.PipelineRunSpec{
+					Status: tt.specStatus,
+				},
+			}
+
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "test-ns",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					GitProvider: &v1alpha1.GitProvider{
+						Secret: &v1alpha1.Secret{
+							Name: "pac-provider-secret",
+						},
+						User: "test-user",
+					},
+				},
+			}
+
+			testData := testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testData)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{
+								SecretAutoCreation: true,
+							},
+						},
+						Kube: &info.KubeOpts{
+							Namespace: "global",
+						},
+						Controller: &info.ControllerInfo{
+							GlobalRepository: "global-repo",
+						},
+					},
+				},
+				kinteract: &testkubernetestint.KinterfaceTest{
+					GetSecretResult: map[string]string{
+						"pac-provider-secret": "test-token",
+					},
+				},
+			}
+
+			err := r.ReconcileKind(ctx, pr)
+			assert.NilError(t, err)
+
+			updatedPR, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+			assert.NilError(t, getErr)
+
+			if tt.expectSecretCreated {
+				assert.Equal(t, updatedPR.Annotations[keys.SecretCreated], "true")
+			}
+
+			if tt.expectPendingCleared {
+				assert.Equal(t, string(updatedPR.Spec.Status), "",
+					"pending status should be cleared after secret creation for state=started PRs")
+			} else if tt.specStatus == tektonv1.PipelineRunSpecStatusPending {
+				assert.Equal(t, string(updatedPR.Spec.Status), string(tektonv1.PipelineRunSpecStatusPending),
+					"pending status should NOT be cleared for state=queued PRs (queue manager handles this)")
+			}
+
+			if tt.expectSCMStartedAdded {
+				scmStarted, ok := updatedPR.Annotations[keys.SCMReportingPLRStarted]
+				assert.Assert(t, ok, "SCMReportingPLRStarted annotation should be set")
+				assert.Equal(t, scmStarted, "true")
+			}
+		})
+	}
+}

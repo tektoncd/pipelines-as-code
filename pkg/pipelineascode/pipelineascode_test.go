@@ -709,18 +709,20 @@ func TestRun(t *testing.T) {
 						secretName, ok := pr.GetAnnotations()[keys.GitAuthSecret]
 						assert.Assert(t, ok, "Cannot find secret %s on annotations", secretName)
 					}
-					if pr.Spec.Status == pipelinev1.PipelineRunSpecStatusPending {
-						state, ok := pr.GetAnnotations()[keys.State]
-						assert.Assert(t, ok, "State hasn't been set on PR", state)
-						assert.Equal(t, state, kubeinteraction.StateQueued)
+					state, ok := pr.GetAnnotations()[keys.State]
+					assert.Assert(t, ok, "State hasn't been set on PR")
 
-						// When PipelineRun is queued, SCMReportingPLRStarted should not be set
+					if state == kubeinteraction.StateQueued {
+						// Concurrency-pending: must be pending, no SCMReportingPLRStarted
+						assert.Equal(t, pr.Spec.Status, pipelinev1.PipelineRunSpecStatusPending,
+							"queued PipelineRun should be in pending state")
 						_, scmStartedExists := pr.GetAnnotations()[keys.SCMReportingPLRStarted]
 						assert.Assert(t, !scmStartedExists, "SCMReportingPLRStarted should not be set for queued PipelineRuns")
 					} else {
-						// When PipelineRun is not queued, SCMReportingPLRStarted should be set to "true"
+						// State is "started" — may be pending (secret-pending) or not pending (no secret auto-creation).
+						// Either way, SCMReportingPLRStarted should be set to "true".
 						scmStarted, scmStartedExists := pr.GetAnnotations()[keys.SCMReportingPLRStarted]
-						assert.Assert(t, scmStartedExists, "SCMReportingPLRStarted should be set for non-queued PipelineRuns")
+						assert.Assert(t, scmStartedExists, "SCMReportingPLRStarted should be set for started PipelineRuns")
 						assert.Equal(t, scmStarted, "true", "SCMReportingPLRStarted should be 'true'")
 					}
 				}

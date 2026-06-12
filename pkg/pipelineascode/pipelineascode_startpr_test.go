@@ -356,37 +356,60 @@ func TestStartPRConcurrencyLimitBehavior(t *testing.T) {
 	tests := []struct {
 		name                    string
 		concurrencyLimit        *int
+		secretAutoCreation      bool
 		expectedState           string
 		expectedStatus          pipelinev1.PipelineRunSpecStatus
 		verifySCMStartedMissing bool   // true if SCMReportingPLRStarted should NOT be set
 		expectedSCMStartedVal   string // expected value for SCMReportingPLRStarted when it should be set
 	}{
 		{
-			name:                    "nil concurrency limit - starts immediately",
+			name:                    "nil concurrency limit with secret auto-creation - pending for secret",
 			concurrencyLimit:        nil,
+			secretAutoCreation:      true,
+			expectedState:           kubeinteraction.StateStarted,
+			expectedStatus:          pipelinev1.PipelineRunSpecStatusPending,
+			verifySCMStartedMissing: false,
+			expectedSCMStartedVal:   "true",
+		},
+		{
+			name:                    "nil concurrency limit without secret auto-creation - starts immediately",
+			concurrencyLimit:        nil,
+			secretAutoCreation:      false,
 			expectedState:           kubeinteraction.StateStarted,
 			expectedStatus:          "",
 			verifySCMStartedMissing: false,
 			expectedSCMStartedVal:   "true",
 		},
 		{
-			name:                    "zero concurrency limit - treated as no limit",
+			name:                    "zero concurrency limit with secret auto-creation - pending for secret",
 			concurrencyLimit:        intPtr(0),
+			secretAutoCreation:      true,
+			expectedState:           kubeinteraction.StateStarted,
+			expectedStatus:          pipelinev1.PipelineRunSpecStatusPending,
+			verifySCMStartedMissing: false,
+			expectedSCMStartedVal:   "true",
+		},
+		{
+			name:                    "zero concurrency limit without secret auto-creation - starts immediately",
+			concurrencyLimit:        intPtr(0),
+			secretAutoCreation:      false,
 			expectedState:           kubeinteraction.StateStarted,
 			expectedStatus:          "",
 			verifySCMStartedMissing: false,
 			expectedSCMStartedVal:   "true",
 		},
 		{
-			name:                    "positive concurrency limit - sets pending",
+			name:                    "positive concurrency limit - sets pending and queued",
 			concurrencyLimit:        intPtr(1),
+			secretAutoCreation:      true,
 			expectedState:           kubeinteraction.StateQueued,
 			expectedStatus:          pipelinev1.PipelineRunSpecStatusPending,
 			verifySCMStartedMissing: true,
 		},
 		{
-			name:                    "higher concurrency limit - still sets pending",
+			name:                    "higher concurrency limit - still sets pending and queued",
 			concurrencyLimit:        intPtr(5),
+			secretAutoCreation:      true,
 			expectedState:           kubeinteraction.StateQueued,
 			expectedStatus:          pipelinev1.PipelineRunSpecStatusPending,
 			verifySCMStartedMissing: true,
@@ -394,6 +417,7 @@ func TestStartPRConcurrencyLimitBehavior(t *testing.T) {
 		{
 			name:                    "negative concurrency limit - treated as having limit (queued)",
 			concurrencyLimit:        intPtr(-1),
+			secretAutoCreation:      true,
 			expectedState:           kubeinteraction.StateQueued,
 			expectedStatus:          pipelinev1.PipelineRunSpecStatusPending,
 			verifySCMStartedMissing: true,
@@ -402,7 +426,9 @@ func TestStartPRConcurrencyLimitBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fixture := setupStartPRTestDefault(t)
+			config := defaultStartPRTestConfig()
+			config.secretAutoCreation = tt.secretAutoCreation
+			fixture := setupStartPRTestWithConfig(t, config)
 			defer fixture.teardown()
 
 			match := createTestMatch(tt.concurrencyLimit)
@@ -590,6 +616,14 @@ func TestStartPRPatchBehavior(t *testing.T) {
 				}
 				assert.Equal(t, pr.GetNamespace(), "test-namespace")
 				assert.Assert(t, patchAttempts >= 1, "Patch should have been attempted")
+
+				// Even when the post-creation patch fails, the state annotation
+				// should still be present because it is set before Create.
+				// This is the fix for https://github.com/tektoncd/pipelines-as-code/issues/2751
+				state, hasState := pr.GetAnnotations()[keys.State]
+				assert.Assert(t, hasState, "State annotation should be set at creation time even when patch fails")
+				assert.Equal(t, state, kubeinteraction.StateStarted,
+					"State should be 'started' for non-concurrency PRs even when patch fails")
 			} else {
 				fixture := setupStartPRTestDefault(t)
 				defer fixture.teardown()
@@ -714,4 +748,140 @@ func TestStartPRConcurrentCreation(t *testing.T) {
 	// All should succeed with proper isolation (each has unique name and secret)
 	assert.Equal(t, successCount, numConcurrent, "All concurrent PipelineRuns should succeed with proper isolation, got %d/%d (failures: %d)", successCount, numConcurrent, failureCount)
 	t.Logf("Successfully created %d/%d concurrent PipelineRuns", successCount, numConcurrent)
+}
+
+// TestStartPRStateAnnotationSurvivesPatchFailure verifies the fix for
+// https://github.com/tektoncd/pipelines-as-code/issues/2751
+//
+// When the post-creation patch that sets state/reporting annotations fails
+// transiently, the PipelineRun must still have the state annotation so the
+// controller's enqueue guard can pick it up for reconciliation. Without the
+// state annotation, the reconciler never creates the generated git-auth secret.
+func TestStartPRStateAnnotationSurvivesPatchFailure(t *testing.T) {
+	tests := []struct {
+		name             string
+		concurrencyLimit *int
+		expectedState    string
+	}{
+		{
+			name:             "no concurrency limit - state annotation is started at creation",
+			concurrencyLimit: nil,
+			expectedState:    kubeinteraction.StateStarted,
+		},
+		{
+			name:             "with concurrency limit - state annotation is queued at creation",
+			concurrencyLimit: intPtr(1),
+			expectedState:    kubeinteraction.StateQueued,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Namespaces: []*corev1.Namespace{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-namespace",
+						},
+					},
+				},
+			})
+
+			// Make ALL patches fail to simulate the transient failure in #2751
+			stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+				return true, nil, fmt.Errorf("webhook validation timeout")
+			})
+
+			cs := &params.Run{
+				Clients: clients.Clients{
+					PipelineAsCode: stdata.PipelineAsCode,
+					Log:            logger,
+					Kube:           stdata.Kube,
+					Tekton:         stdata.Pipeline,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{
+						Name:      "default",
+						Configmap: "pipelines-as-code",
+						Secret:    "pipelines-as-code-secret",
+					},
+				},
+			}
+			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			event := &info.Event{
+				SHA:               "test-sha",
+				Organization:      "test-org",
+				Repository:        "test-repo",
+				URL:               "https://test.com/repo",
+				HeadBranch:        "test-branch",
+				BaseBranch:        "main",
+				Sender:            "test-user",
+				EventType:         "pull_request",
+				TriggerTarget:     "pull_request",
+				PullRequestNumber: 123,
+				Provider: &info.Provider{
+					Token: "test-token",
+					User:  "git",
+					URL:   "https://api.github.com",
+				},
+			}
+
+			fakeclient, mux, ghTestServerURL, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			replyString(mux, fmt.Sprintf("/repos/%s/%s/statuses/%s", event.Organization, event.Repository, event.SHA), "{}")
+			replyString(mux, fmt.Sprintf("/repos/%s/%s/check-runs", event.Organization, event.Repository), `{"id": 123}`)
+			event.Provider.URL = ghTestServerURL
+
+			kint := &kitesthelper.KinterfaceTest{
+				ConsoleURL: "https://console.test",
+			}
+
+			pacInfo := &info.PacOpts{
+				Settings: settings.Settings{
+					SecretAutoCreation: true,
+				},
+			}
+
+			vcx := setupProviderForTest(cs, logger, fakeclient, pacInfo)
+			p := NewPacs(event, vcx, cs, pacInfo, kint, logger, nil)
+
+			match := createTestMatch(tt.concurrencyLimit)
+
+			pr, err := p.startPR(ctx, match)
+
+			// startPR logs the patch error but returns the PR without error
+			assert.Assert(t, pr != nil, "PipelineRun should be returned even when patch fails")
+			assert.NilError(t, err, "startPR should not return error on patch failure")
+
+			// The critical assertion: the state annotation must be present on
+			// the created PipelineRun so the controller can enqueue it
+			state, hasState := pr.GetAnnotations()[keys.State]
+			assert.Assert(t, hasState,
+				"State annotation MUST be set at creation time so the reconciler "+
+					"can enqueue the PipelineRun even when the post-creation patch fails (#2751)")
+			assert.Equal(t, state, tt.expectedState,
+				"State annotation should match expected initial state")
+
+			// Also verify the state label matches
+			labelState, hasLabelState := pr.GetLabels()[keys.State]
+			assert.Assert(t, hasLabelState, "State label should be set at creation time")
+			assert.Equal(t, labelState, tt.expectedState,
+				"State label should match annotation state")
+
+			// Verify the git auth secret annotation is present
+			_, hasGitAuth := pr.GetAnnotations()[keys.GitAuthSecret]
+			assert.Assert(t, hasGitAuth, "GitAuthSecret annotation should be set")
+
+			// Verify secret-created is false (secret hasn't been created yet)
+			secretCreated, hasSecretCreated := pr.GetAnnotations()[keys.SecretCreated]
+			assert.Assert(t, hasSecretCreated, "SecretCreated annotation should be set")
+			assert.Equal(t, secretCreated, "false", "SecretCreated should be false before reconciler creates it")
+		})
+	}
 }

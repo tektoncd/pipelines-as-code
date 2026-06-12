@@ -63,6 +63,7 @@ func AddLabelsAndAnnotations(ctx context.Context, event *info.Event, pipelineRun
 		keys.SourceBranch:  event.HeadBranch,
 		keys.Repository:    repo.GetName(),
 		keys.GitProvider:   providerConfig.Name,
+		keys.State:         StateStarted,
 		keys.SecretCreated: "false",
 		keys.ControllerInfo: fmt.Sprintf(`{"name":"%s","configmap":"%s","secret":"%s", "gRepo": "%s"}`,
 			paramsinfo.Controller.Name, paramsinfo.Controller.Configmap, paramsinfo.Controller.Secret, paramsinfo.Controller.GlobalRepository),
