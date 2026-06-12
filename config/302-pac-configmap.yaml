@@ -181,10 +181,15 @@ data:
 
   # Configure a custom console here, the driver support custom parameters from
   # Repo CR along a few other template variable, see documentation for more
-  # details
+  # details.
+  #
+  # When custom-console-url is set, custom-console-url-pr-details,
+  # custom-console-url-namespace, and custom-console-url-pr-tasklog should
+  # also be set, otherwise links in status reports will be broken.
   #
   # custom-console-name: Console Name
   # custom-console-url: https://url
+  # custom-console-url-namespace: https://url/ns/{{ namespace }}
   # custom-console-url-pr-details: https://url/ns/{{ namespace }}/{{ pr }}
   # custom-console-url-pr-tasklog: https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ task }}
 
