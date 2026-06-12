@@ -265,6 +265,7 @@ func TestParsePayload(t *testing.T) {
 			assert.Equal(t, tt.expectedSender, got.Sender)
 			assert.Equal(t, tt.expectedSHA, got.SHA, "%s != %s", tt.expectedSHA, got.SHA)
 			assert.Equal(t, tt.expectedEventType, got.EventType, "%s != %s", tt.expectedEventType, got.EventType)
+			assert.Assert(t, got.Event != nil)
 
 			if tt.expectedRef != "" {
 				assert.Equal(t, tt.expectedRef, got.BaseBranch, tt.expectedRef, got.BaseBranch)

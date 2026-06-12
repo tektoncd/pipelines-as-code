@@ -29,7 +29,7 @@ libraries in other languages.
 ### Versions
 
 The forthcoming Version 5 will be released with several breaking API changes,
-and will require Golang's `encoding/json/v2`, which is currently requires
+and will require Golang's `encoding/json/v2`, which is currently requires 
 Go 1.25 built with GOEXPERIMENT=jsonv2.
 
 Version 4 is the current stable version:
