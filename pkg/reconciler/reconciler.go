@@ -117,6 +117,16 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		} else if err != nil {
 			logger.Errorf("failed to create secret for pipelineRun %s/%s: %v", pr.GetNamespace(), pr.GetName(), err)
 		}
+
+		// If the PipelineRun was made pending for secret creation (state="started"
+		// with pending status), clear the pending status now that the secret exists
+		// so Tekton controller can start execution.
+		if err == nil && state == kubeinteraction.StateStarted && pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
+			logger.Infof("secret created for pipelineRun %s/%s, clearing pending status to allow execution", pr.GetNamespace(), pr.GetName())
+			if _, err := r.updatePipelineRunState(ctx, logger, pr, kubeinteraction.StateStarted); err != nil {
+				return fmt.Errorf("failed to clear pending status for pipelineRun %s/%s after secret creation: %w", pr.GetNamespace(), pr.GetName(), err)
+			}
+		}
 	}
 
 	reason := ""

@@ -224,10 +224,31 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	}
 
 	// if concurrency is defined then start the pipelineRun in pending state
-	if match.Repo.Spec.ConcurrencyLimit != nil && *match.Repo.Spec.ConcurrencyLimit != 0 {
+	hasConcurrencyLimit := match.Repo.Spec.ConcurrencyLimit != nil && *match.Repo.Spec.ConcurrencyLimit != 0
+	if hasConcurrencyLimit {
 		// pending status
 		match.PipelineRun.Spec.Status = tektonv1.PipelineRunSpecStatusPending
 		p.debugf("startPR: marking pipelinerun=%s as pending due to concurrency limit", prName)
+	} else if p.pacInfo.SecretAutoCreation {
+		// When secret auto-creation is enabled, the secret is created by the
+		// reconciler. Prevent Tekton controller from executing the PipelineRun
+		// before the secret exists. Set pending status to gate execution until
+		// the reconciler creates the secret and clears the pending status.
+		// The state annotation will be "started" (not "queued"), so the
+		// reconciler can distinguish this from concurrency-pending PRs.
+		if _, hasGitAuth := match.PipelineRun.GetAnnotations()[keys.GitAuthSecret]; hasGitAuth {
+			match.PipelineRun.Spec.Status = tektonv1.PipelineRunSpecStatusPending
+			p.debugf("startPR: marking pipelinerun=%s as pending until git-auth secret is created", prName)
+		}
+	}
+
+	// Override the state for concurrency-pending PRs before creation.
+	// labels.go already sets state="started" for all PRs; only the
+	// concurrency path needs to change it to "queued".
+	// See https://github.com/tektoncd/pipelines-as-code/issues/2751
+	if hasConcurrencyLimit {
+		match.PipelineRun.Annotations[keys.State] = kubeinteraction.StateQueued
+		match.PipelineRun.Labels[keys.State] = kubeinteraction.StateQueued
 	}
 
 	// Create the actual pipelineRun
@@ -274,9 +295,13 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	patchAnnotations := map[string]string{}
 	patchLabels := map[string]string{}
 	whatPatching := ""
-	// if pipelineRun is in pending state then report status as queued
-	// The pipelineRun can be pending because of PAC's concurrency limit or because of an external mutatingwebhook
-	if pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
+	// Determine the state and status based on why the pipelineRun is pending.
+	// Concurrency-pending PRs report as "queued" with state="queued".
+	// Secret-pending PRs (pending only for secret auto-creation) report as
+	// "in_progress" with state="started", so the reconciler can distinguish
+	// them from concurrency-queued PRs and clear the pending status after
+	// creating the secret.
+	if pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending && hasConcurrencyLimit {
 		status.Status = queuedStatus
 		if status.Text, err = mt.MakeTemplate(p.vcx.GetTemplate(provider.QueueingPipelineType)); err != nil {
 			return nil, fmt.Errorf("cannot create message template: %w", err)

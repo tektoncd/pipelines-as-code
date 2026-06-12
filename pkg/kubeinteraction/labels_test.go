@@ -90,6 +90,11 @@ func TestAddLabelsAndAnnotations(t *testing.T) {
 			assert.Equal(t, tt.args.pipelineRun.Annotations[keys.ControllerInfo],
 				fmt.Sprintf(`{"name":"%s","configmap":"%s","secret":"%s", "gRepo": "%s"}`, tt.args.controllerInfo.Name, tt.args.controllerInfo.Configmap, tt.args.controllerInfo.Secret, tt.args.controllerInfo.GlobalRepository))
 			assert.Equal(t, tt.args.pipelineRun.Annotations[keys.CloneURL], tt.args.event.CloneURL)
+
+			// Verify state annotation is set at creation time (#2751)
+			state, hasState := tt.args.pipelineRun.Annotations[keys.State]
+			assert.Assert(t, hasState, "State annotation should be set at creation time")
+			assert.Equal(t, state, StateStarted, "State annotation should default to 'started'")
 		})
 	}
 }
