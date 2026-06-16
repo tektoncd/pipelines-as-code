@@ -13,6 +13,12 @@ import (
 
 const largeComment = "/Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s"
 
+func mrEventWithChanges(sample thelp.TEvent, changesJSON string) string {
+	base := sample.MREventAsJSON("update", "")
+	idx := strings.LastIndex(base, "}")
+	return base[:idx] + `,"changes": {` + changesJSON + `}}`
+}
+
 func TestProviderDetect(t *testing.T) {
 	sample := thelp.TEvent{
 		Username:          "foo",
@@ -172,6 +178,67 @@ func TestProviderDetect(t *testing.T) {
 			eventType:  gitlab.EventTypeNote,
 			isGL:       true,
 			processReq: true,
+		},
+		{
+			name:       "good/mergeRequest update Event with label addition",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [], "current": [{"id": 1, "title": "bug"}]}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: true,
+		},
+		{
+			name:       "good/mergeRequest update Event with label addition and updated_at metadata",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [], "current": [{"id": 1, "title": "bug"}]}, "updated_at": {"previous": "2026-01-01 00:00:00 UTC", "current": "2026-01-02 00:00:00 UTC"}, "updated_by_id": {"previous": 1, "current": 2}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: true,
+		},
+		{
+			name:       "good/mergeRequest update Event with label addition and removal",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [{"id": 1, "title": "ci"}], "current": [{"id": 2, "title": "bug"}]}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: true,
+		},
+		{
+			name:       "bad/mergeRequest update Event with label removal",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [{"id": 1, "title": "bug"}], "current": []}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: false,
+			wantReason: "this 'Merge Request' update event changes are not supported",
+		},
+		{
+			name:       "bad/mergeRequest update Event with label removal partial",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [{"id": 1, "title": "bug"}, {"id": 2, "title": "feature"}], "current": [{"id": 1, "title": "bug"}]}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: false,
+			wantReason: "this 'Merge Request' update event changes are not supported",
+		},
+		{
+			name:       "bad/mergeRequest update Event with label addition on draft to ready transition",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [], "current": [{"id": 1, "title": "bug"}]}, "draft": {"previous": true, "current": false}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: false,
+			wantReason: "this 'Merge Request' update event changes are not supported",
+		},
+		{
+			name:       "bad/mergeRequest update Event with label addition on ready to draft transition",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [], "current": [{"id": 1, "title": "bug"}]}, "draft": {"previous": false, "current": true}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: false,
+			wantReason: "this 'Merge Request' update event changes are not supported",
+		},
+		{
+			name:       "bad/mergeRequest update Event with label addition and description change",
+			event:      mrEventWithChanges(sample, `"labels": {"previous": [], "current": [{"id": 1, "title": "bug"}]}, "description": {"previous": "old", "current": "new"}`),
+			eventType:  gitlab.EventTypeMergeRequest,
+			isGL:       true,
+			processReq: false,
+			wantReason: "this 'Merge Request' update event changes are not supported",
 		},
 		{
 			name:       "good/commit comment /retest command",
