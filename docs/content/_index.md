@@ -4,12 +4,12 @@ toc: false
 hero_subtitle: "An opinionated CI based on Tekton."
 ---
 
-Pipelines as Code lets you define your CI/CD using
+Pipelines-as-Code lets you define your CI/CD using
 [Tekton](https://tekton.dev) PipelineRuns and Tasks in files stored directly
 alongside your source code. Your pipeline definitions are versioned, reviewed,
 and collaborated on just like your application code — bringing the full power of
 the Git workflow to your CI/CD pipelines. With a single pane of glass from your
-SCM provider (GitHub, GitLab, Bitbucket, or Forgejo), pipeline runs are
+SCM provider (GitHub, GitLab, Bitbucket, or Forgejo), PipelineRuns are
 automatically triggered for Pull Requests and Push events.
 
 {{< cards >}}
