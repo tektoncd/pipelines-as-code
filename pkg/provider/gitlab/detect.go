@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -87,13 +88,16 @@ func (v *Provider) Detect(req *http.Request, payload string, logger *zap.Sugared
 
 // hasOnlyLabelsChanged checks if the only change in the merge request is to its labels.
 // This function ensures that other fields remain unchanged.
+// Labels changes are treated when they're done standalone and not done with other changes
+// for example, if a merge request is marked as draft and then the labels are changed, this is not a valid merge request update.
 func hasOnlyLabelsChanged(gitEvent *gitlab.MergeEvent) bool {
 	changes := gitEvent.Changes
 
-	labelsChanged := len(changes.Labels.Previous) > 0 || len(changes.Labels.Current) > 0
+	labelsChanged := isNewLabelAdded(changes.Labels.Previous, changes.Labels.Current)
 
 	// Only Labels can change — everything else must be zero or nil
 	onlyUpdatedAtOrLabels := labelsChanged &&
+		!changes.Draft.Previous && !changes.Draft.Current &&
 		changes.Assignees.Previous == nil && changes.Assignees.Current == nil &&
 		changes.Reviewers.Previous == nil && changes.Reviewers.Current == nil &&
 		changes.Description.Previous == "" && changes.Description.Current == "" &&
@@ -107,4 +111,15 @@ func hasOnlyLabelsChanged(gitEvent *gitlab.MergeEvent) bool {
 		changes.Title.Previous == "" && changes.Title.Current == ""
 
 	return onlyUpdatedAtOrLabels
+}
+
+func isNewLabelAdded(previous, current []*gitlab.EventLabel) bool {
+	return slices.ContainsFunc(current, func(label *gitlab.EventLabel) bool {
+		if label == nil {
+			return false
+		}
+		return !slices.ContainsFunc(previous, func(prev *gitlab.EventLabel) bool {
+			return prev != nil && prev.Title == label.Title
+		})
+	})
 }
