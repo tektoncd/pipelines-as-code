@@ -68,7 +68,7 @@ annotations:
 Pipelines-as-Code runs the PipelineRun `pipeline-push-on-1.0-tags` when you push the `1.0` tag to your repository.
 
 {{< callout type="warning" >}}
-GitHub does not send webhook events when more than three tags are pushed simultaneously (e.g., with `git push origin --tags`). To ensure pipeline runs are triggered for all tags, push them in batches of three or fewer. [See GitHub's docs here](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#create).
+GitHub does not send webhook events when more than three tags are pushed simultaneously (e.g., with `git push origin --tags`). To ensure PipelineRuns are triggered for all tags, push them in batches of three or fewer. [See GitHub's docs here](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#create).
 {{< /callout >}}
 
 ## Required annotations and parallel execution
