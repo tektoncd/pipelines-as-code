@@ -47,7 +47,7 @@ GitLab's commit status API to identify which pipelines previously succeeded,
 ensuring only failed pipelines are re-run. If commit statuses were never
 reported (for example, because both status updates failed and only a comment was
 posted), Pipelines-as-Code cannot determine prior results and will fail to
-re-run any pipelines when `/retest` unless you retest individual pipelineruns
+re-run any pipelines when `/retest` unless you retest individual PipelineRuns
 with `/test <pipeline-name>`.
 
 When a status update succeeds, you can see the status in the GitLab UI in the `Pipelines` tab, as
