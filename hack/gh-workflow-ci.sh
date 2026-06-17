@@ -129,13 +129,14 @@ get_tests() {
 }
 
 run_e2e_tests() {
-	bitbucket_cloud_token="${1}"
-	webhook_secret="${2}"
-	test_gitea_smeeurl="${3}"
-	installation_id="${4}"
-	gh_apps_token="${5}"
-	test_github_second_token="${6}"
-	gitlab_token="${7}"
+	# Accept secrets as positional args (v0.27.x workflow) or env vars (v0.37.x+ workflow)
+	local bitbucket_cloud_token="${1:-${TEST_BITBUCKET_CLOUD_TOKEN:-}}"
+	local webhook_secret="${2:-${TEST_EL_WEBHOOK_SECRET:-}}"
+	local test_gitea_smeeurl="${3:-${TEST_GITEA_SMEEURL:-}}"
+	local installation_id="${4:-${TEST_GITHUB_REPO_INSTALLATION_ID:-}}"
+	local gh_apps_token="${5:-${TEST_GITHUB_TOKEN:-}}"
+	local test_github_second_token="${6:-${TEST_GITHUB_SECOND_TOKEN:-}}"
+	local gitlab_token="${7:-${TEST_GITLAB_TOKEN:-}}"
 
 	# Nothing specific to webhook here it  just that repo is private in that org and that's what we want to test
 	export TEST_GITHUB_PRIVATE_TASK_URL="https://github.com/openshift-pipelines/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml"
@@ -145,10 +146,10 @@ run_e2e_tests() {
 
 	export TEST_BITBUCKET_CLOUD_API_URL=https://api.bitbucket.org/2.0
 	export TEST_BITBUCKET_CLOUD_E2E_REPOSITORY=cboudjna/pac-e2e-tests
-	export TEST_BITBUCKET_CLOUD_TOKEN=${bitbucket_cloud_token}
+	export TEST_BITBUCKET_CLOUD_TOKEN="${bitbucket_cloud_token}"
 	export TEST_BITBUCKET_CLOUD_USER=cboudjna
 
-	export TEST_EL_URL="http://${CONTROLLER_DOMAIN_URL}"
+	export TEST_EL_URL="http://${CONTROLLER_DOMAIN_URL:-localhost}"
 	export TEST_EL_WEBHOOK_SECRET="${webhook_secret}"
 
 	export TEST_GITEA_API_URL="http://localhost:3000"
@@ -175,7 +176,7 @@ run_e2e_tests() {
 
 	export TEST_GITLAB_API_URL="https://gitlab.com"
 	export TEST_GITLAB_PROJECT_ID="34405323"
-	export TEST_GITLAB_TOKEN=${gitlab_token}
+	export TEST_GITLAB_TOKEN="${gitlab_token}"
 	# https://gitlab.com/gitlab-com/alliances/ibm-red-hat/sandbox/openshift-pipelines/pac-e2e-tests
 
 	# Use TEST_PROVIDER if set (matrix-based workflow), otherwise run all tests
@@ -273,7 +274,7 @@ create_second_github_app_controller_on_ghe)
 	create_second_github_app_controller_on_ghe "${2}" "${3}" "${4}"
 	;;
 run_e2e_tests)
-	run_e2e_tests "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}"
+	run_e2e_tests "${2-}" "${3-}" "${4-}" "${5-}" "${6-}" "${7-}" "${8-}"
 	;;
 collect_logs)
 	collect_logs

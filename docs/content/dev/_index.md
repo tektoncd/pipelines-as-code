@@ -276,6 +276,7 @@ to the tektoncd/pipeline version.
 
   ```shell
   find -name '*.go'|xargs sed -i 's,github.com/google/go-github/v56,github.com/google/go-github/v59,'
+  ```
 
 - This will update everything, sometime the library ghinstallation is not
 updated with the new version, so you will need to keep the old version kept in

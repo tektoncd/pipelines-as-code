@@ -53,7 +53,7 @@ linters:
     # - execinquery
     - exhaustive
     #- exhaustruct
-    - copyloopvar
+    - exportloopref
     - forbidigo
     - forcetypeassert
     #- funlen

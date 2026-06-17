@@ -205,7 +205,7 @@ spec:
                 git config --global --add safe.directory $(workspaces.source.path)
                 project="goreleaser"
                 repo="goreleaser/goreleaser"
-                version=$(curl -H "Authorization: Bearer ${HUB_TOKEN}" -L -s https://api.github.com/repos/${repo}/releases/latest|python -c 'import sys, json;dico=json.load(sys.stdin);print(dico["tag_name"])')
+                version="v2.5.0"
                 curl -sH "Authorization: Bearer ${HUB_TOKEN}" -L https://github.com/${repo}/releases/download/${version}/${project}_Linux_arm64.tar.gz|tar -xz -C /tmp/ -f- ${project}
                 export NO_COLOR=1
                 /tmp/goreleaser check
