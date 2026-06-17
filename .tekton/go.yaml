@@ -4,10 +4,11 @@ kind: PipelineRun
 metadata:
   name: go-testing
   annotations:
-    pipelinesascode.tekton.dev/task: "[git-clone]"
     pipelinesascode.tekton.dev/max-keep-runs: "2"
-    pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "pull_request" && "***/*.go".pathChanged()
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/on-event: "pull_request"
+    pipelinesascode.tekton.dev/on-target-branch: "[*]"
+    pipelinesascode.tekton.dev/on-path-change: "[***/*.go]"
 spec:
   params:
     - name: repo_url
@@ -29,7 +30,7 @@ spec:
                 resolver: http
                 params:
                   - name: url
-                    value: https://raw.githubusercontent.com/tektoncd/catalog/main/stepaction/git-clone/0.1/git-clone.yaml
+                    value: https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
               params:
                 - name: output-path
                   value: $(workspaces.source.path)
@@ -42,7 +43,7 @@ spec:
                 resolver: http
                 params:
                   - name: url
-                    value: https://raw.githubusercontent.com/openshift-pipelines/tekton-caches/main/tekton/cache-fetch.yaml
+                    value: https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/refs/heads/main/.tekton/tasks/cache-fetch.yaml
               params:
                 - name: patterns
                   value: ["**go.mod", "**go.sum"]
@@ -111,16 +112,19 @@ spec:
                   value: go1.21.13
                 - name: GOLANGCILINT_CACHE
                   value: $(workspaces.source.path)/go-build-cache/golangci-cache
+                - name: GOFLAGS
+                  value: "-buildvcs=false"
               script: |
                 #!/usr/bin/env bash
                 set -eux
+                git config --global --add safe.directory $(workspaces.source.path)
                 make lint-go
             - name: cache-upload
               ref:
                 resolver: http
                 params:
                   - name: url
-                    value: https://raw.githubusercontent.com/openshift-pipelines/tekton-caches/main/tekton/cache-upload.yaml
+                    value: https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/refs/heads/main/.tekton/tasks/cache-upload.yaml
               params:
                 - name: patterns
                   value: ["**go.mod", "**go.sum"]

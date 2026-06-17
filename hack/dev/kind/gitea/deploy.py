@@ -250,7 +250,7 @@ metadata:
 spec:
   port:
     targetPort: http-listener
-  { tls_mode }
+  {tls_mode}
   to:
     kind: Service
     name: gitea
