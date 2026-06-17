@@ -56,6 +56,78 @@ create_second_github_app_controller_on_ghe() {
 	kubectl -n pipelines-as-code delete pod -l app.kubernetes.io/name=ghe-controller
 }
 
+get_tests() {
+	local target="$1"
+	local -a testfiles
+	local all_tests
+	mapfile -t testfiles < <(find test/ -maxdepth 1 -name '*.go')
+	all_tests=$(grep -hioP '^func[[:space:]]+Test[[:alnum:]_]+' "${testfiles[@]}" | sed -E 's/^func[[:space:]]+//')
+
+	local -a gitea_tests=()
+	if [[ "${target}" == *"gitea"* ]]; then
+		mapfile -t gitea_tests < <(echo "${all_tests}" | grep -iP '^TestGitea' 2>/dev/null | grep -ivP 'Concurrency' 2>/dev/null | sort 2>/dev/null)
+		local -a filtered_tests
+		for test in "${gitea_tests[@]}"; do
+			if [[ "${test}" =~ ^TestGitea ]] && [[ ! "${test}" =~ Concurrency ]]; then
+				filtered_tests+=("${test}")
+			fi
+		done
+		gitea_tests=("${filtered_tests[@]}")
+	fi
+
+	local chunk_size remainder
+	if [[ ${#gitea_tests[@]} -gt 0 ]]; then
+		chunk_size=$((${#gitea_tests[@]} / 3))
+		remainder=$((${#gitea_tests[@]} % 3))
+	fi
+
+	case "${target}" in
+	flaky)
+		# no-op: kept for backward compat since pull_request_target uses main's YAML
+		;;
+	concurrency)
+		printf '%s\n' "${all_tests}" | grep -iP 'Concurrency|Others'
+		;;
+	github_public | github_1 | github_2)
+		printf '%s\n' "${all_tests}" | grep -iP 'Github' | grep -ivP 'Concurrency|GHE|Second' | grep -ivP 'Gitea'
+		;;
+	github_ghe_1 | github_ghe_2 | github_ghe_3 | github_second_controller | github_ghe)
+		printf '%s\n' "${all_tests}" | grep -iP 'GHE|Second' | grep -ivP 'Concurrency'
+		;;
+	gitlab_bitbucket)
+		printf '%s\n' "${all_tests}" | grep -iP 'Gitlab|Bitbucket' | grep -ivP 'Concurrency'
+		;;
+	gitea_1)
+		if [[ ${#gitea_tests[@]} -gt 0 ]]; then
+			printf '%s\n' "${gitea_tests[@]:0:${chunk_size}}"
+		fi
+		;;
+	gitea_2)
+		if [[ ${#gitea_tests[@]} -gt 0 ]]; then
+			printf '%s\n' "${gitea_tests[@]:${chunk_size}:${chunk_size}}"
+		fi
+		;;
+	gitea_3)
+		if [[ ${#gitea_tests[@]} -gt 0 ]]; then
+			local start_idx=$((chunk_size * 2))
+			printf '%s\n' "${gitea_tests[@]:${start_idx}:$((chunk_size + remainder))}"
+		fi
+		;;
+	# backward compat for v0.27.x workflow YAML
+	providers)
+		printf '%s\n' "${all_tests}" | grep -iP 'Github|Gitlab|Bitbucket' | grep -ivP 'Concurrency'
+		;;
+	gitea_others)
+		printf '%s\n' "${all_tests}" | grep -ivP 'Github|Gitlab|Bitbucket'
+		;;
+	*)
+		echo "Invalid target: ${target}"
+		echo "supported targets: github_public, github_ghe_1, github_ghe_2, github_ghe_3, gitlab_bitbucket, gitea_1, gitea_2, gitea_3, concurrency, flaky"
+		echo "backward compat aliases: github_1, github_2, github_second_controller, github_ghe, providers, gitea_others"
+		;;
+	esac
+}
+
 run_e2e_tests() {
 	bitbucket_cloud_token="${1}"
 	webhook_secret="${2}"
@@ -105,13 +177,48 @@ run_e2e_tests() {
 	export TEST_GITLAB_PROJECT_ID="34405323"
 	export TEST_GITLAB_TOKEN=${gitlab_token}
 	# https://gitlab.com/gitlab-com/alliances/ibm-red-hat/sandbox/openshift-pipelines/pac-e2e-tests
-	make test-e2e
+
+	# Use TEST_PROVIDER if set (matrix-based workflow), otherwise run all tests
+	local target="${TEST_PROVIDER:-all}"
+
+	if [[ "${target}" == "all" ]]; then
+		make test-e2e
+		return $?
+	fi
+
+	set +x
+	mapfile -t tests < <(get_tests "${target}")
+	echo "About to run ${#tests[@]} tests: ${tests[*]}"
+
+	if [[ ${#tests[@]} -eq 0 || (-z "${tests[0]}" && ${#tests[@]} -eq 1) ]]; then
+		echo "No tests to run for target '${target}', exiting successfully."
+		return 0
+	fi
+
+	mkdir -p /tmp/logs
+
+	local test_pattern
+	local test_status=0
+	local raw_output=/tmp/logs/e2e-test-output.json
+
+	# shellcheck disable=SC2001
+	test_pattern="$(echo "${tests[*]}" | sed 's/ /|/g')"
+	if command -v gotestsum >/dev/null 2>&1; then
+		gotestsum --format standard-verbose --jsonfile "${raw_output}" -- \
+			-race -failfast -timeout 45m -count=1 -tags=e2e -run "${test_pattern}" ./test || test_status=$?
+	else
+		# shellcheck disable=SC2001
+		make test-e2e GO_TEST_FLAGS="-v -run \"${test_pattern}\"" || test_status=$?
+	fi
+	return "${test_status}"
 }
 
 collect_logs() {
 	mkdir -p /tmp/logs
 	kind export logs /tmp/logs
-	[[ -d /tmp/gosmee-replay ]] && cp -a /tmp/gosmee-replay /tmp/logs/
+
+	mkdir -p /tmp/logs/gosmee
+	[[ -d /tmp/gosmee-replay ]] && cp -a /tmp/gosmee-replay /tmp/logs/gosmee/replay
 
 	kubectl get pipelineruns -A -o yaml >/tmp/logs/pac-pipelineruns.yaml
 	kubectl get repositories.pipelinesascode.tekton.dev -A -o yaml >/tmp/logs/pac-repositories.yaml
@@ -126,6 +233,10 @@ collect_logs() {
 		done
 		kubectl -n ${ns} get events >/tmp/logs/ns/${ns}/events
 	done
+}
+
+generate_github_summary() {
+	echo "generate_github_summary: skipped on backport branch"
 }
 
 help() {
@@ -145,6 +256,12 @@ help() {
 
   collect_logs
     Collect logs from the cluster
+
+  generate_github_summary
+    No-op on backport branch.
+
+  print_tests
+    Print the list of tests that would be run for each provider target.
 EOF
 }
 
@@ -160,6 +277,18 @@ run_e2e_tests)
 	;;
 collect_logs)
 	collect_logs
+	;;
+generate_github_summary)
+	generate_github_summary
+	;;
+print_tests)
+	set +x
+	for target in github_public github_ghe_1 github_ghe_2 github_ghe_3 gitlab_bitbucket gitea_1 gitea_2 gitea_3 concurrency flaky providers gitea_others; do
+		mapfile -t tests < <(get_tests "${target}")
+		echo "Tests for target: ${target} Total: ${#tests[@]}"
+		printf '%s\n' "${tests[@]}"
+		echo
+	done
 	;;
 help)
 	help

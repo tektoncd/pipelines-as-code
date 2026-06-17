@@ -45,7 +45,7 @@ jobs:
 
       - name: Run gosmee
         run: |
-          nohup gosmee client --saveDir /tmp/gosmee-replay ${{ secrets.PYSMEE_URL }} "http://${CONTROLLER_DOMAIN_URL}" &
+          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay ${{ secrets.PYSMEE_URL }} "http://${CONTROLLER_DOMAIN_URL}" &
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
