@@ -21,6 +21,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	trepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -164,18 +165,18 @@ func verifyGHTokenScope(t *testing.T, remoteTaskURL, remoteTaskName string, data
 	}
 	defer g.TearDown(ctx, t)
 
-	runcnx.Clients.Log.Infof("Waiting for Repository to be updated")
+	runcnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
 		RepoName:        targetNS,
 		Namespace:       targetNS,
 		MinNumberStatus: 0,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
-	_, err = twait.UntilRepositoryUpdated(ctx, runcnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, runcnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
-	runcnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
+	runcnx.Clients.Log.Infof("Check if PipelineRun succeeded")
 	repo, err := runcnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(targetNS).Get(ctx, targetNS, metav1.GetOptions{})
 	assert.NilError(t, err)
 	laststatus := repo.Status[len(repo.Status)-1]

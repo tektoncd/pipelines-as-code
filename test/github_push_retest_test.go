@@ -59,16 +59,11 @@ func TestGithubGHEPushRequestGitOpsCommentOnComment(t *testing.T) {
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: len(g.YamlFiles),
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	g.Cnx.Clients.Log.Info("Waiting for Repository to be updated")
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Equal(t, repo.Status[len(repo.Status)-1].Conditions[0].Status, corev1.ConditionTrue)
 
 	pruns, err = g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
@@ -122,13 +117,13 @@ func TestGithubGHEPushRequestGitOpsCommentRetest(t *testing.T) {
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 4,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	g.Cnx.Clients.Log.Info("Waiting for Repository to be updated")
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
+	g.Cnx.Clients.Log.Infof("Check if PipelineRun succeeded")
 	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
 	assert.NilError(t, err)
 	assert.Equal(t, repo.Status[len(repo.Status)-1].Conditions[0].Status, corev1.ConditionTrue)
@@ -179,9 +174,9 @@ func TestGithubGHEPushRequestGitOpsCommentCancel(t *testing.T) {
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: numberOfStatus,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	comment := "/cancel pipelinerun-on-push branch:" + g.TargetNamespace
@@ -196,17 +191,14 @@ func TestGithubGHEPushRequestGitOpsCommentCancel(t *testing.T) {
 	cancelWaitOpts.MinNumberStatus = 1
 	cancelWaitOpts.PollTimeout = 90 * time.Second
 
-	// wait for the cancellation to propagate through PipelineRun status and repository status
-	err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, cancelWaitOpts)
-	if err == nil {
-		_, err = twait.UntilRepositoryHasStatusReason(ctx, g.Cnx.Clients, cancelWaitOpts, tektonv1.PipelineRunReasonCancelled.String())
-	}
+	// wait for the cancellation to propagate through PipelineRun status
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, cancelWaitOpts)
 	if err != nil {
 		numLines := int64(1000)
 		reg := regexp.MustCompile(".*cancel-in-progress:.*pipelinerun.*on-push.*")
 		logErr := twait.RegexpMatchingInControllerLog(ctx, g.Cnx, *reg, 10, "ghe-controller", &numLines, nil)
 		if logErr != nil {
-			t.Errorf("neither a cancelled pipelinerun in repo status or a cancellation request in the controller log was found: status wait error: %s, log wait error: %s", err.Error(), logErr.Error())
+			t.Errorf("neither a cancelled pipelinerun or a cancellation request in the controller log was found: status wait error: %s, log wait error: %s", err.Error(), logErr.Error())
 		}
 		return
 	}
@@ -319,10 +311,10 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       mergedSHA,
+		TargetSHA:       []string{sha, mergedSHA},
 	}
 
-	err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	regex := regexp.MustCompile(fmt.Sprintf("I don't know my PR number is %d", g.PRNumber))

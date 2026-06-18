@@ -79,6 +79,7 @@ func RegexpMatchingInPodLog(ctx context.Context, clients *params.Run, ns, labels
 
 // GoldenPodLog is a helper function to get the logs of a pod and compare it to a golden file.
 func GoldenPodLog(ctx context.Context, t *testing.T, clients *params.Run, ns, labelselector, containerName, goldenFile string, maxNumberOfLoop int, sinceSeconds *int64) {
+	t.Helper()
 	var err error
 	numLines := int64(10)
 	for i := 0; i <= maxNumberOfLoop; i++ {

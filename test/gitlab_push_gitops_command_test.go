@@ -49,10 +49,10 @@ func TestGitlabGitOpsCommandTestOnPush(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     wait.DefaultTimeout,
-		TargetSHA:       branch.Commit.ID,
+		TargetSHA:       []string{branch.Commit.ID},
 	}
 
-	err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	commentOpts := &gitlab.PostCommitCommentOptions{
@@ -114,10 +114,10 @@ func TestGitlabGitOpsCommandCancelOnPush(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: numberOfStatus,
 		PollTimeout:     wait.DefaultTimeout,
-		TargetSHA:       branch.Commit.ID,
+		TargetSHA:       []string{branch.Commit.ID},
 	}
 
-	err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	prsNew, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(ctx, metav1.ListOptions{})
@@ -131,7 +131,7 @@ func TestGitlabGitOpsCommandCancelOnPush(t *testing.T) {
 	assert.NilError(t, err)
 	topts.ParamsRun.Clients.Log.Infof("Commit comment %s has been created", cc.Note)
 
-	err = wait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, waitOpts)
+	_, err = wait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 }
 
@@ -185,10 +185,10 @@ func TestGitlabGitOpsCommandTestOnTag(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: numberOfPRs,
 		PollTimeout:     wait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
 
-	err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err = wait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	prsNew, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(ctx, metav1.ListOptions{})

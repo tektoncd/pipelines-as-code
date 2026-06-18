@@ -3,26 +3,76 @@ package wait
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"knative.dev/pkg/apis"
 )
 
+// SortPipelineRunsByCompletion sorts the pipeline runs by completion time, then by creation time.
+// Note that it converts time to milliseconds to avoid precision issues.
+func SortPipelineRunsByCompletionMillis(prs []v1.PipelineRun) {
+	sort.Slice(prs, func(i, j int) bool {
+		if prs[i].Status.CompletionTime == nil {
+			return false
+		}
+		if prs[j].Status.CompletionTime == nil {
+			return true
+		}
+
+		ci := time.UnixMilli(prs[i].Status.CompletionTime.UnixMilli())
+		cj := time.UnixMilli(prs[j].Status.CompletionTime.UnixMilli())
+		if ci.IsZero() && cj.IsZero() {
+			ci = time.UnixMilli(prs[i].Status.StartTime.UnixMilli())
+			cj = time.UnixMilli(prs[j].Status.StartTime.UnixMilli())
+			return ci.Before(cj)
+		}
+		if ci.IsZero() {
+			return false
+		}
+		if cj.IsZero() {
+			return true
+		}
+		return ci.Before(cj)
+	})
+}
+
+// SortPipelineRunsByCreationMillis sorts the pipeline runs by creation time.
+// Note that it converts time to milliseconds to avoid precision issues.
+func SortPipelineRunsByCreationMillis(prs []v1.PipelineRun) {
+	sort.Slice(prs, func(i, j int) bool {
+		ci := time.UnixMilli(prs[i].CreationTimestamp.UnixMilli())
+		cj := time.UnixMilli(prs[j].CreationTimestamp.UnixMilli())
+		return ci.Before(cj)
+	})
+}
+
 type Opts struct {
-	RepoName            string
-	Namespace           string
-	MinNumberStatus     int
-	PollTimeout         time.Duration
-	AdminNS             string
-	TargetSHA           string
-	FailOnRepoCondition corev1.ConditionStatus
+	RepoName        string
+	Namespace       string
+	MinNumberStatus int
+	PollTimeout     time.Duration
+	AdminNS         string
+	TargetSHA       []string
+}
+
+func shaLabelSelector(shas []string) string {
+	switch len(shas) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("%s=%s", keys.SHA, shas[0])
+	default:
+		return fmt.Sprintf("%s in (%s)", keys.SHA, strings.Join(shas, ","))
+	}
 }
 
 func UntilMinPRAppeared(ctx context.Context, clients clients.Clients, opts Opts, minNumber int) error {
@@ -30,8 +80,8 @@ func UntilMinPRAppeared(ctx context.Context, clients clients.Clients, opts Opts,
 	defer cancel()
 	return kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
 		listOpts := metav1.ListOptions{}
-		if opts.TargetSHA != "" {
-			listOpts.LabelSelector = fmt.Sprintf("%s=%s", keys.SHA, opts.TargetSHA)
+		if sel := shaLabelSelector(opts.TargetSHA); sel != "" {
+			listOpts.LabelSelector = sel
 		}
 		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, listOpts)
 		if err != nil {
@@ -44,110 +94,76 @@ func UntilMinPRAppeared(ctx context.Context, clients clients.Clients, opts Opts,
 	})
 }
 
-func UntilRepositoryUpdated(ctx context.Context, clients clients.Clients, opts Opts) (*pacv1alpha1.Repository, error) {
+func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
-	var repo *pacv1alpha1.Repository
-	return repo, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
-		clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(opts.Namespace)
-		var err error
-		if repo, err = clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(opts.Namespace).Get(ctx, opts.RepoName, metav1.GetOptions{}); err != nil {
-			return true, err
+	var matched []v1.PipelineRun
+	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
+		listOpts := metav1.ListOptions{}
+		if sel := shaLabelSelector(opts.TargetSHA); sel != "" {
+			listOpts.LabelSelector = sel
 		}
-
-		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, opts.TargetSHA),
-		})
+		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, listOpts)
 		if err != nil {
 			return true, err
 		}
-		if len(prs.Items) > 0 {
-			prConditions := prs.Items[0].Status.Conditions
-			if opts.FailOnRepoCondition == "" {
-				opts.FailOnRepoCondition = corev1.ConditionFalse
-			}
 
-			if len(prConditions) != 0 && prConditions[0].Status == opts.FailOnRepoCondition {
-				return true, fmt.Errorf("pipelinerun has failed")
-			}
+		clients.Log.Infof("waiting for pipelinerun to be created: selector sha=%v, MinNumberStatus=%d pr.Items=%d", opts.TargetSHA, opts.MinNumberStatus, len(prs.Items))
+		if len(prs.Items) >= opts.MinNumberStatus {
+			matched = prs.Items
+			SortPipelineRunsByCreationMillis(matched)
+			return true, nil
 		}
-
-		clients.Log.Infof("Still waiting for repository status to be updated: %d/%d", len(repo.Status), opts.MinNumberStatus)
-		time.Sleep(2 * time.Second)
-		if opts.TargetSHA != "" {
-			matchingStatuses := 0
-			for _, s := range repo.Status {
-				if s.SHA != nil && *s.SHA == opts.TargetSHA {
-					matchingStatuses++
-				}
-			}
-			return matchingStatuses > 0 && len(repo.Status) >= opts.MinNumberStatus, nil
-		}
-		return len(repo.Status) >= opts.MinNumberStatus, nil
-	})
-}
-
-func UntilRepositoryHasStatusReason(ctx context.Context, clients clients.Clients, opts Opts, reason string) (*pacv1alpha1.Repository, error) {
-	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
-	defer cancel()
-	var repo *pacv1alpha1.Repository
-	return repo, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
-		var err error
-		if repo, err = clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(opts.Namespace).Get(ctx, opts.RepoName, metav1.GetOptions{}); err != nil {
-			return true, err
-		}
-
-		matchingStatuses := 0
-		reasons := []string{}
-		for _, status := range repo.Status {
-			if opts.TargetSHA != "" {
-				if status.SHA == nil || *status.SHA != opts.TargetSHA {
-					continue
-				}
-			}
-			matchingStatuses++
-			if len(status.Conditions) == 0 {
-				continue
-			}
-			reasons = append(reasons, status.Conditions[0].Reason)
-			if status.Conditions[0].Reason == reason {
-				return true, nil
-			}
-		}
-
-		clients.Log.Infof(
-			"Still waiting for repository status reason to be updated: wanted=%q matching statuses=%d reasons=%v",
-			reason, matchingStatuses, reasons,
-		)
 		return false, nil
 	})
 }
 
-func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts Opts) error {
+// UntilPipelineRunsFinished waits until at least MinNumberStatus PipelineRuns
+// have reached a terminal state (Succeeded, Failed, or Cancelled).
+// Results are sorted by completion time ascending (oldest first, newest last).
+func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
-	return kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
-		clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(opts.Namespace)
-		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, opts.TargetSHA),
-		})
+	var matched []v1.PipelineRun
+	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
+		listOpts := metav1.ListOptions{}
+		if sel := shaLabelSelector(opts.TargetSHA); sel != "" {
+			listOpts.LabelSelector = sel
+		}
+		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, listOpts)
 		if err != nil {
 			return true, err
 		}
 
-		clients.Log.Infof("waiting for pipelinerun to be created: selector %s=%s, MinNumberStatus=%d pr.Items=%d", keys.SHA, opts.TargetSHA, opts.MinNumberStatus, len(prs.Items))
-		return len(prs.Items) == opts.MinNumberStatus, nil
+		var finished []v1.PipelineRun
+		for _, pr := range prs.Items {
+			if cond := pr.Status.GetCondition(apis.ConditionSucceeded); cond != nil && cond.Status != corev1.ConditionUnknown {
+				finished = append(finished, pr)
+			}
+		}
+
+		clients.Log.Infof("still waiting for %d pipelinerun(s) to finish in %s namespace (finished=%d, total=%d)",
+			opts.MinNumberStatus, opts.Namespace, len(finished), len(prs.Items))
+		if len(finished) >= opts.MinNumberStatus {
+			SortPipelineRunsByCompletionMillis(finished)
+			matched = finished
+			return true, nil
+		}
+		return false, nil
 	})
 }
 
 // UntilPipelineRunHasReason Checks for certain reason of PipelineRuns.
-func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, desiredReason v1.PipelineRunReason, opts Opts) error {
+func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, desiredReason v1.PipelineRunReason, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
-	return kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
-		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, opts.TargetSHA),
-		})
+	var matched []v1.PipelineRun
+	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
+		listOpts := metav1.ListOptions{}
+		if sel := shaLabelSelector(opts.TargetSHA); sel != "" {
+			listOpts.LabelSelector = sel
+		}
+		prs, err := clients.Tekton.TektonV1().PipelineRuns(opts.Namespace).List(ctx, listOpts)
 		if err != nil {
 			return true, err
 		}
@@ -160,6 +176,11 @@ func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, des
 		}
 
 		clients.Log.Infof("still waiting for %d pipelinerun(s) to have reason %s in %s namespace", opts.MinNumberStatus, desiredReason.String(), opts.Namespace)
-		return len(prsWithReason) >= opts.MinNumberStatus, nil
+		if len(prsWithReason) >= opts.MinNumberStatus {
+			matched = prsWithReason
+			SortPipelineRunsByCreationMillis(matched)
+			return true, nil
+		}
+		return false, nil
 	})
 }
