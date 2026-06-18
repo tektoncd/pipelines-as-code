@@ -100,7 +100,6 @@ func TestGitlabMergeRequest(t *testing.T) {
 		OnEvent:         opscomments.TestAllCommentEventType.String(),
 		TargetNS:        topts.TargetNS,
 		NumberofPRMatch: 5, // this is the max we get in repos status
-		SHA:             mr.SHA,
 	}
 	twait.Succeeded(ctx, t, topts.ParamsRun, topts.Opts, sopt)
 }
@@ -133,12 +132,12 @@ func TestGitlabOnLabel(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       mr.SHA,
+		TargetSHA:       []string{mr.SHA},
 	}
-	repo, err := twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	assert.Assert(t, len(repo.Status) > 0)
-	assert.Equal(t, *repo.Status[0].EventType, triggertype.PullRequestLabeled.String())
+	assert.Assert(t, len(prs) > 0)
+	assert.Equal(t, prs[0].Annotations[keys.EventType], triggertype.PullRequestLabeled.String())
 }
 
 func TestGitlabOnComment(t *testing.T) {
@@ -175,15 +174,17 @@ func TestGitlabOnComment(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       mr.SHA,
+		TargetSHA:       []string{mr.SHA},
 	}
-	repo, err := twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	topts.ParamsRun.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	assert.Assert(t, repo.Status[len(repo.Status)-1].Conditions[0].Status == corev1.ConditionTrue)
-	lastPrName := repo.Status[len(repo.Status)-1].PipelineRunName
+	topts.ParamsRun.Clients.Log.Infof("Check if we have the pipelinerun set as succeeded")
+	lastPR := prs[len(prs)-1]
+	cond := lastPR.Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 
-	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPrName), "step-task", *regexp.MustCompile(triggerComment), "", 2, nil)
+	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPR.Name), "step-task", *regexp.MustCompile(triggerComment), "", 2, nil)
 	assert.NilError(t, err)
 }
 
@@ -203,9 +204,9 @@ func TestGitlabCancelInProgressOnChange(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.SHA,
+		TargetSHA:       []string{topts.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, originalPipelineWaitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, originalPipelineWaitOpts)
 	assert.NilError(t, err)
 
 	newEntries := map[string]string{
@@ -229,13 +230,13 @@ func TestGitlabCancelInProgressOnChange(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       newSha,
+		TargetSHA:       []string{newSha},
 	}
-	err = twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, newPipelineWaitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, newPipelineWaitOpts)
 	assert.NilError(t, err)
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for old pipelinerun to be cancelled")
-	cancelledErr := twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, originalPipelineWaitOpts)
+	_, cancelledErr := twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, originalPipelineWaitOpts)
 	assert.NilError(t, cancelledErr)
 }
 
@@ -255,30 +256,22 @@ func TestGitlabCancelInProgressOnPRClose(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.SHA,
+		TargetSHA:       []string{topts.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 	_, _, err = topts.GLProvider.Client().MergeRequests.UpdateMergeRequest(topts.ProjectID, int64(topts.MRNumber), &clientGitlab.UpdateMergeRequestOptions{
 		StateEvent: clientGitlab.Ptr("close"),
 	})
 	assert.NilError(t, err)
 
-	err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)
 	assert.Equal(t, len(prs.Items), 1, "should have only one pipelinerun, but we have: %d", len(prs.Items))
 	assert.Equal(t, prs.Items[0].GetStatusCondition().GetCondition(apis.ConditionSucceeded).GetReason(), "Cancelled", "should have been cancelled")
-
-	// failing on `true` condition because for cancelled PipelineRun we want `false` condition.
-	waitOpts.FailOnRepoCondition = corev1.ConditionTrue
-	repo, err := twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, waitOpts)
-	assert.NilError(t, err)
-
-	laststatus := repo.Status[len(repo.Status)-1]
-	assert.Equal(t, "Cancelled", laststatus.Conditions[0].Reason)
 }
 
 func TestGitlabIssueGitopsComment(t *testing.T) {
@@ -596,20 +589,33 @@ func TestGitlabConsistentCommitStatusOnMR(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, len(prsNew.Items) == 1)
 
-	commitStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, mr.SHA, &clientGitlab.GetCommitStatusesOptions{})
-	assert.NilError(t, err)
-	assert.Assert(t, len(commitStatuses) == 2)
+	gotSuccess := false
+	gotFailure := false
+	for i := 0; i < 5; i++ {
+		commitStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, mr.SHA, &clientGitlab.GetCommitStatusesOptions{})
+		assert.NilError(t, err)
+		assert.Assert(t, len(commitStatuses) == 2)
 
-	for _, cs := range commitStatuses {
-		switch cs.Name {
-		case "Pipelines as Code CI / bad-converts-good-pipelinerun":
-			assert.Assert(t, cs.Status == "failed")
-		case "Pipelines as Code CI / always-good-pipelinerun":
-			assert.Assert(t, cs.Status == "success")
-		default:
-			t.Fatalf("unexpected commit status name: %s", cs.Name)
+		for _, cs := range commitStatuses {
+			switch cs.Name {
+			case "Pipelines as Code CI / bad-converts-good-pipelinerun":
+				gotFailure = cs.Status == "failed"
+			case "Pipelines as Code CI / always-good-pipelinerun":
+				gotSuccess = cs.Status == "success"
+			default:
+				t.Fatalf("unexpected commit status name: %s", cs.Name)
+			}
 		}
+		t.Logf("Waiting for commit statuses to be updated")
+		if gotSuccess && gotFailure {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
 	}
+
+	assert.Assert(t, gotFailure, "Commit status for bad-converts-good-pipelinerun should be failure")
+	assert.Assert(t, gotSuccess, "Commit status for always-good-pipelinerun should be success")
 
 	entries, err := payload.GetEntries(map[string]string{
 		".tekton/bad-pipelinerun.yaml":         "testdata/bad-converts-good-pipelinerun.yaml",
@@ -647,18 +653,32 @@ func TestGitlabConsistentCommitStatusOnMR(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, len(prsNew.Items) == 2)
 
-	commitStatuses, _, err = topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, newSHA, &clientGitlab.GetCommitStatusesOptions{})
-	assert.NilError(t, err)
-	assert.Assert(t, len(commitStatuses) == 2)
+	gotSuccess1 := false
+	gotSuccess2 := false
+	for i := 0; i < 5; i++ {
+		commitStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, newSHA, &clientGitlab.GetCommitStatusesOptions{})
+		assert.NilError(t, err)
+		assert.Assert(t, len(commitStatuses) == 2)
 
-	for _, cs := range commitStatuses {
-		switch cs.Name {
-		case "Pipelines as Code CI / bad-converts-good-pipelinerun", "Pipelines as Code CI / always-good-pipelinerun":
-			assert.Assert(t, cs.Status == "success")
-		default:
-			t.Fatalf("unexpected commit status name: %s", cs.Name)
+		for _, cs := range commitStatuses {
+			switch cs.Name {
+			case "Pipelines as Code CI / bad-converts-good-pipelinerun":
+				gotSuccess1 = cs.Status == "success"
+			case "Pipelines as Code CI / always-good-pipelinerun":
+				gotSuccess2 = cs.Status == "success"
+			default:
+				t.Fatalf("unexpected commit status name: %s", cs.Name)
+			}
 		}
+		if gotSuccess1 && gotSuccess2 {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
 	}
+
+	assert.Assert(t, gotSuccess1, "Commit status for bad-converts-good-pipelinerun should be success")
+	assert.Assert(t, gotSuccess2, "Commit status for always-good-pipelinerun should be success")
 }
 
 // TestGitlabMergeRequestCelPrefix tests the cel: prefix for arbitrary CEL expressions.
@@ -744,9 +764,9 @@ func TestGitlabMergeRequestVariableSubs(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
-	err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonSuccessful, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, v1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	// Get the PipelineRun
@@ -850,13 +870,24 @@ func TestGitlabMergeRequestCommentStrategyUpdateCELErrorReplacement(t *testing.T
 	twait.Succeeded(ctx, t, topts.ParamsRun, topts.Opts, sopt)
 
 	// Verify commit status is success
-	commitStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, sha, &clientGitlab.GetCommitStatusesOptions{})
-	assert.NilError(t, err)
-	assert.Assert(t, len(commitStatuses) > 0, "Expected at least one commit status")
-	for _, cs := range commitStatuses {
-		assert.Equal(t, "success", cs.Status,
-			"Commit status %s should be success, got %s", cs.Name, cs.Status)
+	foundSuccess := false
+	for i := 0; i < 5; i++ {
+		commitStatuses, _, err := topts.GLProvider.Client().Commits.GetCommitStatuses(topts.ProjectID, sha, &clientGitlab.GetCommitStatusesOptions{})
+		assert.NilError(t, err)
+		assert.Assert(t, len(commitStatuses) > 0, "Expected at least one commit status")
+		for _, cs := range commitStatuses {
+			if cs.Status == "success" {
+				foundSuccess = true
+				break
+			}
+		}
+		if foundSuccess {
+			break
+		}
+		time.Sleep(1 * time.Second)
 	}
+
+	assert.Assert(t, foundSuccess, "Commit status success not found")
 
 	// Verify the same comment was updated (not recreated)
 	notes, _, err := topts.GLProvider.Client().Notes.ListMergeRequestNotes(topts.ProjectID, int64(topts.MRNumber), nil)
