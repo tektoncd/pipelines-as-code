@@ -82,9 +82,14 @@ func (p *PacRun) cancelAllInProgressBelongingToClosedPullRequest(ctx context.Con
 	}
 	p.debugf("cancelAllInProgress: found %d pipelineruns to consider", len(prs.Items))
 
-	p.cancelPipelineRuns(ctx, prs, repo, func(_ tektonv1.PipelineRun) bool {
-		return true
-	})
+	p.cancelPipelineRuns(
+		ctx,
+		prs,
+		repo,
+		"The pull request was closed, and this PipelineRun matched the cancel-in-progress criteria.",
+		func(_ tektonv1.PipelineRun) bool {
+			return true
+		})
 
 	return nil
 }
@@ -156,21 +161,29 @@ func (p *PacRun) cancelInProgressMatchingPipelineRun(ctx context.Context, matchP
 		return fmt.Errorf("failed to list pipelineRuns : %w", err)
 	}
 
-	p.cancelPipelineRuns(ctx, prs, repo, func(pr tektonv1.PipelineRun) bool {
-		// skip our own for cancellation
-		if sourceBranch, ok := pr.GetAnnotations()[keys.SourceBranch]; ok {
-			// NOTE(chmouel): Every PR has their own branch and so is every push to different branch
-			// it means we only cancel pipelinerun of the same name that runs to
-			// the unique branch. Note: HeadBranch is the branch from where the PR
-			// comes from in git jargon.
-			if strings.TrimPrefix(sourceBranch, "refs/heads/") != strings.TrimPrefix(p.event.HeadBranch, "refs/heads/") {
-				p.logger.Infof("cancel-in-progress: skipping pipelinerun %v/%v as it is not from the same branch, annotation source-branch: %s event headbranch: %s", pr.GetNamespace(), pr.GetName(), sourceBranch, p.event.HeadBranch)
-				return false
+	p.cancelPipelineRuns(
+		ctx,
+		prs,
+		repo,
+		fmt.Sprintf(
+			"A newer %s event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
+			p.event.TriggerTarget,
+		),
+		func(pr tektonv1.PipelineRun) bool {
+			// skip our own for cancellation
+			if sourceBranch, ok := pr.GetAnnotations()[keys.SourceBranch]; ok {
+				// NOTE(chmouel): Every PR has their own branch and so is every push to different branch
+				// it means we only cancel pipelinerun of the same name that runs to
+				// the unique branch. Note: HeadBranch is the branch from where the PR
+				// comes from in git jargon.
+				if strings.TrimPrefix(sourceBranch, "refs/heads/") != strings.TrimPrefix(p.event.HeadBranch, "refs/heads/") {
+					p.logger.Infof("cancel-in-progress: skipping pipelinerun %v/%v as it is not from the same branch, annotation source-branch: %s event headbranch: %s", pr.GetNamespace(), pr.GetName(), sourceBranch, p.event.HeadBranch)
+					return false
+				}
 			}
-		}
 
-		return pr.GetName() != matchPR.GetName()
-	})
+			return pr.GetName() != matchPR.GetName()
+		})
 	return nil
 }
 
@@ -206,14 +219,19 @@ func (p *PacRun) cancelPipelineRunsOpsComment(ctx context.Context, repo *v1alpha
 	}
 	p.debugf("cancelPipelineRunsOpsComment: found %d pipelineruns to consider", len(prs.Items))
 
-	p.cancelPipelineRuns(ctx, prs, repo, func(pr tektonv1.PipelineRun) bool {
-		if p.event.TargetCancelPipelineRun != "" {
-			if prName, ok := pr.GetAnnotations()[keys.OriginalPRName]; !ok || prName != p.event.TargetCancelPipelineRun {
-				return false
+	p.cancelPipelineRuns(
+		ctx,
+		prs,
+		repo,
+		"Cancellation was requested for this PipelineRun via a /cancel command.",
+		func(pr tektonv1.PipelineRun) bool {
+			if p.event.TargetCancelPipelineRun != "" {
+				if prName, ok := pr.GetAnnotations()[keys.OriginalPRName]; !ok || prName != p.event.TargetCancelPipelineRun {
+					return false
+				}
 			}
-		}
-		return true
-	})
+			return true
+		})
 
 	return nil
 }
@@ -271,7 +289,13 @@ func (p *PacRun) resolveRepoForTargetCancelPipelineRun(ctx context.Context, repo
 	return targetRepo
 }
 
-func (p *PacRun) cancelPipelineRuns(ctx context.Context, prs *tektonv1.PipelineRunList, repo *v1alpha1.Repository, condition matchingCond) {
+func (p *PacRun) cancelPipelineRuns(
+	ctx context.Context,
+	prs *tektonv1.PipelineRunList,
+	repo *v1alpha1.Repository,
+	reason string,
+	condition matchingCond,
+) {
 	var wg sync.WaitGroup
 	p.debugf("cancelPipelineRuns: evaluating %d pipelineruns", len(prs.Items))
 	for _, pr := range prs.Items {
@@ -289,7 +313,7 @@ func (p *PacRun) cancelPipelineRuns(ctx context.Context, prs *tektonv1.PipelineR
 			continue
 		}
 
-		p.logger.Infof("cancel-in-progress: cancelling pipelinerun %v/%v", pr.GetNamespace(), pr.GetName())
+		p.logger.Infof("cancel-in-progress: cancelling pipelinerun %v/%v: %s", pr.GetNamespace(), pr.GetName(), reason)
 		wg.Add(1)
 		go func(ctx context.Context, pr tektonv1.PipelineRun) {
 			defer wg.Done()

@@ -75,14 +75,13 @@ var (
 )
 
 func TestCancelPipelinerunOpsComment(t *testing.T) {
-	observer, _ := zapobserver.New(zap.InfoLevel)
-	logger := zap.New(observer).Sugar()
 	tests := []struct {
 		name                  string
 		event                 *info.Event
 		repo                  *v1alpha1.Repository
 		pipelineRuns          []*pipelinev1.PipelineRun
 		cancelledPipelineRuns map[string]bool
+		wantLog               string
 	}{
 		{
 			name: "cancel running",
@@ -109,6 +108,7 @@ func TestCancelPipelinerunOpsComment(t *testing.T) {
 			cancelledPipelineRuns: map[string]bool{
 				"pr-foo": true,
 			},
+			wantLog: "Cancellation was requested for this PipelineRun via a /cancel command.",
 		},
 		{
 			name: "cancel specific run does not affect other repository in shared namespace",
@@ -336,6 +336,8 @@ func TestCancelPipelinerunOpsComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			observer, catcher := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
 			ctx, _ := rtesting.SetupFakeContext(t)
 
 			tdata := testclient.Data{
@@ -363,6 +365,14 @@ func TestCancelPipelinerunOpsComment(t *testing.T) {
 					continue
 				}
 				assert.Assert(t, string(pr.Spec.Status) != pipelinev1.PipelineRunSpecStatusCancelledRunFinally)
+			}
+
+			if tt.wantLog != "" {
+				assert.Assert(
+					t,
+					len(catcher.FilterMessageSnippet(tt.wantLog).TakeAll()) > 0,
+					fmt.Sprintf("could not find log message: got %+v", catcher.TakeAll()),
+				)
 			}
 		})
 	}
@@ -781,7 +791,7 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 			cancelledPipelineRuns: map[string]bool{
 				"pr-foo-1": true,
 			},
-			wantLog: "cancel-in-progress: cancelling pipelinerun foo/",
+			wantLog: "A newer pull_request event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
 		},
 		{
 			name: "match/cancel in progress on PipelineRun generateName",
@@ -829,7 +839,7 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 			cancelledPipelineRuns: map[string]bool{
 				"pr-foo-2": true,
 			},
-			wantLog: "cancel-in-progress: cancelling pipelinerun foo/pr-foo-2",
+			wantLog: "A newer pull_request event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
 		},
 		{
 			name: "match/cancel in progress from /retest",
@@ -880,7 +890,7 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 			cancelledPipelineRuns: map[string]bool{
 				"pr-foo-1": true,
 			},
-			wantLog: "cancel-in-progress: cancelling pipelinerun foo/pr-foo-1",
+			wantLog: "A newer pull_request event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
 		},
 		{
 			name: "match/cancel in progress exclude not belonging to same push branch",
@@ -1028,7 +1038,7 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 			cancelledPipelineRuns: map[string]bool{
 				"pr-foo-2": true,
 			},
-			wantLog: "cancel-in-progress: cancelling pipelinerun foo/",
+			wantLog: "A newer pull_request event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
 		},
 		{
 			name: "match/cancel in progress on PR is enable via ConfigMap",
@@ -1403,9 +1413,6 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 }
 
 func TestCancelAllInProgressBelongingToClosedPullRequest(t *testing.T) {
-	observer, _ := zapobserver.New(zap.InfoLevel)
-	logger := zap.New(observer).Sugar()
-
 	tests := []struct {
 		name                  string
 		event                 *info.Event
@@ -1413,6 +1420,7 @@ func TestCancelAllInProgressBelongingToClosedPullRequest(t *testing.T) {
 		pipelineRuns          []*pipelinev1.PipelineRun
 		cancelInProgressOnPR  bool
 		cancelledPipelineRuns map[string]bool
+		wantLog               string
 	}{
 		{
 			name: "cancel all in progress PipelineRuns with annotation set to true",
@@ -1458,6 +1466,7 @@ func TestCancelAllInProgressBelongingToClosedPullRequest(t *testing.T) {
 				"pr-foo-1": true,
 				"pr-foo-2": true,
 			},
+			wantLog: "The pull request was closed, and this PipelineRun matched the cancel-in-progress criteria.",
 		},
 		{
 			name: "cancel all in progress PipelineRuns with annotation set to false",
@@ -1707,6 +1716,8 @@ func TestCancelAllInProgressBelongingToClosedPullRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			observer, catcher := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
 			ctx, _ := rtesting.SetupFakeContext(t)
 
 			tdata := testclient.Data{
@@ -1738,6 +1749,14 @@ func TestCancelAllInProgressBelongingToClosedPullRequest(t *testing.T) {
 				} else {
 					assert.Assert(t, string(pr.Spec.Status) != pipelinev1.PipelineRunSpecStatusCancelledRunFinally)
 				}
+			}
+
+			if tt.wantLog != "" {
+				assert.Assert(
+					t,
+					len(catcher.FilterMessageSnippet(tt.wantLog).TakeAll()) > 0,
+					fmt.Sprintf("could not find log message: got %+v", catcher.TakeAll()),
+				)
 			}
 		})
 	}
