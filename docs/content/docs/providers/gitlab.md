@@ -234,7 +234,10 @@ Continue using project-scoped token with comment fallback:
 
 #### Can I disable status comments entirely?
 
-Yes. If you prefer not to see status comments on your merge requests, you can disable them by updating your Repository CR:
+Yes. If you prefer not to see PipelineRun status comments on your merge requests, you can disable
+them by updating your Repository CR. This setting only applies to comments about a PipelineRun's
+status, such as "started" or "succeeded"; Pipelines-as-Code still posts comments for errors
+validating PipelineRuns in the `.tekton/` directory.
 
 ```yaml
 spec:
