@@ -126,6 +126,58 @@ func TestProviderValidate(t *testing.T) {
 	}
 }
 
+// forgejo-sdk can return 200 with content:null (e.g. for non-file paths); error must contain "cannot find".
+func TestProviderGetFileInsideRepo(t *testing.T) {
+	tests := []struct {
+		name         string
+		contentsResp string
+		wantContent  string
+		errContains  string
+	}{
+		{
+			name:         "content field is null does not panic",
+			contentsResp: `{"name":"OWNERS","path":"OWNERS","type":"dir","content":null}`,
+			errContains:  "cannot find",
+		},
+		{
+			name:         "null response body yields content nil without panic",
+			contentsResp: `null`,
+			errContains:  "cannot find",
+		},
+		{
+			name:         "valid file content is decoded",
+			contentsResp: `{"name":"OWNERS","path":"OWNERS","type":"file","content":"YXBwcm92ZXJzOgogIC0gdXNlcgo="}`,
+			wantContent:  "approvers:\n  - user\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeclient, mux, teardown := tgitea.Setup(t)
+			defer teardown()
+			provider := &Provider{giteaClient: fakeclient}
+
+			event := info.NewEvent()
+			event.Organization = "myorg"
+			event.Repository = "myrepo"
+			event.DefaultBranch = "main"
+			event.BaseBranch = "main"
+
+			mux.HandleFunc("/repos/myorg/myrepo/contents/OWNERS",
+				func(rw http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(rw, tt.contentsResp)
+				})
+
+			got, err := provider.GetFileInsideRepo(context.Background(), event, "OWNERS", event.DefaultBranch)
+			if tt.errContains != "" {
+				assert.ErrorContains(t, err, tt.errContains)
+			} else {
+				assert.NilError(t, err)
+				assert.Equal(t, tt.wantContent, got)
+			}
+		})
+	}
+}
+
 func TestCreateComment(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -154,7 +206,7 @@ func TestCreateComment(t *testing.T) {
 			updateMarker: "",
 			mockResponses: map[string]func(rw http.ResponseWriter, _ *http.Request){
 				"/repos/org/repo/issues/123/comments": func(rw http.ResponseWriter, r *http.Request) {
-					assert.Equal(t, r.Method, http.MethodPost)
+					assert.Equal(t, http.MethodPost, r.Method)
 					fmt.Fprint(rw, `{}`)
 				},
 			},
@@ -175,7 +227,7 @@ func TestCreateComment(t *testing.T) {
 					}
 				},
 				"/repos/org/repo/issues/comments/555": func(rw http.ResponseWriter, r *http.Request) {
-					assert.Equal(t, r.Method, "PATCH")
+					assert.Equal(t, "PATCH", r.Method)
 					rw.WriteHeader(http.StatusOK)
 					fmt.Fprint(rw, `{}`)
 				},
@@ -195,7 +247,7 @@ func TestCreateComment(t *testing.T) {
 						fmt.Fprint(rw, `[{"id": 555, "body": "NO_MATCH", "user": {"id": 200}}]`)
 						return
 					}
-					assert.Equal(t, r.Method, http.MethodPost)
+					assert.Equal(t, http.MethodPost, r.Method)
 					rw.WriteHeader(http.StatusCreated)
 					fmt.Fprint(rw, `{}`)
 				},
@@ -215,7 +267,7 @@ func TestCreateComment(t *testing.T) {
 						fmt.Fprint(rw, `[{"id": 555, "body": "Old MARKER", "user": {"id": 999}}]`)
 						return
 					}
-					assert.Equal(t, r.Method, http.MethodPost)
+					assert.Equal(t, http.MethodPost, r.Method)
 					rw.WriteHeader(http.StatusCreated)
 					fmt.Fprint(rw, `{}`)
 				},

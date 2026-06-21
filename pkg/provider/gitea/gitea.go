@@ -555,6 +555,9 @@ func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, pa
 	if err != nil {
 		return "", err
 	}
+	if content == nil || content.Content == nil {
+		return "", fmt.Errorf("cannot find %s inside the repository %s/%s", path, runevent.Organization, runevent.Repository)
+	}
 	// base64 decode to string
 	decoded, err := base64.StdEncoding.DecodeString(*content.Content)
 	if err != nil {
