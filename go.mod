@@ -10,13 +10,13 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/fvbommel/sortorder v1.1.0
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.28.0
+	github.com/google/cel-go v0.28.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260403152401-96a365122246
 	github.com/google/go-github/v84 v84.0.0
 	github.com/google/go-github/v85 v85.0.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/jenkins-x/go-scm v1.15.17
+	github.com/jenkins-x/go-scm v1.15.22
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/juju/ansiterm v1.0.0
 	github.com/ktrysmt/go-bitbucket v0.9.95
@@ -27,23 +27,23 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/pipeline v1.11.1
+	github.com/tektoncd/pipeline v1.13.1
 	gitlab.com/gitlab-org/api/client-go v1.46.0
-	go.opentelemetry.io/otel v1.43.0
-	go.opentelemetry.io/otel/metric v1.43.0
+	go.opentelemetry.io/otel v1.44.0
+	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
-	go.opentelemetry.io/otel/trace v1.43.0
-	go.uber.org/zap v1.27.1
+	go.opentelemetry.io/otel/trace v1.44.0
+	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.37.0
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.5.2
-	k8s.io/api v0.35.4
-	k8s.io/apimachinery v0.35.4
-	k8s.io/client-go v0.35.4
+	k8s.io/api v0.35.5
+	k8s.io/apimachinery v0.35.5
+	k8s.io/client-go v0.35.5
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	knative.dev/eventing v0.49.0
 	knative.dev/pkg v0.0.0-20260422015212-ec452872dcc1
@@ -157,11 +157,11 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260406210006-6f92a3bedf2d
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.35.4 // indirect
+	k8s.io/apiextensions-apiserver v0.35.5 // indirect
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 )
