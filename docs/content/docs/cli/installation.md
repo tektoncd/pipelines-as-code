@@ -27,7 +27,16 @@ On Windows, tkn-pac will look for the Kubernetes config in `%USERPROFILE%\.kube\
 {{< /tab >}}
 
 {{< tab name="Homebrew" >}}
-The `tkn pac` plug-in is available from Homebrew as a cask. Install it with:
+The `tkn pac` plug-in is available from Homebrew as a cask.
+
+Before installing, trust the tap (required for Homebrew 5.2+, mandatory in 6.0):
+
+```shell
+brew tap openshift-pipelines/pipelines-as-code
+brew trust openshift-pipelines/pipelines-as-code
+```
+
+Then install with:
 
 ```shell
 brew install --cask openshift-pipelines/pipelines-as-code/tektoncd-pac
@@ -37,6 +46,12 @@ To upgrade:
 
 ```shell
 brew upgrade --cask openshift-pipelines/pipelines-as-code/tektoncd-pac
+```
+
+If this is the first time you are adding `tkn-pac` on macOS (not needed on Linux), Gatekeeper may block the binary on first run. Remove the quarantine attribute with:
+
+```shell
+xattr -d com.apple.quarantine "$(brew --prefix)/bin/tkn-pac"
 ```
 
 The `tkn pac` plug-in is compatible with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux).

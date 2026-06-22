@@ -87,6 +87,9 @@ homebrew_casks:
     homepage: "https://pipelinesascode.com"
     description: tkn-pac - A command line interface for interacting with Pipelines as Code
     binaries: ["tkn-pac"]
+    caveats: |
+      On first run, macOS may block the binary. To remove the quarantine attribute:
+        xattr -d com.apple.quarantine "$(brew --prefix)/bin/tkn-pac"
     custom_block: |
       zsh_completion = "#{staged_path}/_tkn-pac"
       bash_completion = "#{staged_path}/tkn-pac.bash"
