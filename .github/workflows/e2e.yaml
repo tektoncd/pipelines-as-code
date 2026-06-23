@@ -126,10 +126,14 @@ jobs:
       TESTRR_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       TESTRR_RUN_LABEL: gha-e2e-${{ matrix.provider }}
     steps:
+      # Safe: external contributor PRs do not run this workflow without
+      # an explicit maintainer ok-to-test approval (see the permission
+      # check step below).
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.target_ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          allow-unsafe-pr-checkout: true
 
       - name: Check user permissions on PRs
         if: github.event_name == 'pull_request_target'
