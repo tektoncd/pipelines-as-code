@@ -147,7 +147,7 @@ spec:
                     for i in $(git tag -l | grep '^v' | sort -rn); do echo -n "$i,"; done | sed 's/,$//'
                 )
 
-                git checkout -B nightly origin/main
+                git checkout -B nightly {{revision}}
                 echo nightly > docs/content/VERSION
                 echo ${allversions} > docs/content/ALLVERSIONS
                 echo "nightly-$ssa-$(date +%Y%m%d)" > pkg/params/versiondata/version.txt
