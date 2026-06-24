@@ -260,9 +260,16 @@ collect_logs() {
   [[ -d /tmp/gosmee-replay-gitlab ]] && cp -a /tmp/gosmee-replay-gitlab /tmp/logs/gosmee/replay-gitlab
   [[ -f /tmp/gosmee-gitlab.log ]] && cp /tmp/gosmee-gitlab.log /tmp/logs/gosmee/gitlab.log
 
-  kubectl get pipelineruns -A -o yaml >/tmp/logs/pac-pipelineruns.yaml
-  kubectl get repositories.pipelinesascode.tekton.dev -A -o yaml >/tmp/logs/pac-repositories.yaml
-  kubectl get configmap -n pipelines-as-code -o yaml >/tmp/logs/pac-configmap
+  for type in pipelineruns repositories.pipelinesascode.tekton.dev; do
+    kubectl get "${type}" -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' | while read -r ns name; do
+      echo "---"
+      kubectl get "${type}" "${name}" -n "${ns}" -o yaml
+    done > "/tmp/logs/pac-${type%%.*}.yaml"
+  done
+  kubectl get configmap -n pipelines-as-code -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read -r name; do
+    echo "---"
+    kubectl get configmap "${name}" -n pipelines-as-code -o yaml
+  done > /tmp/logs/pac-configmap.yaml
   kubectl get events -A >/tmp/logs/events
 
   allNamespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
