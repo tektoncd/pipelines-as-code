@@ -33,80 +33,100 @@ func TestWrapAPI(t *testing.T) {
 		assert.Assert(t, err == nil)
 	})
 
-	// Test case: Logger is not nil
-	t.Run("Logger is not nil", func(t *testing.T) {
-		observedZapCore, observedLogs := observer.New(zap.DebugLevel)
-		observedLogger := zap.New(observedZapCore).Sugar()
-		p := &Provider{
-			Logger:       observedLogger,
-			providerName: "github",
-			triggerEvent: "pull_request",
-			repo: &v1alpha1.Repository{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "test-ns",
-					Name:      "test-repo",
+	errorLogTests := []struct {
+		name          string
+		statusCode    int
+		expectedMsg   string
+		expectedLevel zapcore.Level
+	}{
+		{
+			name:          "API 404 logs at debug level",
+			statusCode:    http.StatusNotFound,
+			expectedMsg:   "GitHub API call returned not found",
+			expectedLevel: zap.DebugLevel,
+		},
+		{
+			name:          "non-404 error logs at error level",
+			statusCode:    http.StatusForbidden,
+			expectedMsg:   "GitHub API call failed",
+			expectedLevel: zap.ErrorLevel,
+		},
+	}
+	for _, tt := range errorLogTests {
+		t.Run(tt.name, func(t *testing.T) {
+			observedZapCore, observedLogs := observer.New(zap.DebugLevel)
+			observedLogger := zap.New(observedZapCore).Sugar()
+			p := &Provider{
+				Logger:       observedLogger,
+				providerName: "github",
+				triggerEvent: "pull_request",
+				repo: &v1alpha1.Repository{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test-ns",
+						Name:      "test-repo",
+					},
 				},
-			},
-		}
-		called := false
-		reqURL, _ := url.Parse("https://api.github.com/test")
-		headers := http.Header{}
-		headers.Set("X-RateLimit-Remaining", "99")
-		resp := &github.Response{
-			Response: &http.Response{
-				Request: &http.Request{URL: reqURL},
-				Header:  headers,
-			},
-		}
-		call := func() (string, *github.Response, error) {
-			called = true
-			return "data", resp, fmt.Errorf("error")
-		}
-
-		data, r, e := wrapAPI(p, "test_api_call", call)
-
-		assert.Assert(t, called)
-		assert.Equal(t, "data", data)
-		assert.Equal(t, r, resp)
-		assert.Error(t, e, "error")
-
-		logs := observedLogs.All()
-		assert.Assert(t, len(logs) > 0, "Should have log entries")
-
-		// Find the API call log entry
-		var apiCallLog *observer.LoggedEntry
-		for i := range logs {
-			if logs[i].Message == "GitHub API call failed" {
-				apiCallLog = &logs[i]
-				break
 			}
-		}
-		assert.Assert(t, apiCallLog != nil, "Should have API call failed log entry")
-
-		// Check structured fields
-		foundOperation := false
-		foundProvider := false
-		foundRepo := false
-		for _, field := range apiCallLog.Context {
-			switch field.Key {
-			case "operation":
-				assert.Equal(t, "test_api_call", field.String)
-				foundOperation = true
-			case "provider":
-				assert.Equal(t, "github", field.String)
-				foundProvider = true
-			case "repo":
-				assert.Equal(t, "test-ns/test-repo", field.String)
-				foundRepo = true
+			called := false
+			reqURL, _ := url.Parse("https://api.github.com/test")
+			headers := http.Header{}
+			headers.Set("X-RateLimit-Remaining", "99")
+			resp := &github.Response{
+				Response: &http.Response{
+					StatusCode: tt.statusCode,
+					Request:    &http.Request{URL: reqURL},
+					Header:     headers,
+				},
 			}
-		}
+			call := func() (string, *github.Response, error) {
+				called = true
+				return "data", resp, fmt.Errorf("error")
+			}
 
-		assert.Assert(t, foundOperation, "Should have operation field")
-		assert.Assert(t, foundProvider, "Should have provider field")
-		assert.Assert(t, foundRepo, "Should have repo field")
-	})
+			data, r, e := wrapAPI(p, "test_api_call", call)
 
-	// Test case: Logger is not nil and response is nil
+			assert.Assert(t, called)
+			assert.Equal(t, "data", data)
+			assert.Equal(t, r, resp)
+			assert.Error(t, e, "error")
+
+			logs := observedLogs.All()
+			assert.Assert(t, len(logs) > 0, "Should have log entries")
+
+			var apiCallLog *observer.LoggedEntry
+			for i := range logs {
+				if logs[i].Message == tt.expectedMsg {
+					apiCallLog = &logs[i]
+					break
+				}
+			}
+			assert.Assert(t, apiCallLog != nil, "Should have log entry: %s", tt.expectedMsg)
+			assert.Equal(t, tt.expectedLevel, apiCallLog.Level)
+
+			foundOperation := false
+			foundProvider := false
+			foundRepo := false
+			for _, field := range apiCallLog.Context {
+				switch field.Key {
+				case "operation":
+					assert.Equal(t, "test_api_call", field.String)
+					foundOperation = true
+				case "provider":
+					assert.Equal(t, "github", field.String)
+					foundProvider = true
+				case "repo":
+					assert.Equal(t, "test-ns/test-repo", field.String)
+					foundRepo = true
+				}
+			}
+
+			assert.Assert(t, foundOperation, "Should have operation field")
+			assert.Assert(t, foundProvider, "Should have provider field")
+			assert.Assert(t, foundRepo, "Should have repo field")
+		})
+	}
+
+	// Nil response omits URL and rate-limit fields from the log entry.
 	t.Run("Logger is not nil, response is nil", func(t *testing.T) {
 		observedZapCore, observedLogs := observer.New(zap.DebugLevel)
 		observedLogger := zap.New(observedZapCore).Sugar()
@@ -292,8 +312,9 @@ func TestWrapGetContents(t *testing.T) {
 		headers.Set("X-RateLimit-Remaining", "42")
 		resp := &github.Response{
 			Response: &http.Response{
-				Request: &http.Request{URL: reqURL},
-				Header:  headers,
+				StatusCode: http.StatusForbidden,
+				Request:    &http.Request{URL: reqURL},
+				Header:     headers,
 			},
 		}
 		fileContent := &github.RepositoryContent{Name: github.Ptr("file")}

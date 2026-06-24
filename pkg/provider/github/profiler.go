@@ -76,7 +76,8 @@ func (v *Provider) checkRateLimit(resp *github.Response) (remaining string) {
 		if v.eventEmitter != nil {
 			v.eventEmitter.EmitMessage(
 				v.repo, zap.ErrorLevel, "GitHubRateLimitExceeded",
-				fmt.Sprintf("GitHub API rate limit exceeded, limit: %s, resets at: %s", limit, reset))
+				fmt.Sprintf("GitHub API rate limit exceeded, limit: %s, resets at: %s", limit, reset),
+			)
 		}
 	case remainingCount < rateLimitCritical:
 		v.Logger.Errorw("GitHub API rate limit critically low", logFields...)
@@ -123,7 +124,8 @@ func (v *Provider) logAPICall(operation string, duration time.Duration, resp *gi
 	// Add response context if available
 	if resp != nil {
 		remaining := v.checkRateLimit(resp)
-		logFields = append(logFields,
+		logFields = append(
+			logFields,
 			"url_path", resp.Request.URL.Path,
 			"rate_limit_remaining", remaining,
 			"github_request_id", resp.Header.Get("X-GitHub-Request-Id"),
@@ -132,11 +134,15 @@ func (v *Provider) logAPICall(operation string, duration time.Duration, resp *gi
 			logFields = append(logFields, "status_code", resp.StatusCode)
 		}
 	}
-
-	// Log based on success/failure with appropriate level
+	// Log success/failure appropriately; 404 is debug-only
+	// since a missing OWNERS file, for example, is a valid/expected state
 	if err != nil {
 		logFields = append(logFields, "error", err.Error())
-		v.Logger.Errorw("GitHub API call failed", logFields...)
+		if resp != nil && resp.Response != nil && resp.StatusCode == http.StatusNotFound {
+			v.Logger.Debugw("GitHub API call returned not found", logFields...)
+		} else {
+			v.Logger.Errorw("GitHub API call failed", logFields...)
+		}
 	} else {
 		v.Logger.Debugw("GitHub API call completed", logFields...)
 	}
