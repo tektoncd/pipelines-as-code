@@ -53,7 +53,7 @@ linters:
     # - execinquery
     - exhaustive
     #- exhaustruct
-    - exportloopref
+    - copyloopvar
     - forbidigo
     - forcetypeassert
     #- funlen
@@ -118,7 +118,7 @@ linters:
     - stylecheck
     - tagalign
     #- tagliatelle
-    - tenv
+    #- usetesting
     - testableexamples
     # - testifylint
     #- testpackage
