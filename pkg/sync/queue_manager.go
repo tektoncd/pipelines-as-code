@@ -155,7 +155,6 @@ func (qm *QueueManager) InitQueues(ctx context.Context, tekton versioned2.Interf
 	// pipelineRuns from the namespace where repository is present
 	// those are required for creating queues
 	for _, repo := range repos.Items {
-		repo := repo
 		if repo.Spec.ConcurrencyLimit == nil || *repo.Spec.ConcurrencyLimit == 0 {
 			continue
 		}
@@ -173,7 +172,6 @@ func (qm *QueueManager) InitQueues(ctx context.Context, tekton versioned2.Interf
 		sortedPRs := sortPipelineRunsByCreationTimestamp(prs.Items)
 
 		for _, pr := range sortedPRs {
-			pr := pr
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
 				// if the pipelineRun doesn't have order label then wait
@@ -199,7 +197,6 @@ func (qm *QueueManager) InitQueues(ctx context.Context, tekton versioned2.Interf
 		sortedPRs = sortPipelineRunsByCreationTimestamp(prs.Items)
 
 		for _, pr := range sortedPRs {
-			pr := pr
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
 				// if the pipelineRun doesn't have order label then wait

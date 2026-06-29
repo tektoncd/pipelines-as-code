@@ -123,7 +123,7 @@ spec:
 	runcnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
 
 	counter := 0
-	max := 5
+	maxRetries := 5
 	for {
 		output, err = cli2.ExecCommand(runcnx, tknpaclist.Root, "-n", targetNS)
 		if err == nil && strings.Contains(output, "Succeeded") {
@@ -131,12 +131,12 @@ spec:
 			break
 		}
 		counter++
-		if counter > max {
+		if counter > maxRetries {
 			runcnx.Clients.Log.Errorf("We have waited for 5 minutes and we still do not have the repository set as succeeded: %s", output)
 			t.Fail()
 			break
 		}
-		runcnx.Clients.Log.Infof("Waiting 30s for tkn pac show success, %d/%d", counter, max)
+		runcnx.Clients.Log.Infof("Waiting 30s for tkn pac show success, %d/%d", counter, maxRetries)
 		time.Sleep(30 * time.Second)
 	}
 }

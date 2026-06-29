@@ -256,8 +256,7 @@ func (v *Provider) checkWebhookSecretValidity(ctx context.Context, cw clockwork.
 		}
 
 		if cw.Now().After(ts) {
-			errm := fmt.Sprintf("token has expired at %s", resp.TokenExpiration.Format(time.RFC1123))
-			return fmt.Errorf(errm)
+			return fmt.Errorf("token has expired at %s", resp.TokenExpiration.Format(time.RFC1123))
 		}
 	}
 
