@@ -307,7 +307,7 @@ func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, pa
 
 func (v *Provider) GetCommitInfo(_ context.Context, runevent *info.Event) error {
 	if v.Client == nil {
-		return fmt.Errorf(noClientErrStr)
+		return fmt.Errorf("%s", noClientErrStr)
 	}
 
 	// if we don't have a SHA (ie: incoming-webhook) then get it from the branch
