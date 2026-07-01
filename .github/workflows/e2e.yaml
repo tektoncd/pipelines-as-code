@@ -109,7 +109,7 @@ jobs:
       TEST_BITBUCKET_CLOUD_API_URL: https://api.bitbucket.org/2.0
       TEST_BITBUCKET_CLOUD_E2E_REPOSITORY: cboudjna/pac-e2e-tests
       TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
-      TEST_BITBUCKET_CLOUD_USER: cboudjna
+      TEST_BITBUCKET_CLOUD_USER: cboudjna@redhat.com
 
       # Bitbucket Data Center
       TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}

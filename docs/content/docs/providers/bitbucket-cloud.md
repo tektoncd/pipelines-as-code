@@ -8,12 +8,18 @@ This page covers how to configure Pipelines-as-Code with Bitbucket Cloud through
 ## Prerequisites
 
 - A running Pipelines-as-Code [installation]({{< relref "/docs/installation/installation" >}})
-- A Bitbucket Cloud API token or App Password (see below)
+- A Bitbucket Cloud scoped API token (see below)
 - The public URL of your Pipelines-as-Code controller route or ingress endpoint
 
-## Create a Bitbucket API Token
+## Create a Bitbucket Cloud API token
 
-Follow [this guide](https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/) to create an API token.
+Bitbucket Cloud app passwords are deprecated. Use a scoped API token for new
+setups and rotate existing app passwords to API tokens.
+
+Follow the
+[Bitbucket Cloud API token guide](https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/)
+to create an API token with scopes. Select **Bitbucket** as the app when
+creating the token.
 
 Check these boxes to add the permissions to the token:
 
@@ -21,20 +27,24 @@ Check these boxes to add the permissions to the token:
 - **read:pullrequest:bitbucket**
 - **read:repository:bitbucket**
 - **write:repository:bitbucket**
+- **write:webhook:bitbucket**
 
 {{< callout type="info" >}}
-Note: if you're contributing to PaC and want to run PaC E2E test locally you need one more permission i.e. **write:pullrequest:bitbucket** to create pull requests in E2E test.
+Note: if you're contributing to PaC and want to run PaC E2E test locally you
+need one more permission, **write:pullrequest:bitbucket**, to create pull
+requests in E2E tests.
 {{< /callout >}}
 
-Store the generated token in a safe place, or you will have to recreate it.
+Store the generated token in a safe place. Bitbucket Cloud shows it only once.
 
 ## Webhook Configuration using the CLI
 
 Use the [`tkn pac create repo`]({{< relref "/docs/cli" >}}) command to
 configure a webhook and create the Repository CR in one step.
 
-You need an App Password created. `tkn pac` uses this token to configure the webhook and stores it in a secret
-in the cluster, which the Pipelines-as-Code controller uses for accessing the repository.
+You need a scoped Bitbucket Cloud API token. `tkn pac` uses this token to
+configure the webhook and stores it in a secret in the cluster, which the
+Pipelines-as-Code controller uses for accessing the repository.
 
 Below is the sample format for `tkn pac create repo`
 
@@ -47,9 +57,9 @@ $ tkn pac create repo
 ? Would you like me to create the namespace repo-pipelines? Yes
 ✓ Repository workspace-repo has been created in repo-pipelines namespace
 ✓ Setting up Bitbucket Webhook for Repository https://bitbucket.org/workspace/repo
-? Please enter your bitbucket cloud username:  <username>
-ℹ ️You now need to create a Bitbucket Cloud app password, please checkout the docs at https://is.gd/fqMHiJ for the required permissions
-? Please enter the Bitbucket Cloud app password:  ************************************
+? Please enter your Bitbucket Cloud Atlassian account email:  <email@example.com>
+ℹ ️You now need to create a Bitbucket Cloud API token with scopes, please checkout the docs at https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/ for the required permissions
+? Please enter the Bitbucket Cloud API token:  ************************************
 👀 I have detected a controller url: https://pipelines-as-code-controller-openshift-pipelines.apps.awscl2.aws.ospqa.com
 ? Do you want me to use it? Yes
 ✓ Webhook has been created on repository workspace/repo
@@ -94,11 +104,12 @@ If you prefer to configure the webhook yourself, follow these steps.
 
 ### Create the Secret
 
-Create a Kubernetes secret containing your App Password in the `target-namespace` (the namespace where your pipeline CI runs):
+Create a Kubernetes secret containing your API token in the `target-namespace`
+(the namespace where your pipeline CI runs):
 
 ```shell
 kubectl -n target-namespace create secret generic bitbucket-cloud-token \
-        --from-literal provider.token="APP_PASSWORD_AS_GENERATED_PREVIOUSLY"
+        --from-literal provider.token="BITBUCKET_CLOUD_API_TOKEN"
 ```
 
 ### Create the Repository CR
@@ -115,14 +126,19 @@ Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with th
   spec:
     url: "https://bitbucket.com/workspace/repo"
     git_provider:
-      user: "your_atlassian_email_id"
+      user: "your_atlassian_account_email"
       secret:
         name: "bitbucket-cloud-token"
         # Set this if you have a different key in your secret
         # key: "provider.token"
 ```
 
-You must use your Bitbucket/Atlassian account email address in the `user` field of the Repository CR. To find your email address, click on your profile icon at the top-left corner in the Bitbucket Cloud UI (see image below), go to **Account Settings**, and scroll down to locate your email address.
+You must use your Bitbucket/Atlassian account email address in the `user` field
+of the Repository CR. Pipelines-as-Code uses this value with the API token for
+Bitbucket Cloud API authentication. To find your email address, click on your
+profile icon at the top-left corner in the Bitbucket Cloud UI (see image
+below), go to **Account Settings**, and scroll down to locate your email
+address.
 ![Bitbucket Cloud Account Settings](/images/bitbucket-cloud-account-settings.png)
 
 ## Notes
@@ -165,7 +181,7 @@ Below is the sample format for `tkn pac webhook add`
 $ tkn pac webhook add -n repo-pipelines
 
 ✓ Setting up Bitbucket Webhook for Repository https://bitbucket.org/workspace/repo
-? Please enter your bitbucket cloud username:  <username>
+? Please enter your Bitbucket Cloud Atlassian account email:  <email@example.com>
 👀 I have detected a controller url: https://pipelines-as-code-controller-openshift-pipelines.apps.awscl2.aws.ospqa.com
 ? Do you want me to use it? Yes
 ✓ Webhook has been created on repository workspace/repo
@@ -192,8 +208,8 @@ Below is the sample format for `tkn pac webhook update-token`
 ```shell script
 $ tkn pac webhook update-token -n repo-pipelines
 
-? Please enter your personal access token:  ************************************
-🔑 Secret workspace-repo has been updated with new personal access token in the repo-pipelines namespace.
+? Please enter your Bitbucket Cloud API token:  ************************************
+🔑 Secret workspace-repo has been updated with new Bitbucket Cloud API token in the repo-pipelines namespace.
 
 ```
 
@@ -204,7 +220,8 @@ In the above example, the `Repository` exists in the `repo-pipelines` namespace 
 
 ### Update using kubectl
 
-When you have regenerated an app password, you must update it in the cluster. You can find the secret name in the Repository CR:
+When you have regenerated an API token, you must update it in the cluster. You
+can find the secret name in the Repository CR:
 
   ```yaml
   spec:
@@ -213,8 +230,8 @@ When you have regenerated an app password, you must update it in the cluster. Yo
         name: "bitbucket-cloud-token"
   ```
 
-Replace `$password` and `$target_namespace` with your values:
+Replace `$api_token` and `$target_namespace` with your values:
 
 ```shell
-kubectl -n $target_namespace patch secret bitbucket-cloud-token -p "{\"data\": {\"provider.token\": \"$(echo -n $password|base64 -w0)\"}}"
+kubectl -n $target_namespace patch secret bitbucket-cloud-token -p "{\"data\": {\"provider.token\": \"$(echo -n $api_token|base64 -w0)\"}}"
 ```

@@ -41,7 +41,7 @@ and search for **installation** which looks something like below
 - `TEST_GITHUB_REPO_OWNER_WEBHOOK` - A repository/owner github repo that is configured with github webhooks and
 this repo should differ from the one which is configured as part of `TEST_GITHUB_REPO_OWNER_GITHUBAPP` env.
 - `TEST_BITBUCKET_CLOUD_API_URL` - Bitbucket Cloud Api URL: probably: `https://api.bitbucket.org/2.0`
-- `TEST_BITBUCKET_CLOUD_USER` - Bitbucket Cloud Username (you can get from "Personal Bitbucket settings" in UI)
+- `TEST_BITBUCKET_CLOUD_USER` - Atlassian account email for Bitbucket Cloud API authentication
 - `TEST_BITBUCKET_CLOUD_E2E_REPOSITORY` - Bitbucket Cloud repository (i.e. `project/repo`)
 - `TEST_BITBUCKET_CLOUD_TOKEN` - Bitbucket Cloud token
 - `TEST_GITLAB_API_URL` - Gitlab API URL i.e: `https://gitlab.com`
