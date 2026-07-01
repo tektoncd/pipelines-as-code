@@ -14,6 +14,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
@@ -805,9 +806,11 @@ func TestIfPullRequestIsForSameRepoWithoutFork(t *testing.T) {
 			repo := &v1alpha1.Repository{Spec: v1alpha1.RepositorySpec{
 				Settings: &v1alpha1.Settings{},
 			}}
+			l, _ := logger.GetLogger()
 			gprovider := Provider{
 				ghClient: fakeclient,
 				repo:     repo,
+				Logger:   l,
 			}
 
 			got, err := gprovider.aclCheckAll(ctx, tt.event)

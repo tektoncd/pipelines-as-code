@@ -473,6 +473,7 @@ func TestSetClient(t *testing.T) {
 				mux.HandleFunc("/users/foo", tt.muxUser)
 			}
 			v := &Provider{client: client, baseURL: tURL}
+			v.SetLogger(testLog)
 			err := v.SetClient(ctx, fakeRun, tt.opts, tt.repo, nil)
 			if tt.wantErrSubstr != "" {
 				assert.ErrorContains(t, err, tt.wantErrSubstr)

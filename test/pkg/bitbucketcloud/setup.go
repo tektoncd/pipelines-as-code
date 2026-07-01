@@ -43,6 +43,7 @@ func Setup(ctx context.Context) (*params.Run, options.E2E, bitbucketcloud.Provid
 		Repo:         split[1],
 	}
 	bbc := bitbucketcloud.Provider{}
+	bbc.SetLogger(run.Clients.Log)
 	event := info.NewEvent()
 	event.Provider = &info.Provider{
 		Token: bitbucketCloudToken,

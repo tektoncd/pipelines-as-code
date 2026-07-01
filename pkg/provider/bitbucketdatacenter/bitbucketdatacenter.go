@@ -309,7 +309,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 		v.client = client
 
 		// Added for security audit purposes to log client access when a token is used
-		run.Clients.Log.Infof("bitbucket-datacenter: initialized client with provided token for user=%s providerURL=%s", event.Provider.User, event.Provider.URL)
+		v.Logger.Infof("bitbucket-datacenter: initialized client with provided token for user=%s providerURL=%s", event.Provider.User, event.Provider.URL)
 	}
 	v.run = run
 	v.repo = repo

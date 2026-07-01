@@ -92,11 +92,6 @@ func (v *Provider) checkRateLimit(resp *github.Response) (remaining string) {
 
 // wrapAPI wraps a GitHub API call with logging, metrics, and operation context.
 func wrapAPI[T any](v *Provider, operation string, call func() (T, *github.Response, error)) (T, *github.Response, error) {
-	// This check ensures we only profile if a logger is available.
-	if v.Logger == nil {
-		return call()
-	}
-
 	start := time.Now()
 	data, resp, err := call()
 	duration := time.Since(start)
@@ -150,11 +145,6 @@ func (v *Provider) logAPICall(operation string, duration time.Duration, resp *gi
 
 // wrapAPIGetContents wraps the GetContents API call with operation context.
 func wrapAPIGetContents(v *Provider, operation string, call func() (*github.RepositoryContent, []*github.RepositoryContent, *github.Response, error)) (*github.RepositoryContent, []*github.RepositoryContent, *github.Response, error) {
-	// This check ensures we only profile if a logger is available.
-	if v.Logger == nil {
-		return call()
-	}
-
 	start := time.Now()
 	file, dir, resp, err := call()
 	duration := time.Since(start)

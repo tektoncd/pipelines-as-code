@@ -206,6 +206,7 @@ func resolveFilenames(ctx context.Context, cs *params.Run, filenames []string, p
 	allTheYamls = templates.ReplacePlaceHoldersVariables(allTheYamls, params, nil, http.Header{}, map[string]any{})
 	// We use github here but since we don't do remotetask we would not care
 	providerintf := github.New()
+	providerintf.SetLogger(cs.Clients.Log)
 	event := info.NewEvent()
 	types, err := resolve.ReadTektonTypes(ctx, cs.Clients.Log, allTheYamls)
 	if err != nil {

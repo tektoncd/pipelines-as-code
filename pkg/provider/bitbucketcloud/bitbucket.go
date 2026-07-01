@@ -221,7 +221,7 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, event *info.Eve
 	v.bbClient = bbClient
 
 	// Added log for security audit purposes to log client access when a token is used
-	run.Clients.Log.Infof("bitbucket-cloud: initialized client with provided token for user=%s", event.Provider.User)
+	v.Logger.Infof("bitbucket-cloud: initialized client with provided token for user=%s", event.Provider.User)
 
 	v.Token = &event.Provider.Token
 	v.Username = &event.Provider.User

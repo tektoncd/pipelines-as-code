@@ -26,6 +26,7 @@ func CreateProvider(ctx context.Context, giteaURL, user, password string) (gitea
 		Password: password,
 		Token:    github.Ptr(password),
 	}
+	gprovider.SetLogger(run.Clients.Log)
 	event := info.NewEvent()
 	event.Provider = &info.Provider{
 		URL:   giteaURL,
