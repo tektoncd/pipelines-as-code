@@ -31,6 +31,7 @@ import (
 func TestGithubProviderCreateCheckRun(t *testing.T) {
 	ctx, _ := rtesting.SetupFakeContext(t)
 	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	l, _ := logger.GetLogger()
 	cnx := Provider{
 		ghClient: fakeclient,
 		Run:      params.New(),
@@ -39,6 +40,7 @@ func TestGithubProviderCreateCheckRun(t *testing.T) {
 				ApplicationName: settings.PACApplicationNameDefaultValue,
 			},
 		},
+		Logger: l,
 	}
 	defer teardown()
 	mux.HandleFunc("/repos/check/info/check-runs", func(w http.ResponseWriter, _ *http.Request) {
@@ -65,10 +67,12 @@ func TestGithubProviderCreateCheckRun(t *testing.T) {
 func TestGetOrUpdateCheckRunStatusForMultipleFailedPipelineRun(t *testing.T) {
 	ctx, _ := rtesting.SetupFakeContext(t)
 	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	l, _ := logger.GetLogger()
 	cnx := Provider{
 		ghClient: fakeclient,
 		Run:      params.New(),
 		pacInfo:  &info.PacOpts{},
+		Logger:   l,
 	}
 	defer teardown()
 	statusOptionData := []providerstatus.StatusOpts{{
@@ -105,9 +109,11 @@ func TestGetExistingCheckRunIDFromMultiple(t *testing.T) {
 	client, mux, _, teardown := ghtesthelper.SetupGH()
 	defer teardown()
 
+	l, _ := logger.GetLogger()
 	cnx := &Provider{
 		ghClient:      client,
 		PaginedNumber: 1,
+		Logger:        l,
 	}
 	event := &info.Event{
 		Organization: "owner",
@@ -152,8 +158,10 @@ func TestGetExistingPendingApprovalCheckRunID(t *testing.T) {
 	client, mux, _, teardown := ghtesthelper.SetupGH()
 	defer teardown()
 
+	l, _ := logger.GetLogger()
 	cnx := New()
 	cnx.SetGithubClient(client)
+	cnx.SetLogger(l)
 
 	event := &info.Event{
 		Organization: "owner",
@@ -191,8 +199,10 @@ func TestGetExistingFailedCheckRunID(t *testing.T) {
 	client, mux, _, teardown := ghtesthelper.SetupGH()
 	defer teardown()
 
+	l, _ := logger.GetLogger()
 	cnx := New()
 	cnx.SetGithubClient(client)
+	cnx.SetLogger(l)
 
 	event := &info.Event{
 		Organization: "owner",
@@ -606,6 +616,7 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 			}
 
 			ctx, _ := rtesting.SetupFakeContext(t)
+			l, _ := logger.GetLogger()
 			provider := &Provider{
 				ghClient: fakeclient,
 				Run:      params.New(),
@@ -614,6 +625,7 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 						ApplicationName: settings.PACApplicationNameDefaultValue,
 					},
 				},
+				Logger: l,
 			}
 
 			if err := provider.createStatusCommit(ctx, tt.event, tt.status); (err != nil) != tt.wantErr {
@@ -668,8 +680,10 @@ func TestProviderGetExistingCheckRunID(t *testing.T) {
 				Repository:   "repository",
 				SHA:          "sha",
 			}
+			l, _ := logger.GetLogger()
 			v := &Provider{
 				ghClient: client,
+				Logger:   l,
 			}
 			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA), func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = fmt.Fprintf(w, "%s", tt.jsonret)
@@ -742,8 +756,10 @@ func TestGetExistingCheckRunIDCache(t *testing.T) {
 				fmt.Fprint(w, tt.jsonret)
 			})
 
+			l, _ := logger.GetLogger()
 			cnx := New()
 			cnx.SetGithubClient(client)
+			cnx.SetLogger(l)
 
 			if tt.goroutines > 1 {
 				var wg sync.WaitGroup

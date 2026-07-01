@@ -258,7 +258,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, runevent *inf
 	}
 	v.Token = &runevent.Provider.Token
 
-	run.Clients.Log.Infof("gitlab: initialized for client with token for apiURL=%s, org=%s, repo=%s", apiURL, runevent.Organization, runevent.Repository)
+	v.Logger.Infof("gitlab: initialized for client with token for apiURL=%s, org=%s, repo=%s", apiURL, runevent.Organization, runevent.Repository)
 	// In a scenario where the source repository is forked and a merge request (MR) is created on the upstream
 	// repository, runevent.SourceProjectID will not be 0 when SetClient is called from the pac-watcher code.
 	// This is because, in the controller, SourceProjectID is set in the annotation of the pull request,
@@ -286,7 +286,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, runevent *inf
 				marker := "<!-- pac-source-repo-inaccessible -->"
 				comment := fmt.Sprintf("%s\n%s", marker, formatSourceRepoInaccessibleComment(runevent.SourceProjectID))
 				if commentErr := v.CreateComment(ctx, runevent, comment, marker); commentErr != nil {
-					run.Clients.Log.Warnf("failed to post source repository access error as MR comment: %v", commentErr)
+					v.Logger.Warnf("failed to post source repository access error as MR comment: %v", commentErr)
 				}
 			}
 			return returnErr
@@ -513,9 +513,7 @@ func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]pr
 			if firstErr == nil {
 				firstErr = err
 			}
-			if v.Logger != nil {
-				v.Logger.Debugf("failed to get commit statuses from gitlab project ID %d for SHA %s: %v", projectID, event.SHA, err)
-			}
+			v.Logger.Debugf("failed to get commit statuses from gitlab project ID %d for SHA %s: %v", projectID, event.SHA, err)
 			continue
 		}
 

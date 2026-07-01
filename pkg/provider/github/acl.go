@@ -211,7 +211,7 @@ func (v *Provider) aclCheckAll(ctx context.Context, rev *info.Event) (bool, erro
 		if isFromSameRepo {
 			return true, nil
 		}
-	} else if rev.PullRequestNumber != 0 && v.Logger != nil {
+	} else if rev.PullRequestNumber != 0 {
 		v.Logger.Debugf(
 			"Skipping same-repo pull request shortcut for untrusted event %T on %s/%s#%d from sender %s",
 			rev.Event, rev.Organization, rev.Repository, rev.PullRequestNumber, rev.Sender,
