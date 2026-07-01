@@ -61,6 +61,8 @@ git_provider:
 
 {{< param name="git_provider.user" type="string" id="param-git-provider-user" >}}
 Sets the username for basic auth or token-based authentication. Pipelines-as-Code does not use this field for GitHub App authentication.
+For Bitbucket Cloud, set this to the Atlassian account email that owns the
+scoped API token.
 
 ```yaml
 git_provider:

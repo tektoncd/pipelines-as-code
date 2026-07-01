@@ -361,7 +361,7 @@ type Interface interface {
 
 **Authentication**:
 
-- App Password (Cloud)
+- Scoped API token (Cloud)
 - Personal Access Token (Server)
 
 ## Package Structure

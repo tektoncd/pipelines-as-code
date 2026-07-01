@@ -1,8 +1,10 @@
 package webhook
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
@@ -21,6 +23,9 @@ func TestAskBBWebhookConfig(t *testing.T) {
 		repoURL             string
 		controllerURL       string
 		personalaccesstoken string
+		wantAccountEmail    string
+		wantAPIToken        string
+		wantControllerURL   string
 	}{
 		{
 			name: "invalid repo format",
@@ -33,38 +38,42 @@ func TestAskBBWebhookConfig(t *testing.T) {
 			name: "ask all details no defaults",
 			askStubs: func(as *prompt.AskStubber) {
 				as.StubOne("https://bitbucket.org/pac/test")
-				as.StubOne("https://controller.url")
-				as.StubOne("user")
+				as.StubOne("user@example.com")
 				as.StubOne("token")
+				as.StubOne("https://controller.url")
 			},
-			wantErrStr: "",
+			wantErrStr:        "",
+			wantAccountEmail:  "user@example.com",
+			wantAPIToken:      "token",
+			wantControllerURL: "https://controller.url",
 		},
 		{
 			name: "with defaults",
 			askStubs: func(as *prompt.AskStubber) {
-				as.StubOne(true)
-				as.StubOne("webhook-secret")
-				as.StubOne("user")
+				as.StubOne("user@example.com")
 				as.StubOne("token")
-				as.StubOne("")
+				as.StubOne(true)
 			},
-			repoURL:       "https://bitbucket.org/pac/demo",
-			controllerURL: "https://test",
-			wantErrStr:    "",
+			repoURL:           "https://bitbucket.org/pac/demo",
+			controllerURL:     "https://test",
+			wantErrStr:        "",
+			wantAccountEmail:  "user@example.com",
+			wantAPIToken:      "token",
+			wantControllerURL: "https://test",
 		},
 		{
 			name: "with personalaccesstoken",
 			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("user@example.com")
 				as.StubOne(true)
-				as.StubOne("webhook-secret")
-				as.StubOne("user")
-				as.StubOne("token")
-				as.StubOne("")
 			},
 			repoURL:             "https://bitbucket.org/pac/demo",
 			controllerURL:       "https://test",
 			personalaccesstoken: "Yzg5NzhlYmNkNTQwNzYzN2E2ZGExYzhkMTc4NjU0MjY3ZmQ2NmMeZg==",
 			wantErrStr:          "",
+			wantAccountEmail:    "user@example.com",
+			wantAPIToken:        "Yzg5NzhlYmNkNTQwNzYzN2E2ZGExYzhkMTc4NjU0MjY3ZmQ2NmMeZg==",
+			wantControllerURL:   "https://test",
 		},
 	}
 
@@ -82,8 +91,39 @@ func TestAskBBWebhookConfig(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+			assert.Equal(t, tt.wantAccountEmail, bb.accountEmail)
+			assert.Equal(t, tt.wantAPIToken, bb.apiToken)
+			assert.Equal(t, tt.wantControllerURL, bb.controllerURL)
 		})
 	}
+}
+
+func TestBBRunReturnsAPITokenAndAccountEmail(t *testing.T) {
+	bbclient, mux, tearDown := bbcloudtest.SetupBBCloudClient(t)
+	defer tearDown()
+	//nolint
+	io, _, _, _ := cli.IOTest()
+
+	mux.HandleFunc("/repositories/pac/repo/hooks", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = fmt.Fprint(w, `{"type": "ok"}`)
+	})
+
+	as, teardown := prompt.InitAskStubber()
+	defer teardown()
+	as.StubOne("user@example.com")
+	as.StubOne(true)
+
+	bb := bitbucketCloudConfig{IOStream: io, Client: bbclient}
+	response, err := bb.Run(context.Background(), &Options{
+		RepositoryURL:       "https://bitbucket.org/pac/repo",
+		ControllerURL:       "https://bb.pac.test",
+		PersonalAccessToken: "api-token",
+	})
+	assert.NilError(t, err)
+	assert.Equal(t, "user@example.com", response.UserName)
+	assert.Equal(t, "api-token", response.PersonalAccessToken)
+	assert.Equal(t, "https://bb.pac.test", response.ControllerURL)
 }
 
 func TestBBCreate(t *testing.T) {
@@ -141,4 +181,57 @@ func TestBBCreate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBBCreateUsesAccountEmailForAuthentication(t *testing.T) {
+	//nolint
+	io, _, _, _ := cli.IOTest()
+	mux := http.NewServeMux()
+	apiHandler := http.NewServeMux()
+	apiHandler.Handle("/2.0/", http.StripPrefix("/2.0", mux))
+	server := httptest.NewServer(apiHandler)
+	defer server.Close()
+
+	mux.HandleFunc("/repositories/pac/repo/hooks", func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		assert.Assert(t, ok)
+		assert.Equal(t, "user@example.com", username)
+		assert.Equal(t, "api-token", password)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = fmt.Fprint(w, `{"type": "ok"}`)
+	})
+
+	bb := bitbucketCloudConfig{
+		IOStream:      io,
+		repoOwner:     "pac",
+		repoName:      "repo",
+		APIURL:        server.URL + "/2.0",
+		controllerURL: "https://bb.pac.test",
+		accountEmail:  "user@example.com",
+		apiToken:      "api-token",
+	}
+	err := bb.create()
+	assert.NilError(t, err)
+}
+
+func TestBBCreateRequiresAPIToken(t *testing.T) {
+	//nolint
+	io, _, _, _ := cli.IOTest()
+	bb := bitbucketCloudConfig{
+		IOStream:     io,
+		accountEmail: "user@example.com",
+	}
+	err := bb.create()
+	assert.ErrorContains(t, err, "bitbucket cloud API token is required")
+}
+
+func TestBBCreateRequiresAccountEmail(t *testing.T) {
+	//nolint
+	io, _, _, _ := cli.IOTest()
+	bb := bitbucketCloudConfig{
+		IOStream: io,
+		apiToken: "api-token",
+	}
+	err := bb.create()
+	assert.ErrorContains(t, err, "bitbucket cloud Atlassian account email is required")
 }

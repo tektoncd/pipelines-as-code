@@ -21,8 +21,9 @@ const (
 	helper=store
 	`
 	//nolint:gosec
-	basicAuthSecretName = `pac-gitauth-%s`
-	ranStringSeedLen    = 6
+	basicAuthSecretName       = `pac-gitauth-%s`
+	bitbucketCloudGitUsername = "x-bitbucket-api-token-auth"
+	ranStringSeedLen          = 6
 )
 
 // MakeBasicAuthSecret Make a secret for git-clone basic-auth workspace.
@@ -42,6 +43,9 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 	gitUser := provider.DefaultProviderAPIUser
 	if runevent.Provider.User != "" {
 		gitUser = runevent.Provider.User
+	}
+	if strings.EqualFold(repoURL.Hostname(), "bitbucket.org") {
+		gitUser = bitbucketCloudGitUsername
 	}
 
 	// Bitbucket Data Center token have / into it, so unless we quote the URL them it's
@@ -94,5 +98,6 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 
 func GenerateBasicAuthSecretName() string {
 	return strings.ToLower(
-		fmt.Sprintf(basicAuthSecretName, random.AlphaString(ranStringSeedLen)))
+		fmt.Sprintf(basicAuthSecretName, random.AlphaString(ranStringSeedLen)),
+	)
 }

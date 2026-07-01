@@ -15,14 +15,14 @@ import (
 )
 
 type bitbucketCloudConfig struct {
-	Client              *bitbucket.Client
-	IOStream            *cli.IOStreams
-	controllerURL       string
-	repoOwner           string
-	repoName            string
-	personalAccessToken string
-	username            string
-	APIURL              string
+	Client        *bitbucket.Client
+	IOStream      *cli.IOStreams
+	controllerURL string
+	repoOwner     string
+	repoName      string
+	apiToken      string
+	accountEmail  string
+	APIURL        string
 }
 
 func (bb *bitbucketCloudConfig) Run(_ context.Context, opts *Options) (*response, error) {
@@ -33,10 +33,10 @@ func (bb *bitbucketCloudConfig) Run(_ context.Context, opts *Options) (*response
 
 	return &response{
 		ControllerURL:       bb.controllerURL,
-		PersonalAccessToken: bb.personalAccessToken,
+		PersonalAccessToken: bb.apiToken,
 		WebhookSecret:       "",
 		APIURL:              bb.APIURL,
-		UserName:            bb.username,
+		UserName:            bb.accountEmail,
 	}, bb.create()
 }
 
@@ -64,20 +64,20 @@ func (bb *bitbucketCloudConfig) askBBWebhookConfig(repositoryURL, controllerURL,
 	bb.repoName = repoArr[1]
 
 	if err := prompt.SurveyAskOne(&survey.Input{
-		Message: "Please enter your bitbucket cloud username: ",
-	}, &bb.username, survey.WithValidator(survey.Required)); err != nil {
+		Message: "Please enter your Bitbucket Cloud Atlassian account email: ",
+	}, &bb.accountEmail, survey.WithValidator(survey.Required)); err != nil {
 		return err
 	}
 
 	if personalAccessToken == "" {
-		fmt.Fprintln(bb.IOStream.Out, "ℹ ️You now need to create a Bitbucket Cloud app password, please checkout the docs at https://is.gd/fqMHiJ for the required permissions")
+		fmt.Fprintln(bb.IOStream.Out, "ℹ ️You now need to create a Bitbucket Cloud API token with scopes, please checkout the docs at https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/ for the required permissions")
 		if err := prompt.SurveyAskOne(&survey.Password{
-			Message: "Please enter the Bitbucket Cloud app password: ",
-		}, &bb.personalAccessToken, survey.WithValidator(survey.Required)); err != nil {
+			Message: "Please enter the Bitbucket Cloud API token: ",
+		}, &bb.apiToken, survey.WithValidator(survey.Required)); err != nil {
 			return err
 		}
 	} else {
-		bb.personalAccessToken = personalAccessToken
+		bb.apiToken = personalAccessToken
 	}
 
 	bb.controllerURL = controllerURL
@@ -121,8 +121,14 @@ func (bb *bitbucketCloudConfig) askBBWebhookConfig(repositoryURL, controllerURL,
 
 func (bb *bitbucketCloudConfig) create() error {
 	if bb.Client == nil {
+		if bb.accountEmail == "" {
+			return fmt.Errorf("bitbucket cloud Atlassian account email is required")
+		}
+		if bb.apiToken == "" {
+			return fmt.Errorf("bitbucket cloud API token is required")
+		}
 		var err error
-		bb.Client, err = bitbucket.NewBasicAuth(bb.repoOwner, bb.personalAccessToken)
+		bb.Client, err = bitbucket.NewBasicAuth(bb.accountEmail, bb.apiToken)
 		if err != nil {
 			return err
 		}

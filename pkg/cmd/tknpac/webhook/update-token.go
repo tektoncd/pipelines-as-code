@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -51,9 +52,11 @@ func webhookUpdateToken(run *params.Run, ioStreams *cli.IOStreams) *cobra.Comman
 	}
 
 	cmd.Flags().StringP(
-		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request")
+		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request",
+	)
 
-	_ = cmd.RegisterFlagCompletionFunc(namespaceFlag,
+	_ = cmd.RegisterFlagCompletionFunc(
+		namespaceFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion(namespaceFlag, args)
 		},
@@ -102,8 +105,12 @@ func update(ctx context.Context, opts *cli.PacCliOpts, run *params.Run, ioStream
 	if err != nil {
 		return err
 	}
+	tokenName := "personal access token"
+	if repo.Spec.GitProvider.Type == "bitbucket-cloud" || strings.Contains(repo.Spec.URL, "bitbucket.org") {
+		tokenName = "Bitbucket Cloud API token"
+	}
 	if err := prompt.SurveyAskOne(&survey.Password{
-		Message: "Please enter your personal access token: ",
+		Message: fmt.Sprintf("Please enter your %s: ", tokenName),
 	}, &personalAccessToken, survey.WithValidator(survey.Required)); err != nil {
 		return err
 	}
@@ -119,7 +126,7 @@ func update(ctx context.Context, opts *cli.PacCliOpts, run *params.Run, ioStream
 		return err
 	}
 
-	fmt.Fprintf(ioStreams.Out, "🔑 Secret %s has been updated with new personal access token in the %s namespace.\n", secretName, repo.Namespace)
+	fmt.Fprintf(ioStreams.Out, "🔑 Secret %s has been updated with new %s in the %s namespace.\n", secretName, tokenName, repo.Namespace)
 
 	return nil
 }

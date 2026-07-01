@@ -173,7 +173,7 @@ A Git provider is a hosting service for Git repositories (such as GitHub, GitLab
 **Requirements**:
 
 - Repository admin access
-- Ability to create App Passwords (Bitbucket Cloud) or Personal Access Tokens (Bitbucket Data Center)
+- Ability to create scoped API tokens (Bitbucket Cloud) or Personal Access Tokens (Bitbucket Data Center)
 
 #### Forgejo
 
