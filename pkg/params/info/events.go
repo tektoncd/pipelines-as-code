@@ -89,11 +89,13 @@ type State struct {
 }
 
 type Provider struct {
-	Token                 string
-	URL                   string
-	User                  string
-	WebhookSecret         string
-	WebhookSecretFromRepo bool
+	Token                           string
+	URL                             string
+	User                            string
+	WebhookSecret                   string
+	WebhookSecretFromRepo           bool
+	GitProviderSecretNamespace      string
+	GitProviderSecretFromGlobalRepo bool
 }
 
 type Request struct {

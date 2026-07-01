@@ -118,8 +118,20 @@ func (r *RepositorySpec) Merge(newRepo RepositorySpec) {
 	if newRepo.ConcurrencyLimit != nil && r.ConcurrencyLimit == nil {
 		r.ConcurrencyLimit = newRepo.ConcurrencyLimit
 	}
-	if newRepo.Settings != nil && r.Settings != nil {
-		r.Settings.Merge(newRepo.Settings)
+	if newRepo.Settings != nil {
+		if r.Settings == nil {
+			// copy instead of aliasing the pointer, the source may be a shared
+			// object (e.g. the global Repository from an informer cache) and
+			// later merges must not mutate it.
+			settings := *newRepo.Settings
+			if settings.Gitlab != nil {
+				gitlabSettings := *settings.Gitlab
+				settings.Gitlab = &gitlabSettings
+			}
+			r.Settings = &settings
+		} else {
+			r.Settings.Merge(newRepo.Settings)
+		}
 	}
 	if r.GitProvider != nil && newRepo.GitProvider != nil {
 		r.GitProvider.Merge(newRepo.GitProvider)
@@ -183,6 +195,14 @@ type GitlabSettings struct {
 	// +optional
 	// +kubebuilder:validation:Enum="";disable_all;update
 	CommentStrategy string `json:"comment_strategy,omitempty"`
+
+	// TokenAutoRotation controls automatic rotation of expiring GitLab access tokens.
+	// This is disabled by default. When enabled, PAC checks the token's expiry on each webhook event and
+	// rotates it when within 7 days of expiration. The new token is written back to the
+	// Kubernetes Secret. Requires the token to have the 'api' scope.
+	// Set to true to enable.
+	// +optional
+	TokenAutoRotation *bool `json:"token_auto_rotation,omitempty"`
 }
 
 type GithubSettings struct {
@@ -225,12 +245,30 @@ func (s *Settings) Merge(newSettings *Settings) {
 	if newSettings.Forgejo != nil && s.Forgejo == nil {
 		s.Forgejo = newSettings.Forgejo
 	}
+	if newSettings.Gitlab != nil {
+		if s.Gitlab == nil {
+			// copy instead of aliasing, later merges must not mutate the source.
+			gitlabSettings := *newSettings.Gitlab
+			s.Gitlab = &gitlabSettings
+		} else {
+			s.Gitlab.Merge(newSettings.Gitlab)
+		}
+	}
 	if newSettings.AIAnalysis != nil && s.AIAnalysis == nil {
 		s.AIAnalysis = newSettings.AIAnalysis
 	}
 
 	if newSettings.GitOpsCommandPrefix != "" && s.GitOpsCommandPrefix == "" {
 		s.GitOpsCommandPrefix = newSettings.GitOpsCommandPrefix
+	}
+}
+
+func (s *GitlabSettings) Merge(newSettings *GitlabSettings) {
+	if newSettings.CommentStrategy != "" && s.CommentStrategy == "" {
+		s.CommentStrategy = newSettings.CommentStrategy
+	}
+	if newSettings.TokenAutoRotation != nil && s.TokenAutoRotation == nil {
+		s.TokenAutoRotation = newSettings.TokenAutoRotation
 	}
 }
 

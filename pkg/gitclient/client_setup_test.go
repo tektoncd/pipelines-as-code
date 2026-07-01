@@ -444,6 +444,7 @@ func TestSetupAuthenticatedClientGlobalRepoMergesSettings(t *testing.T) {
 	t.Parallel()
 
 	ctx, log := setupTestContext(t)
+	enableAutoRotation := true
 
 	// Local repo with git_provider URL but no secret (secret comes from global)
 	repo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
@@ -472,6 +473,11 @@ func TestSetupAuthenticatedClientGlobalRepoMergesSettings(t *testing.T) {
 			Key:  "webhook.secret",
 		},
 	}
+	globalRepo.Spec.Settings = &v1alpha1.Settings{
+		Gitlab: &v1alpha1.GitlabSettings{
+			TokenAutoRotation: &enableAutoRotation,
+		},
+	}
 
 	run := seedTestData(ctx, t, []*v1alpha1.Repository{repo, globalRepo})
 	testProvider := createTestProvider(log)
@@ -489,7 +495,13 @@ func TestSetupAuthenticatedClientGlobalRepoMergesSettings(t *testing.T) {
 	assert.NilError(t, err, "should succeed with auto-fetched global repo providing credentials")
 	// After merge, the repo should have secret from global repo
 	assert.Assert(t, repo.Spec.GitProvider.Secret != nil, "secret should be merged from global repo")
+	assert.Assert(t, repo.Spec.Settings != nil, "settings should be merged from global repo")
+	assert.Assert(t, repo.Spec.Settings.Gitlab != nil, "gitlab settings should be merged from global repo")
+	assert.Assert(t, repo.Spec.Settings.Gitlab.TokenAutoRotation != nil, "token auto-rotation should be inherited from global repo")
+	assert.Equal(t, true, *repo.Spec.Settings.Gitlab.TokenAutoRotation, "global token auto-rotation setting should be preserved")
 	assert.Equal(t, "global-token-value", event.Provider.Token, "token should come from global repo secret")
+	assert.Equal(t, "default", event.Provider.GitProviderSecretNamespace, "secret namespace should be tracked")
+	assert.Assert(t, event.Provider.GitProviderSecretFromGlobalRepo, "secret should be marked as inherited from global repo")
 }
 
 // TestSetupAuthenticatedClient_WebhookValidation tests webhook secret validation.

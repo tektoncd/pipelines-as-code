@@ -311,9 +311,11 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	}
 
 	secretNS := repo.GetNamespace()
+	inheritedGlobalSecret := false
 	if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
 		if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
 			secretNS = globalRepo.GetNamespace()
+			inheritedGlobalSecret = true
 		}
 		repo = copyRepositoryForMerge(repo)
 		repo.Spec.Merge(globalRepo.Spec)
@@ -331,13 +333,14 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
 	} else {
 		secretFromRepo := secrets.SecretFromRepository{
-			K8int:       r.kinteract,
-			Config:      provider.GetConfig(),
-			Event:       event,
-			Repo:        repo,
-			WebhookType: pacInfo.WebhookType,
-			Logger:      logger,
-			Namespace:   secretNS,
+			K8int:                 r.kinteract,
+			Config:                provider.GetConfig(),
+			Event:                 event,
+			Repo:                  repo,
+			WebhookType:           pacInfo.WebhookType,
+			Logger:                logger,
+			Namespace:             secretNS,
+			InheritedGlobalSecret: inheritedGlobalSecret,
 		}
 		if err := secretFromRepo.Get(ctx); err != nil {
 			return repo, fmt.Errorf("cannot get secret from repository: %w", err)
@@ -470,22 +473,25 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 	} else {
 		// secretNS is needed when git provider is other than Github App.
 		secretNS := repo.GetNamespace()
+		inheritedGlobalSecret := false
 		if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
 			if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
 				secretNS = globalRepo.GetNamespace()
+				inheritedGlobalSecret = true
 			}
 			repo = copyRepositoryForMerge(repo)
 			repo.Spec.Merge(globalRepo.Spec)
 		}
 
 		secretFromRepo := secrets.SecretFromRepository{
-			K8int:       r.kinteract,
-			Config:      detectedProvider.GetConfig(),
-			Event:       event,
-			Repo:        repo,
-			WebhookType: pacInfo.WebhookType,
-			Logger:      logger,
-			Namespace:   secretNS,
+			K8int:                 r.kinteract,
+			Config:                detectedProvider.GetConfig(),
+			Event:                 event,
+			Repo:                  repo,
+			WebhookType:           pacInfo.WebhookType,
+			Logger:                logger,
+			Namespace:             secretNS,
+			InheritedGlobalSecret: inheritedGlobalSecret,
 		}
 		if err := secretFromRepo.Get(ctx); err != nil {
 			return nil, nil, fmt.Errorf("cannot get secret from repository: %w", err)

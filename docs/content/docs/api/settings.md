@@ -139,6 +139,22 @@ settings:
 
 {{< /param >}}
 
+{{< param name="gitlab.token_auto_rotation" type="boolean" id="param-gitlab-token-auto-rotation" >}}
+Controls automatic rotation of expiring GitLab access tokens.
+
+- Default: `false` (disabled)
+- `true`: On each webhook event, Pipelines-as-Code checks token expiry and rotates when within 7 days
+
+This can be set on the global Repository CR to enable rotation by default for repositories that do not set a local value.
+
+```yaml
+settings:
+  gitlab:
+    token_auto_rotation: true
+```
+
+{{< /param >}}
+
 {{< /param-group >}}
 {{< /param >}}
 

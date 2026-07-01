@@ -506,6 +506,14 @@ spec:
                             - disable_all
                             - update
                           type: string
+                        token_auto_rotation:
+                          description: |-
+                            TokenAutoRotation controls automatic rotation of expiring GitLab access tokens.
+                            This is disabled by default. When enabled, PAC checks the token's expiry on each webhook event and
+                            rotates it when within 7 days of expiration. The new token is written back to the
+                            Kubernetes Secret. Requires the token to have the 'api' scope.
+                            Set to true to enable.
+                          type: boolean
                       type: object
                     gitops_command_prefix:
                       description: |-
