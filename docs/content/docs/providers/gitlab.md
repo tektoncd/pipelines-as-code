@@ -26,6 +26,13 @@ on the Merge Request.
 
 Store the generated token in a safe place, or you will have to recreate it.
 
+{{< callout type="info" >}}
+Give the token an expiration date. As long as it has the `api` scope (or
+`self_rotate` on newer GitLab versions), Pipelines-as-Code will rotate it
+automatically before it expires. See
+[Automatic Token Rotation](#automatic-token-rotation).
+{{< /callout >}}
+
 ## Webhook Configuration using the CLI
 
 Use the [`tkn pac create repo`]({{< relref "/docs/cli" >}}) command to
@@ -333,3 +340,74 @@ Replace `$NEW_TOKEN` and `$target_namespace` with your values:
 ```shell
 kubectl -n $target_namespace patch secret gitlab-webhook-config -p "{\"data\": {\"provider.token\": \"$(echo -n $NEW_TOKEN|base64 -w0)\"}}"
 ```
+
+## Automatic Token Rotation
+
+Pipelines-as-Code automatically rotates GitLab access tokens before they expire. On each webhook event, it checks the token's expiry date and rotates it when it is within 7 days of expiration. The new token (valid for 30 days) is written back to the Kubernetes Secret configured directly on the Repository CR.
+
+This works for Personal Access Tokens and Project Access Tokens. The token must have the `api` scope (or the `self_rotate` scope available in newer GitLab versions).
+
+Automatic rotation is **enabled by default**. If the token does not have the required scope for self-rotation, the rotation is silently skipped and webhook processing continues normally.
+
+Automatic rotation does not run for `git_provider.secret` values inherited from the global Repository. Global Repository secrets are shared configuration and must be rotated manually, for example by updating the global secret with `kubectl` or the process you use to manage controller-wide credentials.
+
+### Disabling Automatic Rotation
+
+To disable automatic token rotation for a repository, set `token_auto_rotation` to `false`:
+
+```yaml
+spec:
+  settings:
+    gitlab:
+      token_auto_rotation: false
+```
+
+### How It Works
+
+1. On each incoming webhook event, Pipelines-as-Code calls the GitLab [token self-introspection API](https://docs.gitlab.com/api/personal_access_tokens/#self-inform) to check the token's expiry.
+2. If the token expires within 7 days, it calls the [self-rotation API](https://docs.gitlab.com/api/personal_access_tokens/#self-rotate) to rotate it.
+3. The old token is revoked and a new token (valid for 30 days) is returned.
+4. The new token is written back to the Kubernetes Secret referenced directly in the Repository CR.
+5. A Kubernetes event (`GitLabTokenRotated`) is emitted on the Repository CR.
+
+Token rotation is atomic: the old token is revoked the moment the new one is
+created. If the Kubernetes Secret update fails after rotation, the old token is
+already revoked and you must create a new token and update the Secret by hand
+(see [Recovering from an expired or revoked token](#recovering-from-an-expired-or-revoked-token)).
+This is logged as a CRITICAL error and the webhook event is rejected.
+
+### Monitoring Rotation
+
+Each successful rotation emits a `GitLabTokenRotated` Kubernetes event on the Repository CR, including the new expiry date:
+
+```shell
+kubectl -n <namespace> get events --field-selector reason=GitLabTokenRotated
+```
+
+Rotation failures other than the critical Secret-update case do not block webhook processing; they are only logged by the controller. If you suspect tokens are not being rotated, check the controller logs:
+
+```shell
+kubectl -n pipelines-as-code logs deployment/pipelines-as-code-controller | grep -i "token auto-rotation"
+```
+
+### Recovering from an Expired or Revoked Token
+
+Rotation only works while the token is still valid. Once a token has expired,
+GitLab rejects the introspection call and Pipelines-as-Code cannot renew it.
+This typically happens on dormant repositories that received no webhook event
+during the rotation window. The same applies when rotation succeeded on the
+GitLab side but the Secret update failed: the old token is revoked and the new
+one was lost.
+
+In both cases, create a new token in GitLab and update the Secret as described
+in [Update Token](#update-token), using either `tkn pac webhook update-token`
+or `kubectl patch`.
+
+### Requirements
+
+- The token must have `api` or `self_rotate` scope.
+- The token must have an expiration date. Tokens created without one are never rotated.
+- The token secret must be configured directly on the Repository CR. Tokens inherited from the global Repository are not auto-rotated.
+- The repository must receive at least one webhook event within the 7-day rotation window. Dormant repositories that receive no events will not have their tokens rotated and the tokens will eventually expire. For low-traffic repositories, create the token with a longer expiry, or disable auto-rotation and manage the token manually.
+- The Pipelines-as-Code controller needs `update` permission on `secrets` resources. This is included in the default RBAC configuration (`pipeline-as-code-controller-clusterrole`). If you use custom RBAC, ensure the controller's ClusterRole includes `update` on secrets.
+- Group Access Token rotation is not yet supported.

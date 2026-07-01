@@ -190,12 +190,14 @@ func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*in
 
 	// should check global repository for secrets
 	secretNS := repo.GetNamespace()
+	inheritedGlobalSecret := false
 	globalRepo, err := v.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(v.run.Info.Kube.Namespace).Get(
 		ctx, v.run.Info.Controller.GlobalRepository, metav1.GetOptions{},
 	)
 	if err == nil && globalRepo != nil {
 		if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
 			secretNS = globalRepo.GetNamespace()
+			inheritedGlobalSecret = true
 		}
 		repo.Spec.Merge(globalRepo.Spec)
 	}
@@ -206,19 +208,20 @@ func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*in
 	}
 
 	scm := secrets.SecretFromRepository{
-		K8int:       kubeInterface,
-		Config:      v.GetConfig(),
-		Event:       event,
-		Repo:        repo,
-		WebhookType: v.pacInfo.WebhookType,
-		Logger:      v.Logger,
-		Namespace:   secretNS,
+		K8int:                 kubeInterface,
+		Config:                v.GetConfig(),
+		Event:                 event,
+		Repo:                  repo,
+		WebhookType:           v.pacInfo.WebhookType,
+		Logger:                v.Logger,
+		Namespace:             secretNS,
+		InheritedGlobalSecret: inheritedGlobalSecret,
 	}
 	if err := scm.Get(ctx); err != nil {
 		return event, fmt.Errorf("cannot get secret from repository: %w", err)
 	}
 
-	err = v.SetClient(ctx, v.run, event, repo, v.eventEmitter)
+	err = v.setClient(ctx, v.run, event, repo, v.eventEmitter, false)
 	if err != nil {
 		return event, err
 	}
