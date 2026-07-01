@@ -107,32 +107,6 @@ spec:
                 fi
                 exit "${test_status}"
 
-            - name: coverage
-              image: docker.io/golang:1.26
-              env:
-                - name: CODECOV_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: pipelines-as-code-codecov-token
-                      key: token
-                - name: GOCACHE
-                  value: $(workspaces.source.path)/go-build-cache/cache
-                - name: GOMODCACHE
-                  value: $(workspaces.source.path)/go-build-cache/mod
-                - name: GITHUB_REPOSITORY
-                  value: "{{repo_owner}}/{{repo_name}}"
-                - name: GITHUB_PULL_REQUEST_ID
-                  value: "{{pull_request_number}}"
-              workingDir: $(workspaces.source.path)
-              script: |
-                #!/usr/bin/env bash
-                set -eux
-                ARCH=aarch64
-                git config --global --add safe.directory $(workspaces.source.path)
-                git fetch -a --tags
-                curl -LOs https://uploader.codecov.io/v0.7.3/aarch64/codecov
-                chmod +x ./codecov
-                ./codecov -P $GITHUB_PULL_REQUEST_ID -C {{revision}} -v
             - name: lint
               image: docker.io/golangci/golangci-lint:v2.12.2
               workingDir: $(workspaces.source.path)

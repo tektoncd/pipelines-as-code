@@ -2,13 +2,13 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  name: push-generate-coverage-releaseyaml
+  name: push-generate-release-yaml
   annotations:
     pipelinesascode.tekton.dev/task: "[git-clone]"
     pipelinesascode.tekton.dev/max-keep-runs: "2"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch == "main" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-coverage-release.yaml".pathChanged())
+      event == "push" && target_branch == "main" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-release.yaml".pathChanged())
 spec:
   params:
     - name: repo_url
@@ -89,7 +89,7 @@ spec:
                 - name: TESTRR_BUILD_ID
                   value: "$(context.pipelineRun.name)"
                 - name: TESTRR_RUN_LABEL
-                  value: "tekton-coverage-release"
+                  value: "tekton-release-generation"
                 - name: GH_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -106,25 +106,6 @@ spec:
                   echo "WARNING: testrr upload failed; continuing without failing Tekton"
                 fi
                 exit "${test_status}"
-            - name: codecov
-              # Has everything we need in there and we already fetched it!
-              image: docker.io/golang:1.26
-              workingDir: $(workspaces.source.path)
-              env:
-                - name: CODECOV_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: pipelines-as-code-codecov-token
-                      key: token
-              script: |
-                #!/usr/bin/env bash
-                set -eux
-                ARCH=aarch64
-                git config --global --add safe.directory $(workspaces.source.path)
-                git fetch -a --tags
-                curl -LOs https://uploader.codecov.io/v0.7.3/aarch64/codecov
-                chmod +x ./codecov
-                ./codecov -C {{revision}} -v
             - name: upload-release
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)

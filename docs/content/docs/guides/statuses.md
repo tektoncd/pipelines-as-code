@@ -128,11 +128,11 @@ Pipelines](https://github.com/tektoncd/pipeline/blob/main/docs/pipelines.md#addi
 This feature executes a set of tasks at the end of a
 PipelineRun, regardless of whether it succeeds or fails.
 
-For an example, see the [coverage generation PipelineRun](https://github.com/tektoncd/pipelines-as-code/blob/16596b478f4bce202f9f69de9a4b5a7ca92962c1/.tekton/generate-coverage-release.yaml#L127) in the
+For an example, see the [release generation PipelineRun](https://github.com/tektoncd/pipelines-as-code/blob/main/.tekton/generate-release.yaml#L125) in the
 `.tekton/` directory of the Pipelines-as-Code repository. It uses the [finally
 task with the guard
 feature](https://tekton.dev/docs/pipelines/pipelines/#guard-finally-task-execution-using-when-expressions)
 to send a notification to Slack when any failure occurs in the PipelineRun. See
 it in action here:
 
-<https://github.com/tektoncd/pipelines-as-code/blob/16596b478f4bce202f9f69de9a4b5a7ca92962c1/.tekton/generate-coverage-release.yaml#L126>
+<https://github.com/tektoncd/pipelines-as-code/blob/main/.tekton/generate-release.yaml#L124>
