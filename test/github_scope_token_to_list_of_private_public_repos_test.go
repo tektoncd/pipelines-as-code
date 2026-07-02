@@ -21,6 +21,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	trepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -170,9 +171,9 @@ func verifyGHTokenScope(t *testing.T, remoteTaskURL, remoteTaskName string, data
 		Namespace:       targetNS,
 		MinNumberStatus: 0,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
-	_, err = twait.UntilRepositoryUpdated(ctx, runcnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, runcnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	runcnx.Clients.Log.Infof("Check if we have the repository set as succeeded")

@@ -210,7 +210,7 @@ func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, 
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     wait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
 	assert.NilError(t, wait.UntilMinPRAppeared(ctx, g.Cnx.Clients, waitOpts, numberOfPipelineRuns))
 

@@ -129,9 +129,9 @@ func TestGiteaRetestPreservesSourceURL(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
+		TargetSHA:       []string{topts.PullRequest.Head.Sha},
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	assert.NilError(t, twait.UntilMinPRAppeared(context.Background(), topts.ParamsRun.Clients, waitOpts, 2))
 
@@ -312,14 +312,14 @@ func TestGiteaGlobalRepoParams(t *testing.T) {
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	last := repo.Status[len(repo.Status)-1]
+	last := prs[len(prs)-1]
 	err = twait.RegexpMatchingInPodLog(
 		context.Background(),
 		topts.ParamsRun,
 		topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.Name),
 		"step-test-params-value",
 		regexp.Regexp{},
 		t.Name(),
@@ -392,14 +392,14 @@ func TestGiteaGlobalRepoUseLocalDef(t *testing.T) {
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	last := repo.Status[len(repo.Status)-1]
+	last := prs[len(prs)-1]
 	err = twait.RegexpMatchingInPodLog(
 		context.Background(),
 		topts.ParamsRun,
 		topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.Name),
 		"step-test-params-value",
 		regexp.Regexp{},
 		t.Name(),
@@ -482,16 +482,14 @@ func TestGiteaParamsOnRepoCR(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       "",
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	assert.Assert(t, len(repo.Status) != 0)
+	assert.Assert(t, len(prs) != 0)
 	assert.NilError(t,
 		twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=params",
-			repo.Status[0].PipelineRunName), "step-test-params-value", *regexp.MustCompile(
-			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}",
-		), "", 2, nil))
+			prs[0].Name), "step-test-params-value", *regexp.MustCompile(
+			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}"), "", 2, nil))
 }
 
 // TestGiteaParamsBodyHeadersCEL Test that we can access the pull request body and headers in params
@@ -542,9 +540,8 @@ my email is a true beauty and like groot, I AM pac`
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	time.Sleep(5 * time.Second)
@@ -627,9 +624,8 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	time.Sleep(5 * time.Second)
 
@@ -675,9 +671,8 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 4, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	time.Sleep(5 * time.Second)
 
