@@ -53,9 +53,11 @@ func webhookAdd(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 		"", "", "The namespace where pac is installed")
 
 	cmd.Flags().StringP(
-		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request")
+		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request",
+	)
 
-	_ = cmd.RegisterFlagCompletionFunc(namespaceFlag,
+	_ = cmd.RegisterFlagCompletionFunc(
+		namespaceFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion(namespaceFlag, args)
 		},

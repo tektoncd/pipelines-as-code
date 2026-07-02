@@ -42,7 +42,8 @@ func (k Interaction) CleanupPipelines(ctx context.Context, logger *zap.SugaredLo
 		if c >= maxKeep {
 			logger.Infof("cleaning old PipelineRun: %s", prun.GetName())
 			err := k.Run.Clients.Tekton.TektonV1().PipelineRuns(repo.GetNamespace()).Delete(
-				ctx, prun.GetName(), metav1.DeleteOptions{})
+				ctx, prun.GetName(), metav1.DeleteOptions{},
+			)
 			if err != nil {
 				return err
 			}

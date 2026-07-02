@@ -48,7 +48,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateCELErrorReplacement(t *testing.T) 
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 	assert.Assert(t, len(comments) == 1, "There should be only 1 comment on the pull request.")
 
@@ -110,7 +111,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateCELErrorReplacement(t *testing.T) 
 	time.Sleep(10 * time.Second)
 	updatedComments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 
 	var updatedComment *github.IssueComment
@@ -175,7 +177,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 
 	// Find comments with pac-status markers
@@ -219,7 +222,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 
 	updatedComments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 
 	updatedPLRComments := make(map[string]*github.IssueComment)
@@ -282,7 +286,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateMarkerMatchingWithRegexChars(t *te
 
 	comments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 
 	// Find comments with pac-status markers
@@ -346,7 +351,8 @@ func TestGithubGHEWebhookCommentStrategyUpdateMarkerMatchingWithRegexChars(t *te
 
 	updatedComments, _, err := g.Provider.Client().Issues.ListComments(
 		ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueListCommentsOptions{})
+		&github.IssueListCommentsOptions{},
+	)
 	assert.NilError(t, err)
 
 	for _, comment := range updatedComments {

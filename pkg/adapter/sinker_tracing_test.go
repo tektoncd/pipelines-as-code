@@ -104,7 +104,8 @@ func TestProcessEventSpanHonorsIncomingTraceContext(t *testing.T) {
 
 	// This is the exact extract → start sequence from handleEvent.
 	tracedCtx := otel.GetTextMapPropagator().Extract(context.Background(), propagation.HeaderCarrier(req.Header))
-	_, span := otel.Tracer(tracing.TracerName).Start(tracedCtx, "PipelinesAsCode:ProcessEvent",
+	_, span := otel.Tracer(tracing.TracerName).Start(
+		tracedCtx, "PipelinesAsCode:ProcessEvent",
 		trace.WithSpanKind(trace.SpanKindServer),
 	)
 	span.End()
@@ -130,7 +131,8 @@ func TestProcessEventSpanCreatesRootWithoutIncomingContext(t *testing.T) {
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://localhost", nil)
 
 	tracedCtx := otel.GetTextMapPropagator().Extract(context.Background(), propagation.HeaderCarrier(req.Header))
-	_, span := otel.Tracer(tracing.TracerName).Start(tracedCtx, "PipelinesAsCode:ProcessEvent",
+	_, span := otel.Tracer(tracing.TracerName).Start(
+		tracedCtx, "PipelinesAsCode:ProcessEvent",
 		trace.WithSpanKind(trace.SpanKindServer),
 	)
 	span.End()

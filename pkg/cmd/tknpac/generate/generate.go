@@ -120,7 +120,8 @@ func (o *Opts) targetEvent() error {
 			Message: msg,
 			Options: eventLabels,
 			Default: 0,
-		}, &choice); err != nil {
+		}, &choice,
+	); err != nil {
 		return err
 	}
 
@@ -156,7 +157,8 @@ func (o *Opts) branchOrTag() error {
 	if err := prompt.SurveyAskOne(
 		&survey.Input{
 			Message: fmt.Sprintf(msg, mainBranch),
-		}, choice); err != nil {
+		}, choice,
+	); err != nil {
 		return err
 	}
 
@@ -198,7 +200,8 @@ func (o *Opts) samplePipeline(recreateTemplate bool) error {
 		if err := os.MkdirAll(dirPath, 0o750); err != nil {
 			return err
 		}
-		fmt.Fprintf(o.IOStreams.Out, "%s Directory %s has been created.\n",
+		fmt.Fprintf(
+			o.IOStreams.Out, "%s Directory %s has been created.\n",
 			cs.InfoIcon(),
 			cs.Bold(dirPath),
 		)
@@ -230,7 +233,8 @@ func (o *Opts) samplePipeline(recreateTemplate bool) error {
 		return fmt.Errorf("cannot write template to %s: %w", fpath, err)
 	}
 
-	fmt.Fprintf(o.IOStreams.Out, "%s A basic template has been created in %s, feel free to customize it.\n",
+	fmt.Fprintf(
+		o.IOStreams.Out, "%s A basic template has been created in %s, feel free to customize it.\n",
 		cs.SuccessIcon(),
 		cs.Bold(fpath),
 	)

@@ -121,7 +121,8 @@ func GetProviderName(url string) (string, error) {
 				Message: msg,
 				Options: []string{"github", "gitlab", "bitbucket-cloud"},
 				Default: 0,
-			}, &providerName); err != nil {
+			}, &providerName,
+		); err != nil {
 			return "", err
 		}
 	}

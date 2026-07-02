@@ -48,7 +48,8 @@ func emitTimingSpans(logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, cfg *s
 	commonAttrs := buildCommonAttributes(pr, cfg)
 
 	if pr.Status.StartTime != nil {
-		_, waitSpan := tracer.Start(parentCtx, tracing.SpanWaitDuration,
+		_, waitSpan := tracer.Start(
+			parentCtx, tracing.SpanWaitDuration,
 			trace.WithTimestamp(pr.CreationTimestamp.Time),
 			trace.WithAttributes(commonAttrs...),
 		)
@@ -60,7 +61,8 @@ func emitTimingSpans(logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, cfg *s
 		execAttrs := make([]attribute.KeyValue, 0, len(commonAttrs)+len(extra))
 		execAttrs = append(execAttrs, commonAttrs...)
 		execAttrs = append(execAttrs, extra...)
-		_, execSpan := tracer.Start(parentCtx, tracing.SpanExecuteDuration,
+		_, execSpan := tracer.Start(
+			parentCtx, tracing.SpanExecuteDuration,
 			trace.WithTimestamp(pr.Status.StartTime.Time),
 			trace.WithAttributes(execAttrs...),
 		)
@@ -70,7 +72,8 @@ func emitTimingSpans(logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, cfg *s
 
 func buildCommonAttributes(pr *tektonv1.PipelineRun, cfg *settings.Settings) []attribute.KeyValue {
 	attrs := make([]attribute.KeyValue, 0, 6)
-	attrs = append(attrs,
+	attrs = append(
+		attrs,
 		tracing.NamespaceKey.String(pr.GetNamespace()),
 		tracing.PipelineRunKey.String(pr.GetName()),
 		tracing.DeliveryPipelineRunUIDKey.String(string(pr.GetUID())),

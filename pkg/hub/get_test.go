@@ -29,21 +29,24 @@ func TestGetTask(t *testing.T) {
 			URL:   testHubURL,
 			Name:  "default",
 			Type:  hubType.ArtifactHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"anotherHub", settings.HubCatalog{
 			Index: "1",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubType.ArtifactHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		hubType.ArtifactHubType, settings.HubCatalog{
 			Index: "2",
 			URL:   testHubURL,
 			Name:  "tekton-catalog-tasks",
 			Type:  hubType.ArtifactHubType,
-		})
+		},
+	)
 	tests := []struct {
 		name        string
 		resource    string

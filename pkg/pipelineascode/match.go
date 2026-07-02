@@ -156,7 +156,8 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 		reg := regexp.MustCompile(`error unmarshalling yaml file\s([^:]*):\s*(yaml:\s*)?(.*)`)
 		matches := reg.FindStringSubmatch(err.Error())
 		if len(matches) == 4 {
-			p.reportValidationErrors(ctx, repo,
+			p.reportValidationErrors(
+				ctx, repo,
 				[]*pacerrors.PacYamlValidations{
 					{
 						Name:   matches[1],

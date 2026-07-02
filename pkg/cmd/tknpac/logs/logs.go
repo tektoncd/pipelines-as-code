@@ -131,24 +131,30 @@ func Command(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 	}
 
 	cmd.Flags().StringP(
-		tknPathFlag, "", "", fmt.Sprintf("Path to the %s binary (default to search for it in you $PATH)", settings.TknBinaryName))
+		tknPathFlag, "", "", fmt.Sprintf("Path to the %s binary (default to search for it in you $PATH)", settings.TknBinaryName),
+	)
 
 	cmd.Flags().StringP(
-		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request")
-	_ = cmd.RegisterFlagCompletionFunc(namespaceFlag,
+		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request",
+	)
+	_ = cmd.RegisterFlagCompletionFunc(
+		namespaceFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion(namespaceFlag, args)
 		},
 	)
 
 	cmd.Flags().BoolP(
-		openWebBrowserFlag, "w", false, "Open Web browser to detected console instead of using tkn")
+		openWebBrowserFlag, "w", false, "Open Web browser to detected console instead of using tkn",
+	)
 
 	cmd.Flags().BoolP(
-		useLastPipelineRunFlag, "L", false, "show logs of the last PipelineRun")
+		useLastPipelineRunFlag, "L", false, "show logs of the last PipelineRun",
+	)
 
 	cmd.Flags().IntP(
-		limitFlag, "", defaultLimit, "Limit the number of PipelineRun to show (-1 is unlimited)")
+		limitFlag, "", defaultLimit, "Limit the number of PipelineRun to show (-1 is unlimited)",
+	)
 
 	return cmd
 }

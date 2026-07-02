@@ -15,7 +15,8 @@ import (
 
 func (k Interaction) GetSecret(ctx context.Context, secretopt ktypes.GetSecretOpt) (string, error) {
 	secret, err := k.Run.Clients.Kube.CoreV1().Secrets(secretopt.Namespace).Get(
-		ctx, secretopt.Name, metav1.GetOptions{})
+		ctx, secretopt.Name, metav1.GetOptions{},
+	)
 	if err != nil {
 		return "", err
 	}

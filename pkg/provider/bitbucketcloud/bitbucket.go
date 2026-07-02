@@ -153,7 +153,8 @@ func (v *Provider) CreateStatus(_ context.Context, event *info.Event, statusopts
 				RepoSlug:      event.Repository,
 				PullRequestID: strconv.Itoa(event.PullRequestNumber),
 				Content:       fmt.Sprintf("**%s%s** - %s\n\n%s", v.pacInfo.ApplicationName, onPr, statusopts.Title, statusopts.Text),
-			})
+			},
+		)
 		if err != nil {
 			return err
 		}

@@ -349,7 +349,8 @@ func TestGiteaRetestCommentUpdate(t *testing.T) {
 			comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(
 				topts.PullRequest.Base.Repository.Owner.UserName,
 				topts.PullRequest.Base.Repository.Name,
-				forgejo.ListIssueCommentOptions{})
+				forgejo.ListIssueCommentOptions{},
+			)
 			assert.NilError(t, err)
 
 			markerPattern := regexp.MustCompile(`<!-- pac-status-`)

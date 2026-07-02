@@ -46,7 +46,8 @@ func Get(ctx context.Context) v1alpha1.RepositoryInformer {
 	untyped := ctx.Value(Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1.RepositoryInformer from context.")
+			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1.RepositoryInformer from context.",
+		)
 	}
 	return untyped.(v1alpha1.RepositoryInformer)
 }

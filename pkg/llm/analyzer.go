@@ -314,7 +314,8 @@ func getContextCacheKey(config *v1alpha1.ContextConfig) string {
 		maxLines = config.ContainerLogs.GetMaxLines()
 	}
 
-	return fmt.Sprintf("commit:%t-pr:%t-error:%t-logs:%t-%d",
+	return fmt.Sprintf(
+		"commit:%t-pr:%t-error:%t-logs:%t-%d",
 		config.CommitContent,
 		config.PRContent,
 		config.ErrorContent,

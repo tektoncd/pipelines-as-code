@@ -18,7 +18,8 @@ var ErrRepositoryNameConflict = errors.New("multiple repositories exist with the
 
 func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*apipac.Repository, error) {
 	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
-		ctx, metav1.ListOptions{})
+		ctx, metav1.ListOptions{},
+	)
 	sort.RepositorySortByCreationOldestTime(repositories.Items)
 	if err != nil {
 		return nil, err
@@ -39,7 +40,8 @@ func GetRepoByName(ctx context.Context, cs *params.Run, repoName, ns string) (*a
 	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
 		ctx, metav1.ListOptions{
 			FieldSelector: "metadata.name==" + repoName,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

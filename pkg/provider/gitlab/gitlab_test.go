@@ -1070,7 +1070,8 @@ func TestSetClient(t *testing.T) {
 
 	expected := fmt.Sprintf(
 		"gitlab: initialized for client with token for apiURL=%s, org=%s, repo=%s",
-		vv.apiURL, "my-org", "my-repo")
+		vv.apiURL, "my-org", "my-repo",
+	)
 
 	assert.Equal(t, expected, logs[0].Message)
 }

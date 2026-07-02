@@ -987,7 +987,8 @@ func (v *Provider) debugCommentPhase(event *info.Event, trace commentTraceLogCon
 	}
 
 	baseFields := make([]any, 0, 18+len(kv))
-	baseFields = append(baseFields,
+	baseFields = append(
+		baseFields,
 		"phase", phase,
 		"organization", org,
 		"repository", repo,
@@ -1038,13 +1039,15 @@ func (v *Provider) listCommentsByMarker(
 	}
 
 	if len(comments) == v.PaginedNumber {
-		v.debugCommentPhase(event, trace, phase+"_pagination_warning",
+		v.debugCommentPhase(
+			event, trace, phase+"_pagination_warning",
 			"fetched_count", len(comments),
 			"note", "response returned exactly PerPage comments; marker matches beyond page 1 may be missed",
 		)
 	}
 
-	v.debugCommentPhase(event, trace, phase,
+	v.debugCommentPhase(
+		event, trace, phase,
 		"fetched_count", len(comments),
 		"matched_count", len(matchedComments),
 		"matched_comments", compactCommentIDs(matchedComments),
@@ -1071,7 +1074,8 @@ func (v *Provider) CreateComment(ctx context.Context, event *info.Event, commit,
 		}
 
 		if len(existingComments) > 1 {
-			v.debugCommentPhase(event, trace, "duplicate_detected",
+			v.debugCommentPhase(
+				event, trace, "duplicate_detected",
 				"matched_count", len(existingComments),
 				"matched_comments", compactCommentIDs(existingComments),
 			)
@@ -1110,14 +1114,16 @@ func (v *Provider) CreateComment(ctx context.Context, event *info.Event, commit,
 		})
 	})
 	if err != nil {
-		v.debugCommentPhase(event, trace, "create_comment_done",
+		v.debugCommentPhase(
+			event, trace, "create_comment_done",
 			"status_code", responseStatusCode(createResp),
 			"github_request_id", githubRequestID(createResp),
 			"create_error", err.Error(),
 		)
 		return err
 	}
-	v.debugCommentPhase(event, trace, "create_comment_done",
+	v.debugCommentPhase(
+		event, trace, "create_comment_done",
 		"status_code", responseStatusCode(createResp),
 		"github_request_id", githubRequestID(createResp),
 		"created_comment_id", createdComment.GetID(),

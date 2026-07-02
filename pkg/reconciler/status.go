@@ -55,7 +55,8 @@ func (r *Reconciler) updateRepoRunStatus(ctx context.Context, logger *zap.Sugare
 	maxRun := 10
 	for i := 0; i < maxRun; i++ {
 		lastrepo, err := r.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(
-			pr.GetNamespace()).Get(ctx, repo.Name, metav1.GetOptions{})
+			pr.GetNamespace(),
+		).Get(ctx, repo.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -68,7 +69,8 @@ func (r *Reconciler) updateRepoRunStatus(ctx context.Context, logger *zap.Sugare
 
 		lastrepo.Status = append(lastrepo.Status, repoStatus)
 		nrepo, err := r.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(lastrepo.Namespace).Update(
-			ctx, lastrepo, metav1.UpdateOptions{})
+			ctx, lastrepo, metav1.UpdateOptions{},
+		)
 		if err != nil {
 			logger.Infof("Could not update repo %s, retrying %d/%d: %s", lastrepo.Namespace, i, maxRun, err.Error())
 			continue

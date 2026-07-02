@@ -234,7 +234,8 @@ func TestCleanupPipelines(t *testing.T) {
 			}
 
 			plist, err := kint.Run.Clients.Tekton.TektonV1().PipelineRuns(tt.args.namespace).List(
-				ctx, metav1.ListOptions{})
+				ctx, metav1.ListOptions{},
+			)
 			assert.NilError(t, err)
 			assert.Equal(t, tt.args.kept, len(plist.Items), "we have %d pruns kept when we wanted only %d", len(plist.Items), tt.args.kept)
 			if tt.args.prunLatestInList != "" {

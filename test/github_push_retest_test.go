@@ -85,7 +85,8 @@ func TestGithubGHEPushRequestGitOpsCommentOnComment(t *testing.T) {
 		*regexp.MustCompile(opsComment),
 		"",
 		2,
-		nil)
+		nil,
+	)
 
 	assert.NilError(t, err)
 }

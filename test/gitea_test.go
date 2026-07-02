@@ -83,7 +83,8 @@ func TestGiteaGetTaskURI(t *testing.T) {
 	remoteRepo, err := tgitea.CreateGiteaRepo(
 		giteacnx.Client(), opts.Organization,
 		remoteRepoName, options.MainBranch, hookURL, webhookSecret,
-		false, runcnx.Clients.Log)
+		false, runcnx.Clients.Log,
+	)
 	assert.NilError(t, err)
 
 	defer func() {
@@ -111,7 +112,8 @@ func TestGiteaGetTaskURI(t *testing.T) {
 					Message:    "Add " + tf.remoteFile,
 					BranchName: options.MainBranch,
 				},
-			})
+			},
+		)
 		assert.NilError(t, createErr)
 		if tf.refType == "commit" {
 			commitSHA = fr.Commit.SHA
@@ -365,7 +367,8 @@ func TestGiteaBadYamlValidation(t *testing.T) {
 	defer f()
 	maxLines := int64(1000)
 	assert.NilError(t, twait.RegexpMatchingInControllerLog(ctx, topts.ParamsRun, *regexp.MustCompile(
-		"cannot read the PipelineRun: pr-bad-format.yaml, error: yaml validation error: line 3: could not find expected ':'"),
+		"cannot read the PipelineRun: pr-bad-format.yaml, error: yaml validation error: line 3: could not find expected ':'",
+	),
 		10, "controller", &maxLines, nil))
 }
 
@@ -691,7 +694,8 @@ func TestGiteaPush(t *testing.T) {
 	}
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
-	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
+	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(
+		topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
 		forgejo.MergePullRequestOption{
 			Title: "Merged with Panache",
 			Style: "merge",
@@ -1137,7 +1141,8 @@ func TestGiteaPipelineRunWithSameName(t *testing.T) {
 	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(
 		topts.PullRequest.Base.Repository.Owner.UserName,
 		topts.PullRequest.Base.Repository.Name,
-		forgejo.ListIssueCommentOptions{})
+		forgejo.ListIssueCommentOptions{},
+	)
 	assert.NilError(t, err)
 
 	failureRe := regexp.MustCompile("found multiple pipelinerun in .tekton with the same name")
@@ -1228,14 +1233,15 @@ func verifyProvenance(t *testing.T, topts *tgitea.TestOpts, expectedOutput, cNam
 			isGlobal)
 		assert.NilError(t, err)
 
-		defer (func() {
+		defer func() {
 			if os.Getenv("TEST_NOCLEANUP") != "true" {
 				topts.ParamsRun.Clients.Log.Infof("Cleaning up global repo %s in %s", info.DefaultGlobalRepoName, globalNs)
 				err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(globalNs).Delete(
-					context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{})
+					context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{},
+				)
 				assert.NilError(t, err)
 			}
-		})()
+		}()
 	}
 	_, f := tgitea.TestPR(t, topts)
 	defer f()

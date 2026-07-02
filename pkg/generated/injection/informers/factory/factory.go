@@ -50,7 +50,8 @@ func Get(ctx context.Context) externalversions.SharedInformerFactory {
 	untyped := ctx.Value(Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions.SharedInformerFactory from context.")
+			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions.SharedInformerFactory from context.",
+		)
 	}
 	return untyped.(externalversions.SharedInformerFactory)
 }

@@ -134,10 +134,10 @@ func testGlobalRepoConcurrency(t *testing.T, label string, localRepoMaxConcurren
 	// create global repo
 	ctx, globalNS, runcnx, err := trepository.CreateGlobalRepo(ctx)
 	assert.NilError(t, err)
-	defer (func() {
+	defer func() {
 		err = trepository.CleanUpGlobalRepo(runcnx, globalNS)
 		assert.NilError(t, err)
-	})()
+	}()
 
 	numberOfPipelineRuns := 10
 	checkOrdering := false

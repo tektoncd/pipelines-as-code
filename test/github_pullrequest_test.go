@@ -171,7 +171,8 @@ func TestGithubGHEInvalidCELExpressionReportingOnPR(t *testing.T) {
 	for i := 0; i < maxLoop; i++ {
 		comments, _, err := g.Provider.Client().Issues.ListComments(
 			ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-			&github.IssueListCommentsOptions{})
+			&github.IssueListCommentsOptions{},
+		)
 		assert.NilError(t, err)
 
 		if len(comments) > 0 {

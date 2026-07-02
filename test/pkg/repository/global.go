@@ -45,7 +45,8 @@ func CleanUpGlobalRepo(runcnx *params.Run, globalNS string) error {
 	if os.Getenv("TEST_NOCLEANUP") != "true" {
 		runcnx.Clients.Log.Infof("Cleaning up global repo %s in %s", info.DefaultGlobalRepoName, globalNS)
 		return runcnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(globalNS).Delete(
-			context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{})
+			context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{},
+		)
 	}
 	return nil
 }

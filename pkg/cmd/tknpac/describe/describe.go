@@ -128,23 +128,28 @@ func Root(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 	}
 
 	cmd.Flags().StringP(
-		targetPRFlag, "t", "", "Show this PipelineRun information")
-	_ = cmd.RegisterFlagCompletionFunc(targetPRFlag,
+		targetPRFlag, "t", "", "Show this PipelineRun information",
+	)
+	_ = cmd.RegisterFlagCompletionFunc(
+		targetPRFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion("pipelinerun", args)
 		},
 	)
 
 	cmd.Flags().StringP(
-		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request")
-	_ = cmd.RegisterFlagCompletionFunc(namespaceFlag,
+		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request",
+	)
+	_ = cmd.RegisterFlagCompletionFunc(
+		namespaceFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion(namespaceFlag, args)
 		},
 	)
 
 	cmd.Flags().BoolP(
-		showEventflag, "", false, "show kubernetes events associated with this repository, useful if you have an error that cannot be reported on the git provider interface")
+		showEventflag, "", false, "show kubernetes events associated with this repository, useful if you have an error that cannot be reported on the git provider interface",
+	)
 	cmd.PersistentFlags().BoolVarP(&useRealTime, useRealTimeFlag, "", false,
 		"display the time as RFC3339 instead of a relative time")
 	return cmd

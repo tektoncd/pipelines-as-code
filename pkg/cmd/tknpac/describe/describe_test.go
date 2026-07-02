@@ -492,7 +492,8 @@ func TestDescribe(t *testing.T) {
 
 			io, out := tcli.NewIOStream()
 			if err := describe(
-				ctx, cs, cw, tt.args.opts, io, tt.args.repoName); (err != nil) != tt.wantErr {
+				ctx, cs, cw, tt.args.opts, io, tt.args.repoName,
+			); (err != nil) != tt.wantErr {
 				t.Errorf("describe() error = %v, wantErr %v", err, tt.wantErr)
 			} else {
 				golden.Assert(t, out.String(), strings.ReplaceAll(fmt.Sprintf("%s.golden", t.Name()), "/", "-"))

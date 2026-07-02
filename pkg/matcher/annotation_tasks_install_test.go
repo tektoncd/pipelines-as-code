@@ -211,28 +211,32 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.TektonHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"anotherHub", settings.HubCatalog{
 			Index: "1",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.TektonHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"artifactHub", settings.HubCatalog{
 			Index: "2",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.ArtifactHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"artifactHubDefault", settings.HubCatalog{
 			Index: "3",
 			URL:   testHubURL,
 			Name:  "default",
 			Type:  hubtype.ArtifactHubType,
-		})
+		},
+	)
 	tests := []struct {
 		task                   string
 		filesInsideRepo        map[string]string
@@ -491,28 +495,32 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.TektonHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"anotherHub", settings.HubCatalog{
 			Index: "1",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.TektonHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"artifactHub", settings.HubCatalog{
 			Index: "2",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
 			Type:  hubtype.ArtifactHubType,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"artifactHubDefault", settings.HubCatalog{
 			Index: "3",
 			URL:   testHubURL,
 			Name:  "default",
 			Type:  hubtype.ArtifactHubType,
-		})
+		},
+	)
 	tests := []struct {
 		pipeline        string
 		filesInsideRepo map[string]string

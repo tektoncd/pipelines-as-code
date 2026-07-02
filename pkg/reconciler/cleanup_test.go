@@ -170,7 +170,8 @@ func TestCleanupPipelineRuns(t *testing.T) {
 			assert.NilError(t, err)
 
 			plist, err := kint.Run.Clients.Tekton.TektonV1().PipelineRuns(tt.repoNs).List(
-				ctx, metav1.ListOptions{})
+				ctx, metav1.ListOptions{},
+			)
 			assert.NilError(t, err)
 			assert.Equal(t, tt.afterCleanup, len(plist.Items))
 		})

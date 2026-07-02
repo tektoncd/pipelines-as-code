@@ -50,7 +50,8 @@ func TestGiteaParamsStandardCheckForPushAndPullEvent(t *testing.T) {
 	}
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
-	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
+	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(
+		topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
 		forgejo.MergePullRequestOption{
 			Title: "Merged with Panache",
 			Style: "merge",
@@ -373,13 +374,14 @@ func TestGiteaGlobalRepoUseLocalDef(t *testing.T) {
 		true)
 	assert.NilError(t, err)
 
-	defer (func() {
+	defer func() {
 		if os.Getenv("TEST_NOCLEANUP") != "true" {
 			topts.ParamsRun.Clients.Log.Infof("Cleaning up global repo %s in %s", info.DefaultGlobalRepoName, globalNs)
 			_ = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(globalNs).Delete(
-				context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{})
+				context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{},
+			)
 		}
-	})()
+	}()
 
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
@@ -488,7 +490,8 @@ func TestGiteaParamsOnRepoCR(t *testing.T) {
 	assert.NilError(t,
 		twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=params",
 			repo.Status[0].PipelineRunName), "step-test-params-value", *regexp.MustCompile(
-			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}"), "", 2, nil))
+			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}",
+		), "", 2, nil))
 }
 
 // TestGiteaParamsBodyHeadersCEL Test that we can access the pull request body and headers in params
@@ -523,7 +526,8 @@ my email is a true beauty and like groot, I AM pac`
 	assert.NilError(t, err)
 
 	// Merge the pull request so we can generate a push event and wait that it is updated
-	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
+	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(
+		topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
 		forgejo.MergePullRequestOption{
 			Title: "Merged with Panache",
 			Style: "merge",
@@ -607,7 +611,8 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	// ======================================================================================================================
 	// Merge the pull request so we can generate a push event and wait that it is updated
 	// ======================================================================================================================
-	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
+	merged, resp, err := topts.GiteaCNX.Client().MergePullRequest(
+		topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
 		forgejo.MergePullRequestOption{
 			Title: "Merged with Panache",
 			Style: "merge",
@@ -654,7 +659,8 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	// ======================================================================================================================
 	// Merge the pull request so we can generate a second push event and wait that it is updated
 	// ======================================================================================================================
-	merged, resp, err = topts.GiteaCNX.Client().MergePullRequest(topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
+	merged, resp, err = topts.GiteaCNX.Client().MergePullRequest(
+		topts.Opts.Organization, topts.Opts.Repo, topts.PullRequest.Index,
 		forgejo.MergePullRequestOption{
 			Title: "Merged with Panache",
 			Style: "merge",

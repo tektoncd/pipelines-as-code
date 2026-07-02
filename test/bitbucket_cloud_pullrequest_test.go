@@ -38,7 +38,8 @@ func TestBitbucketCloudPullRequest(t *testing.T) {
 
 	entries, err := payload.GetEntries(
 		map[string]string{".tekton/pipelinerun.yaml": "testdata/pipelinerun.yaml"},
-		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{})
+		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{},
+	)
 	assert.NilError(t, err)
 
 	pr, repobranch := tbb.MakePR(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)
@@ -73,7 +74,8 @@ func TestBitbucketCloudPullRequestCancelInProgressMerged(t *testing.T) {
 
 	entries, err := payload.GetEntries(
 		map[string]string{".tekton/pipelinerun-cancel-in-progress.yaml": "testdata/pipelinerun-cancel-in-progress.yaml"},
-		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{})
+		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{},
+	)
 	assert.NilError(t, err)
 
 	pr, repobranch := tbb.MakePR(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)
@@ -125,7 +127,8 @@ func TestBitbucketCloudCELExpressionOnPush(t *testing.T) {
 
 	entries, err := payload.GetEntries(
 		map[string]string{".tekton/pipelinerun.yaml": "testdata/pipelinerun-cel-expression.yaml"},
-		targetNS, targetRefName, triggertype.Push.String(), map[string]string{})
+		targetNS, targetRefName, triggertype.Push.String(), map[string]string{},
+	)
 	assert.NilError(t, err)
 
 	repobranch, err := tbb.MakePush(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)
@@ -161,7 +164,8 @@ func TestBitbucketCloudPRBuildStatusReported(t *testing.T) {
 
 	entries, err := payload.GetEntries(
 		map[string]string{".tekton/my-long-pipelinerun-name-exceeding-forty-chars.yaml": "testdata/pipelinerun.yaml"},
-		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{})
+		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{},
+	)
 	assert.NilError(t, err)
 
 	pr, repobranch := tbb.MakePR(t, bprovider, runcnx, bcrepo, opts, title, targetRefName, entries)

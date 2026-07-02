@@ -53,7 +53,8 @@ func NewPacs(event *info.Event, vcx provider.Interface, run *params.Run, pacInfo
 }
 
 func (p *PacRun) Run(ctx context.Context) error {
-	p.debugf("run start: trigger_target=%s event_type=%s repo_url=%s sha=%s pr=%d has_skip=%t cancel_pipeline_runs=%t",
+	p.debugf(
+		"run start: trigger_target=%s event_type=%s repo_url=%s sha=%s pr=%d has_skip=%t cancel_pipeline_runs=%t",
 		p.event.TriggerTarget,
 		p.event.EventType,
 		p.event.URL,
@@ -208,7 +209,8 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	if prName == "" {
 		prName = match.PipelineRun.GetGenerateName()
 	}
-	p.debugf("startPR: pipelinerun=%s namespace=%s event_sha=%s target_branch=%s",
+	p.debugf(
+		"startPR: pipelinerun=%s namespace=%s event_sha=%s target_branch=%s",
 		prName,
 		match.Repo.GetNamespace(),
 		p.event.SHA,

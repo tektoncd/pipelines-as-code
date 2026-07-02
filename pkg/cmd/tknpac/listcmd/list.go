@@ -81,16 +81,19 @@ func Root(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 		"display the time as RFC3339 instead of a relative time")
 
 	cmd.Flags().StringP(
-		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request")
+		namespaceFlag, "n", "", "If present, the namespace scope for this CLI request",
+	)
 
-	_ = cmd.RegisterFlagCompletionFunc(namespaceFlag,
+	_ = cmd.RegisterFlagCompletionFunc(
+		namespaceFlag,
 		func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return completion.BaseCompletion(namespaceFlag, args)
 		},
 	)
 
 	cmd.Flags().BoolVar(
-		&noheaders, noHeadersFlag, false, "don't print headers.")
+		&noheaders, noHeadersFlag, false, "don't print headers.",
+	)
 
 	cmd.Flags().StringVarP(&selectors, "selectors", "l",
 		"", "Selector (label query) to filter on, "+
@@ -140,7 +143,8 @@ func list(ctx context.Context, cs *params.Run, opts *cli.PacCliOpts, ioStreams *
 	lopt := metav1.ListOptions{LabelSelector: selectors}
 
 	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(cs.Info.Kube.Namespace).List(
-		ctx, lopt)
+		ctx, lopt,
+	)
 	if err != nil {
 		return err
 	}

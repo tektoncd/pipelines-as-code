@@ -38,7 +38,8 @@ func withInformer(ctx context.Context) (context.Context, []controller.Informer) 
 	untyped := ctx.Value(factoryfiltered.LabelKey{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch labelkey from context.")
+			"Unable to fetch labelkey from context.",
+		)
 	}
 	labelSelectors := untyped.([]string)
 	infs := []controller.Informer{}

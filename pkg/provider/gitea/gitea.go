@@ -414,7 +414,8 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 	default:
 		if status.Text != "" && (eventType == triggertype.PullRequest || event.TriggerTarget == triggertype.PullRequest) {
 			status.Text = strings.ReplaceAll(strings.TrimSpace(status.Text), "<br>", "\n")
-			_, _, err := v.Client().CreateIssueComment(event.Organization, event.Repository,
+			_, _, err := v.Client().CreateIssueComment(
+				event.Organization, event.Repository,
 				int64(event.PullRequestNumber), forgejo.CreateIssueCommentOption{
 					Body: fmt.Sprintf("%s\n%s", status.Summary, status.Text),
 				},

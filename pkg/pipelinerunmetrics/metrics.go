@@ -72,7 +72,8 @@ func NewRecorder() (*Recorder, error) {
 func (r Recorder) assertInitialized() error {
 	if !r.initialized {
 		return fmt.Errorf(
-			"ignoring the metrics recording for pipelineruns, failed to initialize the metrics recorder")
+			"ignoring the metrics recording for pipelineruns, failed to initialize the metrics recorder",
+		)
 	}
 	return nil
 }

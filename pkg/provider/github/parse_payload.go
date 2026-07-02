@@ -220,7 +220,8 @@ func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *in
 	if v.Logger == nil {
 		return
 	}
-	v.Logger.Errorw(githubAppTokenExfiltrationBlockedLog,
+	v.Logger.Errorw(
+		githubAppTokenExfiltrationBlockedLog,
 		"severity", "critical",
 		"security-impact", "github-app-jwt-exfiltration-blocked",
 		"reason", reason,
@@ -236,7 +237,8 @@ func (v *Provider) logGitHubAppTokenMintValidationFailure(request *http.Request,
 	if v.Logger == nil {
 		return
 	}
-	v.Logger.Warnw(githubAppTokenMintBlockedLog,
+	v.Logger.Warnw(
+		githubAppTokenMintBlockedLog,
 		"severity", "warning",
 		"security-impact", "github-app-token-mint-blocked",
 		"reason", reason,
@@ -939,7 +941,8 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 
 func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*v1alpha1.Repository, error) {
 	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
-		ctx, metav1.ListOptions{})
+		ctx, metav1.ListOptions{},
+	)
 	if err != nil {
 		return nil, err
 	}

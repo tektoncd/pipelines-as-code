@@ -76,7 +76,8 @@ func TestGithubGHEPullRequestGitopsCommentCancel(t *testing.T) {
 	assert.Equal(t, len(pruns.Items), 2)
 
 	g.Cnx.Clients.Log.Info("/test pr-gitops-comment on Pull Request before canceling")
-	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
+	_, _, err = g.Provider.Client().Issues.CreateComment(
+		ctx,
 		g.Options.Organization,
 		g.Options.Repo,
 		g.PRNumber,
@@ -174,7 +175,8 @@ func TestGithubGHERetestWithMultipleFailedPipelineRuns(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, len(pruns.Items), 1)
 
-	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
+	_, _, err = g.Provider.Client().Issues.CreateComment(
+		ctx,
 		g.Options.Organization,
 		g.Options.Repo,
 		g.PRNumber,
@@ -184,7 +186,8 @@ func TestGithubGHERetestWithMultipleFailedPipelineRuns(t *testing.T) {
 
 	// here we only need to check that we have two failed check runs and nothing is gone
 	// after making the retest comment.
-	res, _, err := g.Provider.Client().Checks.ListCheckRunsForRef(ctx,
+	res, _, err := g.Provider.Client().Checks.ListCheckRunsForRef(
+		ctx,
 		g.Options.Organization,
 		g.Options.Repo,
 		g.SHA,

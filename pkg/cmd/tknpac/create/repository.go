@@ -186,7 +186,8 @@ func getOrCreateNamespace(ctx context.Context, opts *RepoOptions) error {
 		return nil
 	}
 
-	fmt.Fprintf(opts.IoStreams.Out, "%s Namespace %s is not found\n",
+	fmt.Fprintf(
+		opts.IoStreams.Out, "%s Namespace %s is not found\n",
 		opts.IoStreams.ColorScheme().WarningIcon(),
 		chosenNS,
 	)
@@ -264,12 +265,14 @@ func createRepoCRD(ctx context.Context, opts *RepoOptions) (string, string, erro
 				URL: opts.Event.URL,
 			},
 		},
-		metav1.CreateOptions{})
+		metav1.CreateOptions{},
+	)
 	if err != nil {
 		return "", "", err
 	}
 	cs := opts.IoStreams.ColorScheme()
-	fmt.Fprintf(opts.IoStreams.Out, "%s Repository %s has been created in %s namespace\n",
+	fmt.Fprintf(
+		opts.IoStreams.Out, "%s Repository %s has been created in %s namespace\n",
 		cs.SuccessIconWithColor(cs.Green),
 		repositoryName,
 		opts.Repository.Namespace,

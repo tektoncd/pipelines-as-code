@@ -88,7 +88,8 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 			},
 		}
 
-		err = payload.Send(ctx,
+		err = payload.Send(
+			ctx,
 			g.Cnx,
 			os.Getenv("TEST_GITHUB_SECOND_EL_URL"),
 			os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SECRET"),

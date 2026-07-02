@@ -48,7 +48,8 @@ func Get(ctx context.Context) *fake.Clientset {
 	untyped := ctx.Value(client.Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned/fake.Clientset from context.")
+			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned/fake.Clientset from context.",
+		)
 	}
 	return untyped.(*fake.Clientset)
 }

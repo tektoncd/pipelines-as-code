@@ -1699,7 +1699,8 @@ func runTest(ctx context.Context, t *testing.T, tt annotationTest, vcx provider.
 		repo = tt.args.data.Repositories[0]
 	}
 
-	matches, err := MatchPipelinerunByAnnotation(ctx, logger,
+	matches, err := MatchPipelinerunByAnnotation(
+		ctx, logger,
 		tt.args.pruns,
 		client, &tt.args.runevent, vcx, eventEmitter, repo, true,
 	)

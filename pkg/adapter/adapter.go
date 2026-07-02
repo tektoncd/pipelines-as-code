@@ -232,7 +232,8 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		tracedCtx := otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(request.Header))
 
 		tracer := otel.Tracer(tracing.TracerName)
-		tracedCtx, span := tracer.Start(tracedCtx, "PipelinesAsCode:ProcessEvent",
+		tracedCtx, span := tracer.Start(
+			tracedCtx, "PipelinesAsCode:ProcessEvent",
 			trace.WithSpanKind(trace.SpanKindServer),
 		)
 

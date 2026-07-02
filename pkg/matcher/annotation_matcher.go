@@ -210,7 +210,8 @@ func checkPipelineRunAnnotation(prun *tektonv1.PipelineRun, eventEmitter *events
 func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger, pruns []*tektonv1.PipelineRun, cs *params.Run, event *info.Event, vcx provider.Interface, eventEmitter *events.EventEmitter, repo *apipac.Repository, reportErrors bool) ([]Match, error) {
 	matchedPRs := []Match{}
 	logger.Debugf("MatchPipelinerunByAnnotation: pipelineruns=%d event_type=%s trigger_target=%s report_errors=%t", len(pruns), event.EventType, event.TriggerTarget, reportErrors)
-	infomsg := fmt.Sprintf("matching pipelineruns to event: URL=%s, target-branch=%s, source-branch=%s, target-event=%s",
+	infomsg := fmt.Sprintf(
+		"matching pipelineruns to event: URL=%s, target-branch=%s, source-branch=%s, target-event=%s",
 		event.URL,
 		event.BaseBranch,
 		event.HeadBranch,
@@ -279,7 +280,8 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			}
 
 			strippedComment := strings.TrimSpace(
-				strings.TrimPrefix(strings.TrimSuffix(event.TriggerComment, "\r\n"), "\r\n"))
+				strings.TrimPrefix(strings.TrimSuffix(event.TriggerComment, "\r\n"), "\r\n"),
+			)
 			if re.MatchString(strippedComment) {
 				event.EventType = opscomments.OnCommentEventType.String()
 

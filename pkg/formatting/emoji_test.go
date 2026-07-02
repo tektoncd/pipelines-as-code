@@ -58,6 +58,7 @@ func TestConditionEmoji(t *testing.T) {
 
 func TestSkipEmoji(t *testing.T) {
 	got := ConditionSad(
-		kv1.Conditions{{Status: corev1.ConditionTrue}})
+		kv1.Conditions{{Status: corev1.ConditionTrue}},
+	)
 	assert.Assert(t, !strings.Contains(got, "✅"))
 }

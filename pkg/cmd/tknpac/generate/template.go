@@ -64,7 +64,8 @@ func (o *Opts) detectLanguage() (string, error) {
 		for _, f := range v.detectionFiles {
 			fpath := filepath.Join(o.GitInfo.TopLevelPath, f)
 			if _, err := os.Stat(fpath); !os.IsNotExist(err) {
-				fmt.Fprintf(o.IOStreams.Out, "%s We detected your repository uses the %s programming language.\n",
+				fmt.Fprintf(
+					o.IOStreams.Out, "%s We detected your repository uses the %s programming language.\n",
 					cs.SuccessIcon(),
 					cs.Bold(cases.Title(language.Und, cases.NoLower).String(t)),
 				)

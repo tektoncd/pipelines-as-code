@@ -594,7 +594,7 @@ func CheckIfPipelineRunsCancelled(t *testing.T, topts *TestOpts) {
 	for {
 		list, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).
 			List(context.Background(), metav1.ListOptions{
-				LabelSelector: fmt.Sprintf("%v=%v", keys.Repository, formatting.CleanValueKubernetes((topts.TargetNS))),
+				LabelSelector: fmt.Sprintf("%v=%v", keys.Repository, formatting.CleanValueKubernetes(topts.TargetNS)),
 			})
 		assert.NilError(t, err)
 
@@ -682,14 +682,15 @@ func VerifyConcurrency(t *testing.T, topts *TestOpts, globalRepoConcurrencyLimit
 		true)
 	assert.NilError(t, err)
 
-	defer (func() {
+	defer func() {
 		if os.Getenv("TEST_NOCLEANUP") != "true" {
 			topts.ParamsRun.Clients.Log.Infof("Cleaning up global repo %s in %s", info.DefaultGlobalRepoName, globalNs)
 			err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(globalNs).Delete(
-				context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{})
+				context.Background(), info.DefaultGlobalRepoName, metav1.DeleteOptions{},
+			)
 			assert.NilError(t, err)
 		}
-	})()
+	}()
 
 	_, f := TestPR(t, topts)
 	defer f()

@@ -2102,9 +2102,10 @@ func TestCreateComment(t *testing.T) {
 			updateMarker: "MARKER",
 			setup: func(t *testing.T, mux *http.ServeMux) func(t *testing.T) {
 				t.Helper()
-				mux.HandleFunc("/user", func(rw http.ResponseWriter, _ *http.Request) {
-					fmt.Fprint(rw, `{"id": 100, "login": "pac-user"}`)
-				},
+				mux.HandleFunc(
+					"/user", func(rw http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(rw, `{"id": 100, "login": "pac-user"}`)
+					},
 				)
 				mux.HandleFunc("/repos/org/repo/issues/123/comments", func(rw http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet {

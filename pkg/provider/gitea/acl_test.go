@@ -425,7 +425,8 @@ func TestAclCheckAll(t *testing.T) {
 						return
 					}
 					encoded := base64.StdEncoding.EncodeToString([]byte(
-						fmt.Sprintf("approvers:\n  - %s\n", tt.runevent.Sender)))
+						fmt.Sprintf("approvers:\n  - %s\n", tt.runevent.Sender),
+					))
 					// encode to json
 					b, err := json.Marshal(forgejo.ContentsResponse{
 						Content: &encoded,

@@ -124,7 +124,8 @@ func TestIsAllowed(t *testing.T) {
 				&info.Event{
 					AccountID: "0000",
 					Sender:    "NotAllowed",
-				}),
+				},
+			),
 			fields: fields{
 				projectMembers: []*bbv1test.UserPermission{
 					{

@@ -54,7 +54,8 @@ func TestGiteaCustomParamsInCELExpression(t *testing.T) {
 	// The pr.yaml should match (event == "pull_request" && enable_ci == "true" && environment != "")
 	// The nomatch.yaml should NOT match (enable_ci == "false" && environment == "production")
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(
-		context.Background(), metav1.ListOptions{})
+		context.Background(), metav1.ListOptions{},
+	)
 	assert.NilError(t, err)
 	assert.Equal(t, len(prs.Items), 1, "Expected exactly 1 PipelineRun to match (nomatch.yaml should be skipped)")
 
@@ -182,7 +183,8 @@ func TestGiteaFilteredParamsUndefinedInCEL(t *testing.T) {
 
 	// Verify no PipelineRuns were created (because CEL evaluation failed)
 	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(
-		context.Background(), metav1.ListOptions{})
+		context.Background(), metav1.ListOptions{},
+	)
 	assert.NilError(t, err)
 	assert.Equal(t, len(prs.Items), 0, "Expected no PipelineRuns since CEL expression has undefined variable")
 }

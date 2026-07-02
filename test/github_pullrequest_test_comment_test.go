@@ -90,6 +90,7 @@ func TestGithubGHEOnCommentAnnotation(t *testing.T) {
 	assert.NilError(t, err)
 
 	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPrName), "step-task", *regexp.MustCompile(fmt.Sprintf(
-		"The event is %s", opscomments.OnCommentEventType.String())), "", 2, nil)
+		"The event is %s", opscomments.OnCommentEventType.String(),
+	)), "", 2, nil)
 	assert.NilError(t, err)
 }

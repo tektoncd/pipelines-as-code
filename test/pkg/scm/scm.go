@@ -70,11 +70,11 @@ func gitPushPullRetry(t *testing.T, opts *Opts, path string) {
 
 func PushFilesToRefGit(t *testing.T, opts *Opts, entries map[string]string) string {
 	tmpdir := fs.NewDir(t, t.Name())
-	defer (func() {
+	defer func() {
 		if os.Getenv("TEST_NOCLEANUP") == "" {
 			tmpdir.Remove()
 		}
-	})()
+	}()
 	defer env.ChangeWorkingDir(t, tmpdir.Path())()
 	path := tmpdir.Path()
 	_, err := git.RunGit(path, "init")
@@ -135,11 +135,11 @@ func PushFilesToRefGit(t *testing.T, opts *Opts, entries map[string]string) stri
 
 func ChangeFilesRefGit(t *testing.T, opts *Opts, fileChanges []FileChange) {
 	tmpdir := fs.NewDir(t, t.Name())
-	defer (func() {
+	defer func() {
 		if os.Getenv("TEST_NOCLEANUP") == "" {
 			tmpdir.Remove()
 		}
-	})()
+	}()
 	defer env.ChangeWorkingDir(t, tmpdir.Path())()
 	path := tmpdir.Path()
 	_, err := git.RunGit(path, "init")

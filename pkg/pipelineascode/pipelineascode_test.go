@@ -104,13 +104,15 @@ func TestRun(t *testing.T) {
 			Index: "default",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
-		})
+		},
+	)
 	hubCatalogs.Store(
 		"anotherHub", settings.HubCatalog{
 			Index: "1",
 			URL:   testHubURL,
 			Name:  testCatalogHubName,
-		})
+		},
+	)
 	observer, log := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 	tests := []struct {

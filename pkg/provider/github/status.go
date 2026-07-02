@@ -462,7 +462,8 @@ func (v *Provider) createStatusCommit(ctx context.Context, runevent *info.Event,
 		if (status.Status == "completed" || (status.Status == "queued" && status.Title == pendingApproval)) &&
 			status.Text != "" && eventType == triggertype.PullRequest {
 			_, _, err = wrapAPI(v, "create_issue_comment", func() (*github.IssueComment, *github.Response, error) {
-				return v.Client().Issues.CreateComment(ctx, runevent.Organization, runevent.Repository,
+				return v.Client().Issues.CreateComment(
+					ctx, runevent.Organization, runevent.Repository,
 					runevent.PullRequestNumber,
 					&github.IssueComment{
 						Body: github.Ptr(fmt.Sprintf("%s<br>%s", status.Summary, status.Text)),

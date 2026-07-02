@@ -89,7 +89,8 @@ func (p *PacRun) cancelAllInProgressBelongingToClosedPullRequest(ctx context.Con
 		"The pull request was closed, and this PipelineRun matched the cancel-in-progress criteria.",
 		func(_ tektonv1.PipelineRun) bool {
 			return true
-		})
+		},
+	)
 
 	return nil
 }
@@ -183,7 +184,8 @@ func (p *PacRun) cancelInProgressMatchingPipelineRun(ctx context.Context, matchP
 			}
 
 			return pr.GetName() != matchPR.GetName()
-		})
+		},
+	)
 	return nil
 }
 
@@ -231,7 +233,8 @@ func (p *PacRun) cancelPipelineRunsOpsComment(ctx context.Context, repo *v1alpha
 				}
 			}
 			return true
-		})
+		},
+	)
 
 	return nil
 }
