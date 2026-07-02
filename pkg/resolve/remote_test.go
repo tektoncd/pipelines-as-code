@@ -23,14 +23,15 @@ import (
 
 func TestRemote(t *testing.T) {
 	randomPipelineRunName := "pipelinerun-abc"
+	remoteBaseURL := "https://93.184.216.34"
 	remotePipelineName := "remote-pipeline"
-	remotePipelineURL := "http://remote/" + remotePipelineName
+	remotePipelineURL := remoteBaseURL + "/" + remotePipelineName
 
 	taskFromPipelineRunName := "task-from-pipelinerun"
-	taskFromPipelineRunURL := "http://remote/" + taskFromPipelineRunName
+	taskFromPipelineRunURL := remoteBaseURL + "/" + taskFromPipelineRunName
 
 	remoteTaskName := "remote-task"
-	remoteTaskURL := "http://remote/" + remoteTaskName
+	remoteTaskURL := remoteBaseURL + "/" + remoteTaskName
 	taskFromPipelineSpec := tektonv1.TaskSpec{
 		Steps: []tektonv1.Step{
 			{
@@ -166,7 +167,7 @@ func TestRemote(t *testing.T) {
 				),
 			},
 			remoteURLS: map[string]map[string]string{
-				"http://remote/embedpipeline": {
+				remoteBaseURL + "/embedpipeline": {
 					"body": string(pipelinewithTaskEmbeddedB),
 					"code": "200",
 				},
@@ -181,8 +182,8 @@ func TestRemote(t *testing.T) {
 			},
 			expectedTaskSpec: taskFromPipelineSpec,
 			expectedLogsSnippets: []string{
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remotePipelineURL),
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remoteTaskURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remotePipelineURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remoteTaskURL),
 			},
 			expectedPipelineRun: []string{"remote-pipeline-with-remote-task-from-pipeline.yaml"},
 		},
@@ -231,7 +232,7 @@ func TestRemote(t *testing.T) {
 					"body": string(singleRelativeTaskBc),
 					"code": "200",
 				},
-				"http://remote/utils/remote-task-c": {
+				remoteBaseURL + "/utils/remote-task-c": {
 					"body": string(singleRelativeTaskBc),
 					"code": "200",
 				},
@@ -327,8 +328,8 @@ func TestRemote(t *testing.T) {
 				},
 			},
 			expectedLogsSnippets: []string{
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remotePipelineURL),
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", taskFromPipelineRunURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remotePipelineURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", taskFromPipelineRunURL),
 			},
 			expectedPipelineRun: []string{"remote-pipeline-with-remote-task-from-pipelinerun.yaml"},
 		},
@@ -390,8 +391,8 @@ func TestRemote(t *testing.T) {
 			},
 			expectedTaskSpec: taskFromPipelineSpec,
 			expectedLogsSnippets: []string{
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remotePipelineURL),
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remoteTaskURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remotePipelineURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remoteTaskURL),
 			},
 			expectedPipelineRun: []string{"skip-fetching-multiple-tasks-of-the-same-name-from-pipelinerun-annotations-and-pipeline-annotation.yaml"},
 		},
@@ -425,8 +426,8 @@ func TestRemote(t *testing.T) {
 			},
 			expectedTaskSpec: taskFromPipelineSpec,
 			expectedLogsSnippets: []string{
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remotePipelineURL),
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remoteTaskURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remotePipelineURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remoteTaskURL),
 				fmt.Sprintf("skipping remote task %s as already fetched task %s for pipelinerun %s", remoteTaskURL, remoteTaskName, randomPipelineRunName),
 				fmt.Sprintf("overriding task %s coming from .tekton directory by an annotation task for pipelinerun %s", remoteTaskName, randomPipelineRunName),
 			},
@@ -462,8 +463,8 @@ func TestRemote(t *testing.T) {
 			},
 			expectedTaskSpec: taskFromPipelineSpec,
 			expectedLogsSnippets: []string{
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remotePipelineURL),
-				fmt.Sprintf("successfully fetched %s from remote HTTPS URL", remoteTaskURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remotePipelineURL),
+				fmt.Sprintf("successfully fetched %s from remote URL", remoteTaskURL),
 				fmt.Sprintf("skipping remote task %s as already fetched task %s for pipelinerun %s", remoteTaskURL, remoteTaskName, randomPipelineRunName),
 			},
 			expectedPipelineRun: []string{"skip-fetching-multiple-pipelines-of-the-same-name-from-pipelinerun-annotations-and-tektondir.yaml"},
@@ -481,7 +482,7 @@ func TestRemote(t *testing.T) {
 			}
 
 			tprovider := &testprovider.TestProviderImp{}
-			httpTestClient := httptesthelper.MakeHTTPTestClient(tt.remoteURLS)
+			httpTestClient := httptesthelper.MakeHTTPTransportTestClient(t, tt.remoteURLS)
 			rt := &matcher.RemoteTasks{
 				ProviderInterface: tprovider,
 				Logger:            logger,

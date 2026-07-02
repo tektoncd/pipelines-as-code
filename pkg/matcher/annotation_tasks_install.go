@@ -12,6 +12,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/hub"
 	hubtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/hub/vars"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
@@ -32,6 +33,19 @@ type RemoteTasks struct {
 	Event                  *info.Event
 	Logger                 *zap.SugaredLogger
 	DeprecatedHubResources []string // tracks resources resolved from deprecated tektonhub catalogs
+}
+
+func (rt RemoteTasks) remoteResourceFetchOptions() clients.RemoteResourceFetchOptions {
+	if rt.Run == nil || rt.Run.Info.Pac == nil {
+		return clients.RemoteResourceFetchOptions{
+			MaxResponseBytes: clients.DefaultRemoteResourceMaxResponseBytes,
+		}
+	}
+	return clients.RemoteResourceFetchOptions{
+		AllowedHosts:     rt.Run.Info.Pac.RemoteTasksURLAllowlist,
+		BlockedCIDRs:     rt.Run.Info.Pac.RemoteTasksURLBlockedCIDRs,
+		MaxResponseBytes: int64(rt.Run.Info.Pac.RemoteTasksURLMaxResponseSize),
+	}
 }
 
 // nolint: dupl
@@ -101,20 +115,43 @@ func (rt *RemoteTasks) convertTotask(ctx context.Context, uri, data string) (*te
 
 func (rt *RemoteTasks) getRemote(ctx context.Context, uri string, fromHub bool, kind string) (string, error) {
 	rt.Logger.Debugf("getRemote: uri=%s kind=%s fromHub=%t", uri, kind, fromHub)
-	if fetchedFromURIFromProvider, task, err := rt.ProviderInterface.GetTaskURI(ctx, rt.Event, uri); fetchedFromURIFromProvider {
-		rt.Logger.Debugf("getRemote: fetched %s via provider hook for uri=%s", kind, uri)
-		return task, err
-	}
+	fetchOptions := rt.remoteResourceFetchOptions()
+	loweredURI := strings.ToLower(uri)
 
-	switch {
-	case strings.HasPrefix(uri, "https://"), strings.HasPrefix(uri, "http://"): // if it starts with http(s)://, it is a remote resource
+	if strings.HasPrefix(loweredURI, "http://") || strings.HasPrefix(loweredURI, "https://") {
+		if err := clients.ValidateRemoteResourceProviderURL(uri, fetchOptions); err != nil {
+			return "", err
+		}
+		if fetchedFromURIFromProvider, task, err := rt.ProviderInterface.GetTaskURI(ctx, rt.Event, uri); fetchedFromURIFromProvider {
+			rt.Logger.Debugf("getRemote: fetched %s via provider hook for uri=%s", kind, uri)
+			if err != nil {
+				return task, err
+			}
+			if err := clients.CheckRemoteResourceResponseSize(int64(len(task)), fetchOptions); err != nil {
+				return "", err
+			}
+			return task, nil
+		}
 		rt.Logger.Debugf("getRemote: fetching %s from http(s) url", kind)
-		data, err := rt.Run.Clients.GetURL(ctx, uri)
+		data, err := rt.Run.Clients.GetRemoteResourceURL(ctx, uri, fetchOptions)
 		if err != nil {
 			return "", err
 		}
-		rt.Logger.Infof("successfully fetched %s from remote HTTPS URL", uri)
+		rt.Logger.Infof("successfully fetched %s from remote URL", uri)
 		return string(data), nil
+	}
+	if fetchedFromURIFromProvider, task, err := rt.ProviderInterface.GetTaskURI(ctx, rt.Event, uri); fetchedFromURIFromProvider {
+		rt.Logger.Debugf("getRemote: fetched %s via provider hook for uri=%s", kind, uri)
+		if err != nil {
+			return task, err
+		}
+		if err := clients.CheckRemoteResourceResponseSize(int64(len(task)), fetchOptions); err != nil {
+			return "", err
+		}
+		return task, nil
+	}
+
+	switch {
 	case fromHub && strings.Contains(uri, "://"): // if it contains ://, it is a remote custom catalog
 		split := strings.Split(uri, "://")
 		catalogID := split[0]

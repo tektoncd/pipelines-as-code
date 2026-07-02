@@ -24,6 +24,7 @@ type TestProviderImp struct {
 	CreateStatusErorring   bool
 	FilesInsideRepo        map[string]string
 	WantProviderRemoteTask bool
+	ProviderRemoteTask     string
 	PolicyDisallowing      bool
 	AllowedInOwnersFile    bool
 	WantAllChangedFiles    []string
@@ -102,7 +103,7 @@ func (v *TestProviderImp) IsAllowed(_ context.Context, _ *info.Event) (bool, err
 }
 
 func (v *TestProviderImp) GetTaskURI(_ context.Context, _ *info.Event, _ string) (bool, string, error) {
-	return v.WantProviderRemoteTask, "", nil
+	return v.WantProviderRemoteTask, v.ProviderRemoteTask, nil
 }
 
 func (v *TestProviderImp) CreateStatus(_ context.Context, _ *info.Event, _ providerstatus.StatusOpts) error {

@@ -3,8 +3,10 @@ package settings
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -50,6 +52,9 @@ type Settings struct {
 	ApplicationName                     string `default:"Pipelines as Code CI" json:"application-name"`
 	HubCatalogs                         *sync.Map
 	RemoteTasks                         bool   `default:"true"                                 json:"remote-tasks"`
+	RemoteTasksURLAllowlist             string `json:"remote-tasks-url-allowlist"`
+	RemoteTasksURLBlockedCIDRs          string `json:"remote-tasks-url-blocked-cidrs"`
+	RemoteTasksURLMaxResponseSize       int    `default:"1048576"                              json:"remote-tasks-url-max-response-size"`
 	MaxKeepRunsUpperLimit               int    `json:"max-keep-run-upper-limit"`
 	DefaultMaxKeepRuns                  int    `json:"default-max-keep-runs"`
 	BitbucketCloudCheckSourceIP         bool   `default:"true"                                 json:"bitbucket-cloud-check-source-ip"`
@@ -115,6 +120,11 @@ func DefaultValidators() map[string]func(string) error {
 		"CustomConsoleURL":           isValidURL,
 		"CustomConsolePRTaskLog":     startWithHTTPorHTTPS,
 		"CustomConsolePRDetail":      startWithHTTPorHTTPS,
+		"RemoteTasksURLAllowlist":    isValidHostList,
+		"RemoteTasksURLBlockedCIDRs": isValidCIDRList,
+		"RemoteTasksURLMaxResponseSize": func(value string) error {
+			return positiveInt(value, "remote tasks URL max response size")
+		},
 	}
 }
 
@@ -161,6 +171,63 @@ func isValidRegex(regex string) error {
 func startWithHTTPorHTTPS(url string) error {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return fmt.Errorf("invalid value, must start with http:// or https://")
+	}
+	return nil
+}
+
+func isValidHostList(value string) error {
+	for _, host := range strings.Split(value, ",") {
+		host = strings.TrimSpace(host)
+		if host == "" {
+			continue
+		}
+		if strings.Contains(host, "://") {
+			parsedURL, err := url.Parse(host)
+			if err != nil {
+				return fmt.Errorf("host %q has an invalid URL scheme: %w", host, err)
+			}
+			if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+				return fmt.Errorf("host %q must use http:// or https:// when including a URL scheme", host)
+			}
+			if parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || (parsedURL.Path != "" && parsedURL.Path != "/") {
+				return fmt.Errorf("host %q must not include a URL path, query, fragment, or userinfo", host)
+			}
+			host = parsedURL.Host
+		}
+		if strings.Contains(host, "*") && !strings.HasPrefix(host, "*.") {
+			return fmt.Errorf("host %q has an invalid wildcard", host)
+		}
+		trimmedHost := strings.TrimPrefix(host, "*.")
+		if trimmedHost == "" || strings.ContainsAny(trimmedHost, "/?#") {
+			return fmt.Errorf("host %q is invalid", host)
+		}
+	}
+	return nil
+}
+
+func isValidCIDRList(value string) error {
+	for _, cidr := range strings.Split(value, ",") {
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" {
+			continue
+		}
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			return fmt.Errorf("invalid CIDR %q: %w", cidr, err)
+		}
+	}
+	return nil
+}
+
+func positiveInt(value, name string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parsedValue, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	if parsedValue <= 0 {
+		return fmt.Errorf("%s must be greater than 0", name)
 	}
 	return nil
 }
