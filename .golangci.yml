@@ -131,6 +131,7 @@ formatters:
     generated: lax
     paths:
       - vendor
+      - go-build-cache
       - pkg/provider/gitea/structs
       - third_party$
       - builtin$
