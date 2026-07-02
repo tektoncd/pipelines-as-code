@@ -205,6 +205,11 @@ func TestQueuePipelineRun(t *testing.T) {
 			if tt.wantLog != "" {
 				assert.Assert(t, logcatch.FilterMessage(tt.wantLog).Len() != 0, "We didn't get the expected log message", logcatch.All())
 			}
+			if tt.globalRepo != nil && tt.testRepo != nil {
+				cachedRepo, err := informers.Repository.Lister().Repositories(tt.testRepo.Namespace).Get(tt.testRepo.Name)
+				assert.NilError(t, err)
+				assert.Assert(t, cachedRepo.Spec.Settings == nil, "global settings should not mutate the cached Repository")
+			}
 		})
 	}
 }
