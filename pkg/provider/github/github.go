@@ -343,7 +343,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 	if event.InstallationID != 0 {
 		integration = "github-app"
 	}
-	run.Clients.Log.Infof(integration+": initialized OAuth2 client for providerName=%s providerURL=%s", v.providerName, event.Provider.URL)
+	v.Logger.Infof(integration+": initialized OAuth2 client for providerName=%s providerURL=%s", v.providerName, event.Provider.URL)
 
 	v.APIURL = apiURL
 
@@ -973,10 +973,6 @@ func (v *Provider) newCommentTraceLogContext(ctx context.Context, event *info.Ev
 }
 
 func (v *Provider) debugCommentPhase(event *info.Event, trace commentTraceLogContext, phase string, kv ...any) {
-	if v.Logger == nil {
-		return
-	}
-
 	org := "unknown"
 	repo := "unknown"
 	pr := 0

@@ -79,7 +79,10 @@ func TestGetTaskURI(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
-			provider := &Provider{ghClient: fakeclient}
+			l, _ := logger.GetLogger()
+			provider := New()
+			provider.SetGithubClient(fakeclient)
+			provider.SetLogger(l)
 			event := info.NewEvent()
 			event.HeadBranch = "main"
 			event.URL = tt.eventURL
@@ -705,8 +708,10 @@ func TestGetFileInsideRepo(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
+			l, _ := logger.GetLogger()
 			gvcs := Provider{
 				ghClient: fakeclient,
+				Logger:   l,
 			}
 			for s, f := range tt.rets {
 				mux.HandleFunc(s, f)
@@ -780,9 +785,11 @@ func TestGetFileInsideRepoRefSelection(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
+			l, _ := logger.GetLogger()
 			gvcs := Provider{
 				ghClient:   fakeclient,
 				provenance: tt.provenance,
+				Logger:     l,
 			}
 
 			mux.HandleFunc("/repos/org/repo/contents/OWNERS", func(w http.ResponseWriter, r *http.Request) {
@@ -842,8 +849,10 @@ func TestCheckSenderOrgMembership(t *testing.T) {
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 			ctx, _ := rtesting.SetupFakeContext(t)
+			l, _ := logger.GetLogger()
 			gprovider := Provider{
 				ghClient: fakeclient,
+				Logger:   l,
 			}
 			mux.HandleFunc(fmt.Sprintf("/orgs/%s/members", tt.runevent.Organization), func(rw http.ResponseWriter, _ *http.Request) {
 				fmt.Fprint(rw, tt.apiReturn)
@@ -891,9 +900,11 @@ func TestGetStringPullRequestComment(t *testing.T) {
 					Settings: &v1alpha1.Settings{},
 				},
 			}
+			l, _ := logger.GetLogger()
 			gprovider := Provider{
 				ghClient: fakeclient,
 				repo:     repo,
+				Logger:   l,
 			}
 			mux.HandleFunc(fmt.Sprintf("/repos/issues/%s/comments", filepath.Base(tt.runevent.URL)), func(rw http.ResponseWriter, _ *http.Request) {
 				fmt.Fprint(rw, tt.apiReturn)
@@ -1118,9 +1129,15 @@ func TestGithubGetCommitInfo(t *testing.T) {
 				fmt.Fprint(rw, string(jsonData))
 			})
 			ctx, _ := rtesting.SetupFakeContext(t)
-			provider := &Provider{ghClient: fakeclient}
+			l, _ := logger.GetLogger()
+			provider := &Provider{
+				ghClient: fakeclient,
+				Logger:   l,
+			}
 			if tt.noclient {
-				provider = &Provider{}
+				provider = &Provider{
+					Logger: l,
+				}
 			}
 			err := provider.GetCommitInfo(ctx, tt.event)
 			if tt.wantErr != "" {
@@ -1756,7 +1773,12 @@ func TestListRepos(t *testing.T) {
 	})
 
 	ctx, _ := rtesting.SetupFakeContext(t)
-	provider := &Provider{ghClient: fakeclient, PaginedNumber: 1}
+	l, _ := logger.GetLogger()
+	provider := &Provider{
+		ghClient:      fakeclient,
+		PaginedNumber: 1,
+		Logger:        l,
+	}
 	data, err := ListRepos(ctx, provider)
 	assert.NilError(t, err)
 	assert.Equal(t, data[0], "https://matched/by/incoming")
@@ -1851,7 +1873,7 @@ func TestCreateToken(t *testing.T) {
 		})
 	}
 
-	provider := &Provider{ghClient: fakeclient}
+	provider := &Provider{ghClient: fakeclient, Logger: logger}
 	provider.Run = run
 	_, err := provider.CreateToken(ctx, urlData, info)
 	assert.Assert(t, len(provider.RepositoryIDs) == 2, "found repositoryIDs are %d which is less than expected", len(provider.RepositoryIDs))
@@ -1954,7 +1976,8 @@ func TestGetPullRequest(t *testing.T) {
 					})
 			}
 
-			provider := &Provider{ghClient: fakeclient}
+			l, _ := logger.GetLogger()
+			provider := &Provider{ghClient: fakeclient, Logger: l}
 			got, err := provider.getPullRequest(ctx, tt.event)
 			if tt.wantErr {
 				assert.Assert(t, err != nil)
@@ -2007,7 +2030,8 @@ func TestGetPullRequestCaching(t *testing.T) {
 		Repository:        "repo",
 		PullRequestNumber: 1,
 	}
-	provider := &Provider{ghClient: fakeclient}
+	l, _ := logger.GetLogger()
+	provider := &Provider{ghClient: fakeclient, Logger: l}
 
 	_, err := provider.getPullRequest(ctx, event)
 	assert.NilError(t, err)
@@ -2055,7 +2079,8 @@ func TestIsHeadCommitOfBranch(t *testing.T) {
 			})
 
 			ctx, _ := rtesting.SetupFakeContext(t)
-			provider := &Provider{ghClient: fakeclient}
+			l, _ := logger.GetLogger()
+			provider := &Provider{ghClient: fakeclient, Logger: l}
 			err := provider.isHeadCommitOfBranch(ctx, runEvent, "test1")
 			assert.Equal(t, err != nil, tt.wantErr)
 		})
@@ -2193,7 +2218,7 @@ func TestCreateComment(t *testing.T) {
 					postAssert = tt.setup(t, mux)
 				}
 			} else {
-				provider = &Provider{} // nil client
+				provider = &Provider{Logger: fakelogger} // nil client
 			}
 
 			body := tt.commentBody
@@ -2696,7 +2721,8 @@ func TestFetchAppSlug(t *testing.T) {
 			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
 
 			// Create a provider with mocked kubernetes client
-			provider := &Provider{}
+			l, _ := logger.GetLogger()
+			provider := &Provider{Logger: l}
 			provider.Run = &params.Run{
 				Clients: clients.Clients{
 					Kube: stdata.Kube,

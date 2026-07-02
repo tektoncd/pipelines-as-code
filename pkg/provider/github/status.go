@@ -135,11 +135,9 @@ func (v *Provider) fetchAllCheckRunPagesWithRetry(ctx context.Context, runevent 
 		}
 
 		backoff := time.Duration(1<<uint(attempt)) * checkRunsFetchInitialBackoff
-		if v.Logger != nil {
-			v.Logger.Debugf("check-runs lookup failed for %s/%s@%s (attempt %d/%d): %v; retrying in %v",
-				runevent.Organization, runevent.Repository, runevent.SHA,
-				attempt+1, checkRunsFetchMaxRetries+1, err, backoff)
-		}
+		v.Logger.Debugf("check-runs lookup failed for %s/%s@%s (attempt %d/%d): %v; retrying in %v",
+			runevent.Organization, runevent.Repository, runevent.SHA,
+			attempt+1, checkRunsFetchMaxRetries+1, err, backoff)
 
 		select {
 		case <-ctx.Done():
