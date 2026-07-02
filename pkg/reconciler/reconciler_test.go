@@ -50,6 +50,64 @@ var (
 	finalFailureStatus = "failure"
 )
 
+func TestCopyRepositoryForMergeCopiesMutableSpecPointers(t *testing.T) {
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo",
+			Namespace: "ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			Settings: &v1alpha1.Settings{
+				GithubAppTokenScopeRepos: []string{"org/repo"},
+				Policy: &v1alpha1.Policy{
+					OkToTest:    []string{"alice"},
+					PullRequest: []string{"bob"},
+				},
+				Gitlab: &v1alpha1.GitlabSettings{
+					CommentStrategy: "update",
+				},
+				Github: &v1alpha1.GithubSettings{
+					CommentStrategy: "update",
+				},
+				Forgejo: &v1alpha1.ForgejoSettings{
+					UserAgent: "pac-test",
+				},
+				AIAnalysis: &v1alpha1.AIAnalysisConfig{
+					Enabled: true,
+				},
+			},
+			GitProvider: &v1alpha1.GitProvider{
+				Secret:        &v1alpha1.Secret{Name: "provider-secret"},
+				WebhookSecret: &v1alpha1.Secret{Name: "webhook-secret"},
+			},
+		},
+	}
+
+	copied := copyRepositoryForMerge(repo)
+	assert.Assert(t, copied != repo)
+	assert.Assert(t, copied.Spec.Settings != repo.Spec.Settings)
+	assert.Assert(t, copied.Spec.Settings.Policy != repo.Spec.Settings.Policy)
+	assert.Assert(t, copied.Spec.Settings.Gitlab != repo.Spec.Settings.Gitlab)
+	assert.Assert(t, copied.Spec.Settings.Github != repo.Spec.Settings.Github)
+	assert.Assert(t, copied.Spec.Settings.Forgejo != repo.Spec.Settings.Forgejo)
+	assert.Assert(t, copied.Spec.Settings.AIAnalysis != repo.Spec.Settings.AIAnalysis)
+	assert.Assert(t, copied.Spec.GitProvider != repo.Spec.GitProvider)
+	assert.Assert(t, copied.Spec.GitProvider.Secret != repo.Spec.GitProvider.Secret)
+	assert.Assert(t, copied.Spec.GitProvider.WebhookSecret != repo.Spec.GitProvider.WebhookSecret)
+
+	copied.Spec.Settings.GithubAppTokenScopeRepos[0] = "changed/repo"
+	copied.Spec.Settings.Policy.OkToTest[0] = "mallory"
+	copied.Spec.Settings.Policy.PullRequest[0] = "eve"
+	copied.Spec.GitProvider.Secret.Name = "changed-provider-secret"
+	copied.Spec.GitProvider.WebhookSecret.Name = "changed-webhook-secret"
+
+	assert.Equal(t, "org/repo", repo.Spec.Settings.GithubAppTokenScopeRepos[0])
+	assert.Equal(t, "alice", repo.Spec.Settings.Policy.OkToTest[0])
+	assert.Equal(t, "bob", repo.Spec.Settings.Policy.PullRequest[0])
+	assert.Equal(t, "provider-secret", repo.Spec.GitProvider.Secret.Name)
+	assert.Equal(t, "webhook-secret", repo.Spec.GitProvider.WebhookSecret.Name)
+}
+
 func testSetupGHReplies(t *testing.T, mux *http.ServeMux, runevent *info.Event, checkrunID, finalStatus string) {
 	t.Helper()
 	mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/check-runs/%s", runevent.Organization, runevent.Repository, checkrunID),
@@ -158,6 +216,17 @@ func TestReconcilerReconcileKind(t *testing.T) {
 					URL: randomURL,
 				},
 			}
+			globalRepo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "global-repo",
+					Namespace: "ns",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{
+						PipelineRunProvenance: "default_branch",
+					},
+				},
+			}
 
 			taskStatus := tektonv1.TaskRunStatusFields{
 				PodName: "task1",
@@ -173,7 +242,7 @@ func TestReconcilerReconcileKind(t *testing.T) {
 				},
 			}
 			testData := testclient.Data{
-				Repositories: []*v1alpha1.Repository{testRepo},
+				Repositories: []*v1alpha1.Repository{testRepo, globalRepo},
 				PipelineRuns: []*tektonv1.PipelineRun{pr},
 				TaskRuns: []*tektonv1.TaskRun{
 					tektontest.MakeTaskRunCompletion(clock, "task1", "ns", "pipeline-newest",
@@ -203,9 +272,12 @@ func TestReconcilerReconcileKind(t *testing.T) {
 						Kube:           stdata.Kube,
 					},
 					Info: info.Info{
-						Kube: &info.KubeOpts{},
+						Kube: &info.KubeOpts{
+							Namespace: "ns",
+						},
 						Controller: &info.ControllerInfo{
-							Secret: secretName,
+							Secret:           secretName,
+							GlobalRepository: "global-repo",
 						},
 					},
 				},
@@ -240,8 +312,93 @@ func TestReconcilerReconcileKind(t *testing.T) {
 
 			// state must be updated to completed
 			assert.Equal(t, got.Annotations[keys.State], kubeinteraction.StateCompleted)
+			cachedRepo, err := informers.Repository.Lister().Repositories(testRepo.Namespace).Get(testRepo.Name)
+			assert.NilError(t, err)
+			assert.Assert(t, cachedRepo.Spec.Settings == nil, "global settings should not mutate the cached Repository")
 		})
 	}
+}
+
+func TestInitGitProviderClientUsesGlobalSecretWithoutMutatingCache(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.GitProvider:   "github",
+				keys.RepoURL:       "https://github.com/org/repo",
+				keys.URLOrg:        "org",
+				keys.URLRepository: "repo",
+				keys.SHA:           "abc123",
+			},
+		},
+	}
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL:         "https://github.com/org/repo",
+			GitProvider: &v1alpha1.GitProvider{},
+		},
+	}
+	globalRepo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "global-repo",
+			Namespace: "global",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			GitProvider: &v1alpha1.GitProvider{
+				Secret: &v1alpha1.Secret{
+					Name: "global-provider-secret",
+				},
+			},
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo, globalRepo},
+	})
+	kint := &testkubernetestint.KinterfaceTest{
+		GetSecretResult: map[string]string{
+			"global-provider-secret": "test-token",
+		},
+	}
+	r := &Reconciler{
+		repoLister:   informers.Repository.Lister(),
+		kinteract:    kint,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+		run: &params.Run{
+			Clients: clients.Clients{
+				Kube:           stdata.Kube,
+				PipelineAsCode: stdata.PipelineAsCode,
+				Log:            logger,
+			},
+			Info: info.Info{
+				Kube: &info.KubeOpts{
+					Namespace: "global",
+				},
+				Controller: &info.ControllerInfo{
+					GlobalRepository: "global-repo",
+				},
+				Pac: info.NewPacOpts(),
+			},
+		},
+	}
+
+	cachedRepo, err := informers.Repository.Lister().Repositories(repo.Namespace).Get(repo.Name)
+	assert.NilError(t, err)
+	_, event, err := r.initGitProviderClient(ctx, logger, cachedRepo, pr)
+	assert.NilError(t, err)
+	assert.Equal(t, "test-token", event.Provider.Token)
+
+	cachedRepo, err = informers.Repository.Lister().Repositories(repo.Namespace).Get(repo.Name)
+	assert.NilError(t, err)
+	assert.Assert(t, cachedRepo.Spec.GitProvider.Secret == nil, "global secret should not mutate the cached Repository")
 }
 
 func TestUpdatePipelineRunState(t *testing.T) {

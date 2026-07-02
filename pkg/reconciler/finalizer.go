@@ -46,12 +46,9 @@ func (r *Reconciler) FinalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 			logger.Errorf("failed to report deleted pipeline run as cancelled: %w", err)
 		}
 
-		r.secretNS = repo.GetNamespace()
-		if r.globalRepo, err = r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && r.globalRepo != nil {
-			if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && r.globalRepo.Spec.GitProvider != nil && r.globalRepo.Spec.GitProvider.Secret != nil {
-				r.secretNS = r.globalRepo.GetNamespace()
-			}
-			repo.Spec.Merge(r.globalRepo.Spec)
+		if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
+			repo = copyRepositoryForMerge(repo)
+			repo.Spec.Merge(globalRepo.Spec)
 		}
 		logger = logger.With("namespace", repo.Namespace)
 		next := r.qm.RemoveAndTakeItemFromQueue(repo, pr)
