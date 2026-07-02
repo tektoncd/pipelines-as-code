@@ -11,11 +11,11 @@ metadata:
     # The branch or tag we target (i.e., main, refs/tags/*)
     pipelinesascode.tekton.dev/on-target-branch: "main"
 
-    # Fetch the git-clone task from hub, we can reference later on it
-    # with taskRef and it will automatically be embedded into our pipeline.
+    # Fetch the git-clone task with a Pipelines-as-Code remote task annotation.
+    # Pipelines-as-Code will inline it into the PipelineRun before execution.
     pipelinesascode.tekton.dev/task: "git-clone"
 
-    # Use maven task from hub
+    # Use maven from Artifact Hub with another remote task annotation.
     #
     # pipelinesascode.tekton.dev/task-1: "maven"
 

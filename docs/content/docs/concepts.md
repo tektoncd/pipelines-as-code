@@ -207,9 +207,10 @@ For each pipeline definition found, the controller checks whether:
 
 If your pipeline references external tasks, the controller:
 
-- Identifies tasks referenced via `resolver: hub` or `resolver: bundles`
-- Fetches task definitions from Tekton Hub, Artifact Hub, or OCI bundles
-- Inlines remote tasks into the pipeline definition
+- Reads remote task annotations such as `pipelinesascode.tekton.dev/task`
+- Fetches task definitions from Artifact Hub, remote URLs, or repository files
+- Inlines fetched tasks that are referenced by plain `taskRef.name`
+- Leaves `taskRef.resolver` references for Tekton to resolve in the cluster
 - Validates the complete pipeline
 
 ### 8. Variable substitution
@@ -331,13 +332,13 @@ metadata:
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/on-path-change: "[src/**, tests/**]"
+    pipelinesascode.tekton.dev/task: "[git-clone, golang-test]"
 spec:
   pipelineSpec:
     tasks:
     - name: fetch-repository
       taskRef:
         name: git-clone
-        resolver: hub
       workspaces:
       - name: output
         workspace: source
@@ -350,7 +351,6 @@ spec:
       runAfter: [fetch-repository]
       taskRef:
         name: golang-test
-        resolver: hub
       workspaces:
       - name: source
         workspace: source

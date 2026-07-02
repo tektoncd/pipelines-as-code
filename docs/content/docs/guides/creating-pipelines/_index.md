@@ -9,7 +9,7 @@ Pipelines-as-Code follows the standard Tekton template format as closely as poss
 
 Using its [resolver]({{< relref "/docs/guides/pipeline-resolution" >}}), Pipelines-as-Code bundles each PipelineRun with all its referenced Tasks into a single self-contained PipelineRun with no external dependencies.
 
-To check out the commit that triggered the webhook, clone the repository at that ref inside your pipeline. In most cases, you can reuse the [git-clone](https://github.com/tektoncd-catalog/git-clone/tree/main/task/git-clone) task from the [tektoncd/catalog](https://github.com/tektoncd-catalog/git-clone/tree/main/task/git-clone).
+To check out the commit that triggered the webhook, clone the repository at that ref inside your pipeline. In most cases, you can reuse the [git-clone](https://artifacthub.io/packages/tekton-task/git-clone/git-clone) task from Artifact Hub.
 
 To inject parameters such as the commit SHA and repository URL, Pipelines-as-Code provides [dynamic variables](#dynamic-variables) written as `{{ var }}` that you can use anywhere in your template.
 
@@ -23,7 +23,7 @@ PipelineRuns with duplicate names are never matched.
 
 Dynamic variables are placeholder tokens written as `{{ variable_name }}` that Pipelines-as-Code replaces with real values at runtime. They let you write generic PipelineRun templates that automatically adapt to each event without hardcoding repository URLs, branch names, or commit SHAs.
 
-The following table lists all available dynamic variables. The most commonly used are `revision` and `repo_url`, which provide the commit SHA and repository URL being tested. Use these with the [git-clone](https://artifacthub.io/packages/tekton-task/tekton-catalog-tasks/git-clone) task to check out the code under test.
+The following table lists all available dynamic variables. The most commonly used are `revision` and `repo_url`, which provide the commit SHA and repository URL being tested. Use these with the [git-clone](https://artifacthub.io/packages/tekton-task/git-clone/git-clone) task to check out the code under test.
 
 | Variable | Description | Example | Example Output |
 | --- | --- | --- | --- |

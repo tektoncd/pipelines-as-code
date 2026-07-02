@@ -225,12 +225,32 @@ The resolver processes pipeline definitions:
 1. Fetch `.tekton/` directory from the repository at the event revision
 2. Parse YAML files for PipelineRun resources
 3. Match pipelines to the event
-4. Resolve remote tasks using `resolver` field:
+4. Resolve remote tasks from Pipelines-as-Code annotations and inline them into the PipelineRun:
+
+   ```yaml
+   metadata:
+     annotations:
+       pipelinesascode.tekton.dev/task: "git-clone"
+   spec:
+     pipelineSpec:
+       tasks:
+       - name: fetch-repository
+         taskRef:
+           name: git-clone
+   ```
+
+   Task references that set `taskRef.resolver` are left for Tekton to resolve in the cluster:
 
    ```yaml
    taskRef:
-     name: git-clone
-     resolver: hub  # or bundles
+     resolver: hub
+     params:
+       - name: catalog
+         value: git-clone
+       - name: kind
+         value: task
+       - name: name
+         value: git-clone
    ```
 
 5. Substitute template variables:

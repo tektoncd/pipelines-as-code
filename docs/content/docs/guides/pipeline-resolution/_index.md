@@ -68,6 +68,17 @@ pipelinesascode.tekton.dev/task: "git-clone"
 
 By default, this syntax installs the task from Artifact Hub.
 
+This annotation is Pipelines-as-Code syntax. In your Pipeline or embedded PipelineRun, reference the fetched task by name only:
+
+```yaml
+tasks:
+  - name: fetch-repository
+    taskRef:
+      name: git-clone
+```
+
+Do not add `resolver: hub` to this `taskRef`. `resolver: hub` is native Tekton resolver syntax; if you combine it with `name: git-clone`, Tekton treats the name as a resolver URI and rejects it because `git-clone` is not a URI.
+
 Examples:
 
 ```yaml
@@ -95,6 +106,32 @@ To pin a specific version of a task, append a colon and the version number:
 # Using specific version from Artifact Hub
 pipelinesascode.tekton.dev/task: "git-clone:0.9.0"
 ```
+
+#### Native Tekton `hub` resolver syntax for Artifact Hub
+
+If you want Tekton in the cluster to resolve the task from Artifact Hub instead of Pipelines-as-Code fetching and inlining it, use the native `resolver: hub` syntax with resolver parameters and omit `taskRef.name`.
+
+For the current Artifact Hub `git-clone` package, use this form:
+
+```yaml
+tasks:
+  - name: fetch-repository
+    taskRef:
+      resolver: hub
+      params:
+        - name: catalog
+          value: git-clone
+        - name: type
+          value: artifact
+        - name: kind
+          value: task
+        - name: name
+          value: git-clone
+        - name: version
+          value: "1.7.0"
+```
+
+Pipelines-as-Code does not inline a task reference that sets `taskRef.resolver`; it leaves that reference for Tekton to resolve in the cluster.
 
 #### Custom hub support for tasks
 
