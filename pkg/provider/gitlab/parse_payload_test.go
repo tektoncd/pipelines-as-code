@@ -514,3 +514,76 @@ func TestParsePayload(t *testing.T) {
 		})
 	}
 }
+
+func TestInitGitLabClientSkipsTokenAutoRotation(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	logger, _ := logger.GetLogger()
+	client, mux, tearDown := thelp.Setup(t)
+	defer tearDown()
+
+	introspectionCalled := false
+	mux.HandleFunc("/personal_access_tokens/self", func(rw http.ResponseWriter, _ *http.Request) {
+		introspectionCalled = true
+		fmt.Fprint(rw, `{"id": 1, "active": true, "expires_at": "2000-01-01"}`)
+	})
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "fakeNs",
+			Name:      "gitlab-webhook-config",
+		},
+		Data: map[string][]byte{
+			"provider.token": []byte("glpat_124ABC"),
+			"webhook.secret": []byte("shhhhhhit'ssecret"),
+		},
+	}
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "fakeNs",
+			Name:      "repo",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			URL: "https://foo.com",
+			GitProvider: &v1alpha1.GitProvider{
+				URL:           client.BaseURL().String(),
+				Secret:        &v1alpha1.Secret{Name: "gitlab-webhook-config"},
+				WebhookSecret: &v1alpha1.Secret{Name: "gitlab-webhook-config"},
+			},
+		},
+	}
+	run := &params.Run{
+		Info: info.NewInfo(),
+	}
+	run.Info.Kube.Namespace = "fakeNs"
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo},
+		Secret:       []*corev1.Secret{secret},
+	})
+	run.Clients = clients.Clients{
+		Kube:           stdata.Kube,
+		PipelineAsCode: stdata.PipelineAsCode,
+		Log:            logger,
+	}
+
+	v := &Provider{
+		run: run,
+		pacInfo: &info.PacOpts{
+			Settings: settings.Settings{
+				ApplicationName: settings.PACApplicationNameDefaultValue,
+			},
+		},
+		eventEmitter: events.NewEventEmitter(run.Clients.Kube, logger),
+		Logger:       logger,
+	}
+	event := info.NewEvent()
+	event.URL = "https://foo.com"
+	event.Organization = "hello"
+	event.Repository = "project"
+	event.SourceProjectID = 200
+	event.TargetProjectID = 200
+
+	_, err := v.initGitLabClient(ctx, event)
+	assert.NilError(t, err)
+	assert.Assert(t, v.gitlabClient != nil, "gitlab client should be initialized")
+	assert.Assert(t, !introspectionCalled, "token rotation must not run before webhook validation")
+}

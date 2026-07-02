@@ -490,6 +490,8 @@ func TestSetupAuthenticatedClientGlobalRepoMergesSettings(t *testing.T) {
 	// After merge, the repo should have secret from global repo
 	assert.Assert(t, repo.Spec.GitProvider.Secret != nil, "secret should be merged from global repo")
 	assert.Equal(t, "global-token-value", event.Provider.Token, "token should come from global repo secret")
+	assert.Equal(t, "default", event.Provider.GitProviderSecretNamespace, "secret namespace should be tracked")
+	assert.Assert(t, event.Provider.GitProviderSecretFromGlobalRepo, "secret should be marked as inherited from global repo")
 }
 
 // TestSetupAuthenticatedClient_WebhookValidation tests webhook secret validation.

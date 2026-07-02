@@ -20,13 +20,14 @@ const (
 )
 
 type SecretFromRepository struct {
-	K8int       kubeinteraction.Interface
-	Config      *info.ProviderConfig
-	Event       *info.Event
-	Repo        *apipac.Repository
-	WebhookType string
-	Namespace   string
-	Logger      *zap.SugaredLogger
+	K8int                 kubeinteraction.Interface
+	Config                *info.ProviderConfig
+	Event                 *info.Event
+	Repo                  *apipac.Repository
+	WebhookType           string
+	Namespace             string
+	InheritedGlobalSecret bool
+	Logger                *zap.SugaredLogger
 }
 
 // Get grab the secret from the repository CRD.
@@ -58,6 +59,8 @@ func (s *SecretFromRepository) Get(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	s.Event.Provider.GitProviderSecretNamespace = s.Namespace
+	s.Event.Provider.GitProviderSecretFromGlobalRepo = s.InheritedGlobalSecret
 
 	// if we don't have a provider token in repo crd we won't be able to do much with it
 	// let it go and it will fail later on when doing SetClients or success if it was done from a github app

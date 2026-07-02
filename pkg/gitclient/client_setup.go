@@ -49,9 +49,11 @@ func SetupAuthenticatedClient(
 	// Determine secret namespace BEFORE merging repos
 	// This preserves the ability to detect when credentials come from global repo
 	secretNS := repo.GetNamespace()
+	inheritedGlobalSecret := false
 	if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil &&
 		globalRepo != nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
 		secretNS = globalRepo.GetNamespace()
+		inheritedGlobalSecret = true
 	}
 	logger.Debugf("setupAuthenticatedClient: repo=%s/%s secret_namespace=%s", repo.GetNamespace(), repo.GetName(), secretNS)
 	// merge global repo settings into local repo (after determining secret namespace)
@@ -67,13 +69,14 @@ func SetupAuthenticatedClient(
 	} else {
 		// Non-GitHub App providers use git_provider section in Repository spec
 		scm := secrets.SecretFromRepository{
-			K8int:       kint,
-			Config:      vcx.GetConfig(),
-			Event:       event,
-			Repo:        repo,
-			WebhookType: pacInfo.WebhookType,
-			Logger:      logger,
-			Namespace:   secretNS,
+			K8int:                 kint,
+			Config:                vcx.GetConfig(),
+			Event:                 event,
+			Repo:                  repo,
+			WebhookType:           pacInfo.WebhookType,
+			Logger:                logger,
+			Namespace:             secretNS,
+			InheritedGlobalSecret: inheritedGlobalSecret,
 		}
 		if err := scm.Get(ctx); err != nil {
 			return fmt.Errorf("cannot get secret from repository: %w", err)
