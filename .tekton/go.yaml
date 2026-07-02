@@ -121,6 +121,7 @@ spec:
                 #!/usr/bin/env bash
                 set -eux
                 make lint-go
+                make lint-fmt
             - name: cache-upload
               ref:
                 resolver: http

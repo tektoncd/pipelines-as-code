@@ -90,7 +90,7 @@ html-coverage: ## generate html coverage
 
 ##@ Linting
 .PHONY: lint
-lint: lint-go lint-yaml lint-md lint-python lint-shell lint-e2e-naming ## run all linters
+lint: lint-go lint-fmt lint-yaml lint-md lint-python lint-shell lint-e2e-naming ## run all linters
 
 .PHONY: lint-e2e-naming
 lint-e2e-naming: ## check e2e test naming conventions
@@ -104,6 +104,11 @@ lint-go: ## runs go linter on all go files
 							--max-issues-per-linter=0 \
 							--max-same-issues=0 \
 							--timeout $(TIMEOUT_UNIT)
+
+.PHONY: lint-fmt
+lint-fmt: ## check go files are formatted with gofumpt
+	@echo "Checking Go formatting with gofumpt..."
+	@$(GOLANGCI_LINT) fmt --diff ./pkg/... ./test/... ./cmd/... || { echo "Go files are not formatted, run 'make fumpt' to fix"; exit 1; }
 
 .PHONY: lint-yaml
 lint-yaml: ## runs yamllint on all yaml files
