@@ -223,9 +223,6 @@ run_e2e_tests() {
   env GODEBUG=asynctimerchan=1 \
     gotestsum --format standard-verbose --jsonfile "${raw_output}" -- \
     -race -failfast -timeout 45m -count=1 -tags=e2e -run "${test_pattern}" ./test || test_status=$?
-  if ! TESTRR_RUN_LABEL="${TESTRR_RUN_LABEL:-gha-e2e-${target}}" ./hack/upload-testrr.sh "${raw_output}"; then
-    echo "::warning::testrr upload failed; continuing without failing GitHub Actions"
-  fi
   return "${test_status}"
 }
 

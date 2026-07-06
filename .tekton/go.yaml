@@ -70,24 +70,6 @@ spec:
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
-                - name: TESTRR_URL
-                  value: "https://testrr.pipelinesascode.com"
-                - name: TESTRR_PROJECT
-                  value: "pipelinesascode"
-                - name: TESTRR_USERNAME
-                  value: "pac"
-                - name: TESTRR_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: testrr-secret
-                      key: password
-                      optional: true
-                - name: TESTRR_COMMIT_SHA
-                  value: "{{revision}}"
-                - name: TESTRR_BUILD_ID
-                  value: "$(context.pipelineRun.name)"
-                - name: TESTRR_RUN_LABEL
-                  value: "pac-unit-tests"
                 - name: GH_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -100,11 +82,8 @@ spec:
                 git config --global --add safe.directory $(workspaces.source.path)
                 ./hack/install-gotestsum.sh 1.13.0 "$(go env GOPATH)/bin"
                 test_status=0
-                gotestsum --format standard-verbose --jsonfile /tmp/testrr-unit-go.json -- \
+                gotestsum --format standard-verbose -- \
                   -coverprofile=coverage.txt -covermode=atomic ./pkg/... || test_status=$?
-                if ! ./hack/upload-testrr.sh /tmp/testrr-unit-go.json; then
-                  echo "WARNING: testrr upload failed; continuing without failing Tekton"
-                fi
                 exit "${test_status}"
 
             - name: lint

@@ -117,15 +117,6 @@ jobs:
       TEST_BITBUCKET_DATA_CENTER_TOKEN: ${{ secrets.BITBUCKET_DATA_CENTER_TOKEN }}
       TEST_BITBUCKET_DATA_CENTER_USER: pipelines
       TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_DATA_CENTER_WEBHOOK_SECRET }}
-      TESTRR_URL: https://testrr.pipelinesascode.com
-      TESTRR_PROJECT: pipelinesascode
-      TESTRR_USERNAME: pac
-      TESTRR_PASSWORD: ${{ secrets.TESTRR_PASSWORD }}
-      TESTRR_BRANCH: ${{ github.head_ref || github.ref_name }}
-      TESTRR_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      TESTRR_BUILD_ID: ${{ github.run_id }}
-      TESTRR_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      TESTRR_RUN_LABEL: gha-e2e-${{ matrix.provider }}
     steps:
       # Safe: external contributor PRs do not run this workflow without
       # an explicit maintainer ok-to-test approval (see the permission
