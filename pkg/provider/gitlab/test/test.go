@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -96,7 +97,8 @@ func MuxDiscussionsNote(mux *http.ServeMux, pid, mrID int, author string, author
 }
 
 func MuxGetFile(mux *http.ServeMux, pid int, fname, content string) {
-	mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/%s/raw", pid, fname), func(rw http.ResponseWriter, _ *http.Request) {
+	escapedFname := strings.ReplaceAll(url.PathEscape(fname), ".", "%2E")
+	mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/%s/raw", pid, escapedFname), func(rw http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(rw, content)
 	})
 }

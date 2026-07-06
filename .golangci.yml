@@ -1,136 +1,114 @@
-issues:
-  exclude-dirs:
-    - vendor
-    - pkg/provider/gitea/structs
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - gosec
-    # hopefully we can remove this when https://github.com/golangci/golangci-lint/issues/4697 is fixed
-    - path: pkg/resolve/resolve.go
-      text: "don't use `init` function"
+version: "2"
 run:
   build-tags:
     - e2e
-linters-settings:
-  govet:
-    disable:
-      - inline
-  gocritic:
-    disabled-checks:
-      - unlambda
-  errcheck:
-    exclude-functions:
-      - (*github.com/tektoncd/pipeline/vendor/go.uber.org/zap.SugaredLogger).Sync
-      - flag.Set
-      - logger.Sync
-      - fmt.Fprintf
-      - fmt.Fprintln
-      - (io.Closer).Close
-      - updateConfigMap
-  gofumpt:
-    extra-rules: true
 linters:
   enable:
     - asasalint
     - asciicheck
     - bidichk
     - bodyclose
-    #- containedctx
-    #- contextcheck
-    #- cyclop
     - decorder
-    #- depguard
     - dogsled
     - dupl
     - dupword
     - durationcheck
-    - errcheck
     - errchkjson
     - errname
     - errorlint
-    # - execinquery
     - exhaustive
-    #- exhaustruct
-    - exportloopref
     - forbidigo
-    - forcetypeassert
-    #- funlen
-    #- gci
+    #- forcetypeassert
     - ginkgolinter
     - gocheckcompilerdirectives
-    #- gochecknoglobals
     - gochecknoinits
     - gochecksumtype
-    #- gocognit
-    #- goconst
     - gocritic
-    #- gocyclo
     - godot
-    #- godox
-    #- goerr113
-    #- gofmt
-    - gofumpt
     - goheader
-    - goimports
-    #- gomnd
-    #- gomoddirectives
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
-    - gosimple
     - gosmopolitan
-    - govet
     - grouper
     - importas
-    #- inamedparam
-    #- interfacebloat
-    #- ireturn
-    #- lll
     - loggercheck
-    #- maintidx
     - makezero
     - mirror
     - misspell
-    #- musttag
     - nakedret
-    #- nestif
     - nilerr
-    #- nilnil
-    #- nlreturn
-    - noctx
-    #- nolintlint
-    #- nonamedreturns
+    #- noctx
     - nosprintfhostport
-    #- paralleltest
-    #- perfsprint
-    - prealloc
+    #- prealloc
     - predeclared
     - promlinter
     - protogetter
     - reassign
     - revive
-    #- rowserrcheck
     - sloglint
-    #- sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagalign
-    #- tagliatelle
-    - tenv
     - testableexamples
-    # - testifylint
-    #- testpackage
-    #- thelper
     - tparallel
-    #- unconvert
     - unparam
-    - unused
     - usestdlibvars
-    #- varnamelen
-    #- wastedassign
     - whitespace
-    #- wrapcheck
-    #- wsl
     - zerologlint
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*github.com/tektoncd/pipeline/vendor/go.uber.org/zap.SugaredLogger).Sync
+        - flag.Set
+        - logger.Sync
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - updateConfigMap
+    gocritic:
+      disabled-checks:
+        - unlambda
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gosec
+        path: _test\.go
+      - path: pkg/resolve/resolve.go
+        text: don't use `init` function
+      - linters:
+          - gosec
+        text: "G706:"
+      - linters:
+          - staticcheck
+        text: "ST1018:"
+    paths:
+      - vendor
+      - pkg/provider/gitea/structs
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra-rules: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - pkg/provider/gitea/structs
+      - third_party$
+      - builtin$
+      - examples$

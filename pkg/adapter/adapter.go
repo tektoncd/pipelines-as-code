@@ -209,7 +209,7 @@ func (l listener) processRes(processEvent bool, provider provider.Interface, log
 	if err != nil {
 		errStr := fmt.Sprintf("got error while processing : %v", err)
 		logger.Error(errStr)
-		return nil, logger, fmt.Errorf(errStr)
+		return nil, logger, fmt.Errorf("%s", errStr)
 	}
 
 	if skipReason != "" {

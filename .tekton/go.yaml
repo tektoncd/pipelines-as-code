@@ -27,10 +27,18 @@ spec:
           steps:
             - name: fetch-repo
               ref:
-                resolver: http
+                resolver: hub
                 params:
-                  - name: url
-                    value: https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                  - name: catalog
+                    value: git-clone-stepaction
+                  - name: type
+                    value: artifact
+                  - name: kind
+                    value: stepaction
+                  - name: name
+                    value: git-clone
+                  - name: version
+                    value: "1.7.0"
               params:
                 - name: output-path
                   value: $(workspaces.source.path)
@@ -56,14 +64,14 @@ spec:
             - name: unittest
               # we get bumped out when usingh the official image with docker.io
               # ratelimit so workaround this.
-              image: golang:1.21
+              image: golang:1.25.11
               env:
                 - name: GOCACHE
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
                 - name: GOTOOLCHAIN
-                  value: go1.21.13
+                  value: local
               workingDir: $(workspaces.source.path)
               script: |
                 #!/usr/bin/env bash
@@ -73,7 +81,7 @@ spec:
                 make test
 
             - name: coverage
-              image: golang:1.21
+              image: golang:1.25.11
               env:
                 - name: CODECOV_TOKEN
                   valueFrom:
@@ -85,7 +93,7 @@ spec:
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
                 - name: GOTOOLCHAIN
-                  value: go1.21.13
+                  value: local
                 - name: GITHUB_REPOSITORY
                   value: "{{repo_owner}}/{{repo_name}}"
                 - name: GITHUB_PULL_REQUEST_ID
@@ -101,7 +109,7 @@ spec:
                 chmod +x ./codecov
                 ./codecov -P $GITHUB_PULL_REQUEST_ID -C {{revision}} -v
             - name: lint
-              image: golang:1.21
+              image: golang:1.25.11
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
@@ -109,7 +117,7 @@ spec:
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
                 - name: GOTOOLCHAIN
-                  value: go1.21.13
+                  value: local
                 - name: GOLANGCILINT_CACHE
                   value: $(workspaces.source.path)/go-build-cache/golangci-cache
                 - name: GOFLAGS

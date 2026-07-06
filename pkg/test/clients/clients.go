@@ -51,7 +51,7 @@ type Data struct {
 
 // SeedTestData returns Clients and Informers populated with the
 // given Data.
-func SeedTestData(t *testing.T, ctx context.Context, d Data) (Clients, Informers) { //nolint: golint, revive
+func SeedTestData(t *testing.T, ctx context.Context, d Data) (Clients, Informers) { //nolint:revive
 	c := Clients{
 		PipelineAsCode: fakepacclient.Get(ctx),
 		Kube:           fakekubeclient.Get(ctx),
