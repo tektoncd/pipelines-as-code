@@ -233,7 +233,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 		return matchedPRs, nil
 	}
 
-	return nil, fmt.Errorf(buildAvailableMatchingAnnotationErr(event, pruns))
+	return nil, fmt.Errorf("%s", buildAvailableMatchingAnnotationErr(event, pruns))
 }
 
 func buildAvailableMatchingAnnotationErr(event *info.Event, pruns []*tektonv1.PipelineRun) string {

@@ -659,7 +659,7 @@ func TestProviderGetExistingCheckRunID(t *testing.T) {
 				Client: client,
 			}
 			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA), func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = fmt.Fprintf(w, tt.jsonret)
+				_, _ = fmt.Fprintf(w, "%s", tt.jsonret)
 			})
 
 			got, err := v.getExistingCheckRunID(ctx, event, provider.StatusOpts{

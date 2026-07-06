@@ -1,6 +1,6 @@
 TARGET_NAMESPACE=pipelines-as-code
-GOLANGCI_LINT_VERSION ?= v1.59.1
-GO_TOOLCHAIN ?= go1.21.13
+GOLANGCI_LINT_VERSION ?= v2.12.2
+GO_TOOLCHAIN ?= go1.25.11
 GOFUMPT=gofumpt
 TKN_BINARY_NAME := tkn
 TKN_BINARY_URL := https://tekton.dev/docs/cli/\#installation
@@ -46,7 +46,7 @@ FORCE:
 .PHONY: vendor
 vendor:
 	@echo Generating vendor directory
-	@go mod tidy -compat=1.17 && go mod vendor
+	@go mod tidy -compat=1.25 && go mod vendor
 
 ##@ Build
 allbinaries: $(OUTPUT_DIR)/pipelines-as-code-controller $(OUTPUT_DIR)/pipelines-as-code-watcher $(OUTPUT_DIR)/tkn-pac ## compile all binaries

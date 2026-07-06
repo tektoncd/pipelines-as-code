@@ -1,4 +1,4 @@
-FROM golang:1.21 as builder
+FROM golang:1.25.11 as builder
 ARG BINARY_NAME=pipelines-as-code-controller
 COPY . /src
 WORKDIR /src

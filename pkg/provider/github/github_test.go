@@ -545,7 +545,7 @@ func TestGithubGetCommitInfo(t *testing.T) {
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/commits/%s",
 				tt.event.Organization, tt.event.Repository, tt.event.SHA), func(rw http.ResponseWriter, _ *http.Request) {
 				if tt.apiReply != "" {
-					fmt.Fprintf(rw, tt.apiReply)
+					fmt.Fprintf(rw, "%s", tt.apiReply)
 					return
 				}
 				fmt.Fprintf(rw, `{"html_url": "%s", "message": "%s"}`, tt.shaurl, tt.shatitle)
