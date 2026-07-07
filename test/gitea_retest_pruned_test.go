@@ -50,7 +50,6 @@ func TestGiteaRetestAfterPipelineRunPruning(t *testing.T) {
 	// Wait for both PipelineRuns to appear
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to appear")
 	err := twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
 		TargetSHA:   []string{formatting.CleanValueKubernetes(sha)},
@@ -60,7 +59,6 @@ func TestGiteaRetestAfterPipelineRunPruning(t *testing.T) {
 	// Wait for both PipelineRuns to finish (1 success + 1 failure)
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to finish")
 	_, err = twait.UntilPipelineRunsFinished(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,

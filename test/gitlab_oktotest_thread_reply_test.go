@@ -33,7 +33,6 @@ func TestGitlabOpsCommentInThreadReply(t *testing.T) {
 
 	// Wait for PipelineRun to succeed after the MR
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

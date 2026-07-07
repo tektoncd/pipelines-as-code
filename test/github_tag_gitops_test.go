@@ -112,7 +112,6 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 		assert.NilError(t, err)
 
 		waitOpts := twait.Opts{
-			RepoName:        targetNS,
 			Namespace:       targetNS,
 			MinNumberStatus: numberOfPRs,
 			PollTimeout:     twait.DefaultTimeout,

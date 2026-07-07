@@ -34,7 +34,6 @@ func TestGithubGHEMaxKeepRuns(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRuns to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,

@@ -131,7 +131,6 @@ func TestGithubGHESkipCITestCommand(t *testing.T) {
 
 	// Wait for PipelineRun to be created
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

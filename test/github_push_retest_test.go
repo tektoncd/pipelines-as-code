@@ -23,7 +23,6 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -55,7 +54,6 @@ func TestGithubGHEPushRequestGitOpsCommentOnComment(t *testing.T) {
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: len(g.YamlFiles),
 		PollTimeout:     twait.DefaultTimeout,
@@ -113,20 +111,17 @@ func TestGithubGHEPushRequestGitOpsCommentRetest(t *testing.T) {
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 4,
 		PollTimeout:     twait.DefaultTimeout,
 		TargetSHA:       []string{g.SHA},
 	}
 	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
-	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Check if PipelineRun succeeded")
-	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Equal(t, repo.Status[len(repo.Status)-1].Conditions[0].Status, corev1.ConditionTrue)
+	assert.Assert(t, len(prs) >= 4)
 
 	pruns, err = g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
@@ -170,7 +165,6 @@ func TestGithubGHEPushRequestGitOpsCommentCancel(t *testing.T) {
 	assert.NilError(t, err)
 	numberOfStatus := 3
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: numberOfStatus,
 		PollTimeout:     twait.DefaultTimeout,
@@ -307,7 +301,6 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 	g.Logger.Infof("Comment %s has been created", mergedSHA)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,

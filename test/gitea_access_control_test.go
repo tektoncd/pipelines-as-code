@@ -469,7 +469,6 @@ func TestGiteaPolicyAllowedOwnerFiles(t *testing.T) {
 
 	npr := tgitea.CreateForkPullRequest(t, topts, allowedCnx, "")
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

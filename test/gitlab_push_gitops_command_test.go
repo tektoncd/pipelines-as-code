@@ -45,7 +45,6 @@ func TestGitlabGitOpsCommandTestOnPush(t *testing.T) {
 	assert.NilError(t, err)
 
 	waitOpts := wait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     wait.DefaultTimeout,
@@ -110,7 +109,6 @@ func TestGitlabGitOpsCommandCancelOnPush(t *testing.T) {
 
 	numberOfStatus := 2
 	waitOpts := wait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: numberOfStatus,
 		PollTimeout:     wait.DefaultTimeout,
@@ -181,7 +179,6 @@ func TestGitlabGitOpsCommandTestOnTag(t *testing.T) {
 	topts.ParamsRun.Clients.Log.Infof("Commit comment %s has been created", cc.Note)
 
 	waitOpts := wait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: numberOfPRs,
 		PollTimeout:     wait.DefaultTimeout,

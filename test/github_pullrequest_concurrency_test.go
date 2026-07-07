@@ -206,7 +206,6 @@ func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, 
 	time.Sleep(5 * time.Second)
 
 	waitOpts := wait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     wait.DefaultTimeout,
