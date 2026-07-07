@@ -20,6 +20,8 @@ import (
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -180,6 +182,7 @@ func TestMaybeRotateToken(t *testing.T) {
 		wantSecretUpdate bool
 		wantErrContains  string
 		nilSecretData    bool
+		denySecretWrite  bool
 	}{
 		{
 			name: "token not expiring soon",
@@ -308,6 +311,25 @@ func TestMaybeRotateToken(t *testing.T) {
 			wantNewToken:     true,
 			wantSecretUpdate: true,
 		},
+		{
+			name: "secret write denied aborts rotation before revoking old token",
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/personal_access_tokens/self", func(rw http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						fmt.Fprintf(rw, `{"id": 1, "active": true, "expires_at": %q}`, expiringIn3Days)
+						return
+					}
+					t.Error("token rotation API must not be called when secret write access is denied")
+				})
+				mux.HandleFunc("/personal_access_tokens/self/rotate", func(_ http.ResponseWriter, _ *http.Request) {
+					t.Error("token rotation API must not be called when secret write access is denied")
+				})
+			},
+			denySecretWrite: true,
+			wantErr:         true,
+			wantErrContains: "old token untouched",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -335,6 +357,12 @@ func TestMaybeRotateToken(t *testing.T) {
 					},
 				},
 			})
+
+			if tt.denySecretWrite {
+				stdata.Kube.PrependReactor("update", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+					return true, nil, fmt.Errorf("secrets \"gitlab-token\" is forbidden")
+				})
+			}
 
 			run := &params.Run{
 				Clients: clients.Clients{
@@ -403,8 +431,27 @@ func TestMaybeRotateTokenSecretUpdateFails(t *testing.T) {
 	client, mux, tearDown := thelp.Setup(t)
 	defer tearDown()
 
-	// No secret seeded — the update will fail because the secret doesn't exist
-	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	// Secret exists so the pre-flight dry-run write check passes, but the
+	// real update after rotation fails via the reactor below.
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gitlab-token",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{"provider.token": []byte("old-token")},
+			},
+		},
+	})
+	updateCalls := 0
+	stdata.Kube.PrependReactor("update", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		updateCalls++
+		if updateCalls > 1 {
+			return true, nil, fmt.Errorf("secrets \"gitlab-token\" is forbidden")
+		}
+		return false, nil, nil
+	})
 
 	run := &params.Run{
 		Clients: clients.Clients{
@@ -462,7 +509,27 @@ func TestSetClientReturnsErrorWhenRotatedTokenCannotBeStored(t *testing.T) {
 	client, mux, tearDown := thelp.Setup(t)
 	defer tearDown()
 
-	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	// Secret exists so the pre-flight dry-run write check passes, but the
+	// real update after rotation fails via the reactor below.
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gitlab-token",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{"provider.token": []byte("old-token")},
+			},
+		},
+	})
+	updateCalls := 0
+	stdata.Kube.PrependReactor("update", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		updateCalls++
+		if updateCalls > 1 {
+			return true, nil, fmt.Errorf("secrets \"gitlab-token\" is forbidden")
+		}
+		return false, nil, nil
+	})
 	run := &params.Run{
 		Clients: clients.Clients{
 			Kube: stdata.Kube,

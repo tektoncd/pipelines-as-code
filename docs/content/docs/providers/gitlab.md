@@ -371,7 +371,7 @@ When both global and repository settings are present, the repository-level value
 ### How It Works
 
 1. When Pipelines-as-Code sets up the GitLab client (on webhook events and watcher reconciliation loops), it calls the GitLab [token self-introspection API](https://docs.gitlab.com/api/personal_access_tokens/#self-inform) to check the token's expiry. The result is cached per repository (for up to 1 hour, invalidated if the token changes), so repeated events don't each trigger an API call.
-2. If the token expires within 7 days, it calls the [self-rotation API](https://docs.gitlab.com/api/personal_access_tokens/#self-rotate) to rotate it.
+2. If the token expires within 7 days, Pipelines-as-Code first verifies (with a server-side dry-run update) that it can write the Kubernetes Secret referenced in the Repository CR; if not, the rotation is skipped and the old token stays valid. It then calls the [self-rotation API](https://docs.gitlab.com/api/personal_access_tokens/#self-rotate) to rotate the token.
 3. The old token is revoked and a new token (valid for 30 days) is returned.
 4. The new token is written back to the Kubernetes Secret referenced directly in the Repository CR.
 5. A Kubernetes event (`GitLabTokenRotated`) is emitted on the Repository CR.

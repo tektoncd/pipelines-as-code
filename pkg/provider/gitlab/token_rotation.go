@@ -158,6 +158,25 @@ func (v *Provider) rotateToken() (*gitlab.PersonalAccessToken, error) {
 	return nil, fmt.Errorf("rotate token: %w", err)
 }
 
+// verifySecretWriteAccess checks, via a server-side dry-run update with
+// unchanged data, that the controller can actually write the git provider
+// Secret. It is called before rotating the token so that a permission
+// failure aborts the rotation while the old token is still valid — once
+// rotated, the old token is revoked and a failed secret update would lose
+// the new token irrecoverably.
+func (v *Provider) verifySecretWriteAccess(ctx context.Context) error {
+	secretName := v.repo.Spec.GitProvider.Secret.Name
+	secretNS := v.repo.GetNamespace()
+	secret, err := v.run.Clients.Kube.CoreV1().Secrets(secretNS).Get(ctx, secretName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	_, err = v.run.Clients.Kube.CoreV1().Secrets(secretNS).Update(ctx, secret, metav1.UpdateOptions{
+		DryRun: []string{metav1.DryRunAll},
+	})
+	return err
+}
+
 func (v *Provider) updateKubeSecret(ctx context.Context, newToken string) error {
 	if !v.hasGitProviderSecret() {
 		return fmt.Errorf("repository CR has no git_provider.secret configured")
@@ -215,6 +234,14 @@ func (v *Provider) maybeRotateToken(ctx context.Context) (string, error) {
 
 	expiresAt := time.Time(*pat.ExpiresAt)
 	v.Logger.Infof("gitlab token expires at %s (within %v threshold), rotating", expiresAt.Format(time.RFC3339), rotationThreshold)
+
+	// Verify we can write the secret before rotating: once rotated the old
+	// token is revoked, so a permission failure must abort the rotation
+	// while the old token is still valid.
+	if err := v.verifySecretWriteAccess(ctx); err != nil {
+		return "", fmt.Errorf("skipping token rotation, cannot update secret %s/%s (old token untouched): %w",
+			v.repo.GetNamespace(), v.repo.Spec.GitProvider.Secret.Name, err)
+	}
 
 	newPat, err := v.rotateToken()
 	if err != nil {
