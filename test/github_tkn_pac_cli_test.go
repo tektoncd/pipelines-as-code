@@ -107,7 +107,6 @@ spec:
 
 	runcnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
-		RepoName:        targetNS,
 		Namespace:       targetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

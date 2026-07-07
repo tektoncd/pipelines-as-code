@@ -38,7 +38,6 @@ func TestGithubGHEPullRequestTest(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -78,7 +77,6 @@ func TestGithubGHEOnCommentAnnotation(t *testing.T) {
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -97,6 +95,7 @@ func TestGithubGHEOnCommentAnnotation(t *testing.T) {
 	assert.NilError(t, err)
 
 	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPR.Name), "step-task", *regexp.MustCompile(fmt.Sprintf(
-		"The event is %s", opscomments.OnCommentEventType.String())), "", 2, nil)
+		"The event is %s", opscomments.OnCommentEventType.String(),
+	)), "", 2, nil)
 	assert.NilError(t, err)
 }

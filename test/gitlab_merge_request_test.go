@@ -128,7 +128,6 @@ func TestGitlabOnLabel(t *testing.T) {
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -170,7 +169,6 @@ func TestGitlabOnComment(t *testing.T) {
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -200,7 +198,6 @@ func TestGitlabCancelInProgressOnChange(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for the pipelinerun to be created")
 	originalPipelineWaitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -226,7 +223,6 @@ func TestGitlabCancelInProgressOnChange(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for new pipeline to be created")
 	newPipelineWaitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -252,7 +248,6 @@ func TestGitlabCancelInProgressOnPRClose(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for the pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -760,7 +755,6 @@ func TestGitlabMergeRequestVariableSubs(t *testing.T) {
 
 	// Wait for PipelineRun creation
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,

@@ -55,7 +55,6 @@ func TestGitlabRetestAfterPipelineRunPruning(t *testing.T) {
 	// Wait for both PipelineRuns to appear
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to appear")
 	err = twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
 		TargetSHA:   []string{formatting.CleanValueKubernetes(mr.SHA)},
@@ -65,7 +64,6 @@ func TestGitlabRetestAfterPipelineRunPruning(t *testing.T) {
 	// Wait for both PipelineRuns to finish (1 success + 1 failure)
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to finish")
 	_, err = twait.UntilPipelineRunsFinished(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -145,7 +143,6 @@ func TestGitlabRetestAfterPipelineRunPruning(t *testing.T) {
 	// After /retest, we expect only 1 new PipelineRun (the failed one re-runs)
 	topts.ParamsRun.Clients.Log.Infof("Waiting for retest PipelineRun(s) to appear")
 	err = twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
 		TargetSHA:   []string{formatting.CleanValueKubernetes(mr.SHA)},
@@ -154,7 +151,6 @@ func TestGitlabRetestAfterPipelineRunPruning(t *testing.T) {
 
 	// Wait for the re-run pipeline to finish (it's pipelinerun-exit-1 so it will fail)
 	_, err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, tektonv1.PipelineRunReasonFailed, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -279,7 +275,6 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to appear for fork MR")
 	err = twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
 		TargetSHA:   []string{formatting.CleanValueKubernetes(mr.SHA)},
@@ -288,7 +283,6 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to finish for fork MR")
 	_, err = twait.UntilPipelineRunsFinished(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -364,7 +358,6 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for retest PipelineRun(s) to appear for fork MR")
 	err = twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
 		TargetSHA:   []string{formatting.CleanValueKubernetes(mr.SHA)},
@@ -373,7 +366,6 @@ func TestGitlabRetestAfterPipelineRunPruningFromFork(t *testing.T) {
 
 	topts.ParamsRun.Clients.Log.Infof("Waiting for re-run PipelineRun to complete for fork MR")
 	_, err = twait.UntilPipelineRunsFinished(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

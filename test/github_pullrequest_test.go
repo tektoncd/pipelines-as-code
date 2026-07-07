@@ -276,7 +276,6 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for one pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -293,7 +292,6 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts = twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -348,7 +346,6 @@ func TestGithubGHECancelInProgressPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -491,7 +488,6 @@ func TestGithubGHEPullRequestNoPipelineRunCancelledOnPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -569,7 +565,6 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPR(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -616,7 +611,6 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPush(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -730,7 +724,6 @@ func TestGithubGHEPullRequestCelPrefix(t *testing.T) {
 
 	// Wait for PipelineRun to succeed
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

@@ -46,7 +46,6 @@ func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRuns to succeed with custom prefix command")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -94,7 +93,6 @@ func TestGithubPullRequestCustomPrefixCancel(t *testing.T) {
 	defer g.TearDown(ctx, t)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,

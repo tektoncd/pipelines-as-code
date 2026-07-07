@@ -56,12 +56,18 @@ func SortPipelineRunsByCreationMillis(prs []v1.PipelineRun) {
 }
 
 type Opts struct {
-	RepoName        string
 	Namespace       string
 	MinNumberStatus int
 	PollTimeout     time.Duration
 	AdminNS         string
 	TargetSHA       []string
+}
+
+func minNumberStatus(opts Opts) int {
+	if opts.MinNumberStatus < 1 {
+		return 1
+	}
+	return opts.MinNumberStatus
 }
 
 func shaLabelSelector(shas []string) string {
@@ -97,6 +103,7 @@ func UntilMinPRAppeared(ctx context.Context, clients clients.Clients, opts Opts,
 func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
+	minStatus := minNumberStatus(opts)
 	var matched []v1.PipelineRun
 	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
 		listOpts := metav1.ListOptions{}
@@ -108,8 +115,8 @@ func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts 
 			return true, err
 		}
 
-		clients.Log.Infof("waiting for pipelinerun to be created: selector sha=%v, MinNumberStatus=%d pr.Items=%d", opts.TargetSHA, opts.MinNumberStatus, len(prs.Items))
-		if len(prs.Items) >= opts.MinNumberStatus {
+		clients.Log.Infof("waiting for pipelinerun to be created: selector sha=%v, MinNumberStatus=%d pr.Items=%d", opts.TargetSHA, minStatus, len(prs.Items))
+		if len(prs.Items) >= minStatus {
 			matched = prs.Items
 			SortPipelineRunsByCreationMillis(matched)
 			return true, nil
@@ -119,11 +126,17 @@ func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts 
 }
 
 // UntilPipelineRunsFinished waits until at least MinNumberStatus PipelineRuns
-// have reached a terminal state (Succeeded, Failed, or Cancelled).
+// have reached a terminal state (Succeeded, Failed, or Cancelled) AND have
+// been fully reported by the PaC watcher (state annotation set to completed
+// or failed). The watcher patches the state annotation as its last action,
+// after all status reporting and annotation patching (log-url, check-run-id,
+// ...), so waiting on it guarantees those annotations are present — the same
+// ordering the old Repository.Status-based wait provided.
 // Results are sorted by completion time ascending (oldest first, newest last).
 func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
+	minStatus := minNumberStatus(opts)
 	var matched []v1.PipelineRun
 	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
 		listOpts := metav1.ListOptions{}
@@ -137,14 +150,17 @@ func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opt
 
 		var finished []v1.PipelineRun
 		for _, pr := range prs.Items {
-			if cond := pr.Status.GetCondition(apis.ConditionSucceeded); cond != nil && cond.Status != corev1.ConditionUnknown {
+			cond := pr.Status.GetCondition(apis.ConditionSucceeded)
+			state := pr.GetAnnotations()[keys.State]
+			if cond != nil && cond.Status != corev1.ConditionUnknown &&
+				(state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed) {
 				finished = append(finished, pr)
 			}
 		}
 
 		clients.Log.Infof("still waiting for %d pipelinerun(s) to finish in %s namespace (finished=%d, total=%d)",
-			opts.MinNumberStatus, opts.Namespace, len(finished), len(prs.Items))
-		if len(finished) >= opts.MinNumberStatus {
+			minStatus, opts.Namespace, len(finished), len(prs.Items))
+		if len(finished) >= minStatus {
 			SortPipelineRunsByCompletionMillis(finished)
 			matched = finished
 			return true, nil
@@ -157,6 +173,7 @@ func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opt
 func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, desiredReason v1.PipelineRunReason, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
 	defer cancel()
+	minStatus := minNumberStatus(opts)
 	var matched []v1.PipelineRun
 	return matched, kubeinteraction.PollImmediateWithContext(ctx, opts.PollTimeout, func() (bool, error) {
 		listOpts := metav1.ListOptions{}
@@ -175,8 +192,8 @@ func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, des
 			}
 		}
 
-		clients.Log.Infof("still waiting for %d pipelinerun(s) to have reason %s in %s namespace", opts.MinNumberStatus, desiredReason.String(), opts.Namespace)
-		if len(prsWithReason) >= opts.MinNumberStatus {
+		clients.Log.Infof("still waiting for %d pipelinerun(s) to have reason %s in %s namespace", minStatus, desiredReason.String(), opts.Namespace)
+		if len(prsWithReason) >= minStatus {
 			matched = prsWithReason
 			SortPipelineRunsByCreationMillis(matched)
 			return true, nil

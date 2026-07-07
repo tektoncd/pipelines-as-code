@@ -90,7 +90,6 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	prs, err := twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -141,7 +140,6 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	_, err = twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -187,7 +185,6 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed (null head_branch resolved from SHA)")
 	prs, err = twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 3,
 		PollTimeout:     twait.DefaultTimeout,

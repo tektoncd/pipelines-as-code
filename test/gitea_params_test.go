@@ -125,7 +125,6 @@ func TestGiteaRetestPreservesSourceURL(t *testing.T) {
 
 	tgitea.PostCommentOnPullRequest(t, topts, fmt.Sprintf("/retest %s", originalPRName))
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -307,7 +306,6 @@ func TestGiteaGlobalRepoParams(t *testing.T) {
 	defer f()
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -387,7 +385,6 @@ func TestGiteaGlobalRepoUseLocalDef(t *testing.T) {
 	defer f()
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -478,7 +475,6 @@ func TestGiteaParamsOnRepoCR(t *testing.T) {
 
 	// Wait for PipelineRun to succeed
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -489,7 +485,8 @@ func TestGiteaParamsOnRepoCR(t *testing.T) {
 	assert.NilError(t,
 		twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=params",
 			prs[0].Name), "step-test-params-value", *regexp.MustCompile(
-			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}"), "", 2, nil))
+			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}",
+		), "", 2, nil))
 }
 
 // TestGiteaParamsBodyHeadersCEL Test that we can access the pull request body and headers in params
@@ -512,7 +509,6 @@ func TestGiteaParamsBodyHeadersCEL(t *testing.T) {
 	defer f()
 
 	prs, err := twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -540,7 +536,6 @@ my email is a true beauty and like groot, I AM pac`
 	assert.Assert(t, merged)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
@@ -552,7 +547,6 @@ my email is a true beauty and like groot, I AM pac`
 
 	// check we have two PipelineRuns: the previous pull request and new one on push
 	prs, err = twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -628,7 +622,6 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	assert.Assert(t, merged)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
@@ -671,7 +664,6 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	assert.Assert(t, merged)
 
 	waitOpts = twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 4, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,

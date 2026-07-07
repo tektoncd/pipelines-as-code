@@ -41,7 +41,6 @@ func TestGithubGHEPullRequestGitopsCommentRetest(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -79,7 +78,6 @@ func TestGithubGHEPullRequestGitopsCommentCancel(t *testing.T) {
 		&github.IssueComment{Body: github.Ptr("/test pr-gitops-comment")},
 	)
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 3,
 		PollTimeout:     twait.DefaultTimeout,
@@ -97,7 +95,6 @@ func TestGithubGHEPullRequestGitopsCommentCancel(t *testing.T) {
 	assert.NilError(t, err)
 
 	cancelWaitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     90 * time.Second,
@@ -152,7 +149,6 @@ func TestGithubGHERetestWithMultipleFailedPipelineRuns(t *testing.T) {
 	defer g.TearDown(ctx, t)
 
 	_, err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		TargetSHA:       []string{g.SHA},

@@ -547,7 +547,6 @@ func TestGiteaConfigMaxKeepRun(t *testing.T) {
 	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
@@ -657,7 +656,6 @@ func TestGiteaConfigCancelInProgressAfterPRClosed(t *testing.T) {
 
 	time.Sleep(3 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetRefName,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -884,7 +882,6 @@ func TestGiteaConcurrencyOrderedExecution(t *testing.T) {
 	defer f()
 
 	prs, err := twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 3,
 		PollTimeout:     twait.DefaultTimeout,
@@ -1050,7 +1047,6 @@ func TestGiteaOnPullRequestLabels(t *testing.T) {
 	tgitea.AddLabelToIssue(t, topts, "bug")
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
@@ -1349,7 +1345,6 @@ func TestGiteaPushToTagGreedy(t *testing.T) {
 	scmOpts.TargetRefName = "refs/tags/v1.0.0"
 	_ = scm.PushFilesToRefGit(t, scmOpts, map[string]string{"README.md": "hello new version from tag"})
 	waitOpts := twait.Opts{
-		RepoName:  topts.TargetNS,
 		Namespace: topts.TargetNS,
 		// 0 means 1 🙃 (we test for >, while we actually should do >=, but i
 		// need to go all over the code to verify it's not going to break

@@ -42,7 +42,6 @@ func TestGiteaCancelRun(t *testing.T) {
 	tgitea.PostCommentOnPullRequest(t, topts, "/cancel")
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -97,7 +96,6 @@ func TestGiteaOnCommentAnnotation(t *testing.T) {
 	tgitea.PostCommentOnPullRequest(t, topts, triggerComment)
 	// we have two status one for the pull request match and one on comment match from the comment sent
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -165,7 +163,6 @@ func TestGiteaOnCommentTestOverride(t *testing.T) {
 
 	tgitea.PostCommentOnPullRequest(t, topts, "/test custom1=overridden")
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -215,7 +212,6 @@ func TestGiteaTestPipelineRunExplicitlyWithTestComment(t *testing.T) {
 	tgitea.PostCommentOnPullRequest(t, topts, fmt.Sprintf("/test %s custom=awesome", targetPrName))
 	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
@@ -262,7 +258,6 @@ func TestGiteaTestAll(t *testing.T) {
 	defer f()
 	tgitea.PostCommentOnPullRequest(t, topts, "/test")
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
@@ -330,7 +325,6 @@ func TestGiteaRetestCommentUpdate(t *testing.T) {
 			defer f()
 			tgitea.PostCommentOnPullRequest(t, topts, "/retest")
 			waitOpts := twait.Opts{
-				RepoName:        topts.TargetNS,
 				Namespace:       topts.TargetNS,
 				MinNumberStatus: 2,
 				PollTimeout:     twait.DefaultTimeout,

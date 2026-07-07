@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	paramsclients "github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -58,6 +59,16 @@ func makePipelineRunWithStatus(name, sha, reason string, condStatus corev1.Condi
 			},
 		}
 	}
+	return pr
+}
+
+// withState sets the PaC state annotation the watcher patches after it has
+// finished reporting a PipelineRun.
+func withState(pr *pipelinev1.PipelineRun, state string) *pipelinev1.PipelineRun {
+	if pr.Annotations == nil {
+		pr.Annotations = map[string]string{}
+	}
+	pr.Annotations[keys.State] = state
 	return pr
 }
 
@@ -161,6 +172,16 @@ func TestUntilPipelineRunCreated(t *testing.T) {
 			wantCount: 2,
 			wantOrder: []string{"pr-1", "pr-2"},
 		},
+		{
+			name: "zero min status waits for one created pipelinerun",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				makePipelineRun("pr-1", "sha-1", ""),
+			},
+			targetSHA: []string{"sha-1"},
+			minStatus: 0,
+			wantCount: 1,
+			wantOrder: []string{"pr-1"},
+		},
 	}, UntilPipelineRunCreated)
 }
 
@@ -170,8 +191,8 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 		{
 			name: "mixed success and failure both returned sorted by completion",
 			pipelineRuns: []*pipelinev1.PipelineRun{
-				makePipelineRunWithStatus("pr-late", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(10*time.Second)),
-				makePipelineRunWithStatus("pr-early", "sha-1", "Failed", corev1.ConditionFalse, now, now.Add(5*time.Second)),
+				withState(makePipelineRunWithStatus("pr-late", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(10*time.Second)), kubeinteraction.StateCompleted),
+				withState(makePipelineRunWithStatus("pr-early", "sha-1", "Failed", corev1.ConditionFalse, now, now.Add(5*time.Second)), kubeinteraction.StateFailed),
 			},
 			targetSHA: []string{"sha-1"},
 			minStatus: 2,
@@ -181,7 +202,7 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 		{
 			name: "running pipelinerun not counted as finished",
 			pipelineRuns: []*pipelinev1.PipelineRun{
-				makePipelineRunWithStatus("pr-done", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)),
+				withState(makePipelineRunWithStatus("pr-done", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)), kubeinteraction.StateCompleted),
 				makePipelineRun("pr-running", "sha-1", ""),
 			},
 			targetSHA: []string{"sha-1"},
@@ -189,10 +210,28 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 			wantErr:   true,
 		},
 		{
+			name: "terminal condition without watcher state annotation not counted as finished",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				makePipelineRunWithStatus("pr-not-reported", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)),
+			},
+			targetSHA: []string{"sha-1"},
+			minStatus: 1,
+			wantErr:   true,
+		},
+		{
+			name: "started state annotation not counted as finished",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				withState(makePipelineRunWithStatus("pr-started", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)), kubeinteraction.StateStarted),
+			},
+			targetSHA: []string{"sha-1"},
+			minStatus: 1,
+			wantErr:   true,
+		},
+		{
 			name: "no target sha returns all finished across shas",
 			pipelineRuns: []*pipelinev1.PipelineRun{
-				makePipelineRunWithStatus("pr-b", "sha-2", "Failed", corev1.ConditionFalse, now, now.Add(8*time.Second)),
-				makePipelineRunWithStatus("pr-a", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(3*time.Second)),
+				withState(makePipelineRunWithStatus("pr-b", "sha-2", "Failed", corev1.ConditionFalse, now, now.Add(8*time.Second)), kubeinteraction.StateFailed),
+				withState(makePipelineRunWithStatus("pr-a", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(3*time.Second)), kubeinteraction.StateCompleted),
 			},
 			minStatus: 2,
 			wantCount: 2,
@@ -201,7 +240,7 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 		{
 			name: "times out when not enough finished",
 			pipelineRuns: []*pipelinev1.PipelineRun{
-				makePipelineRunWithStatus("pr-1", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)),
+				withState(makePipelineRunWithStatus("pr-1", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)), kubeinteraction.StateCompleted),
 			},
 			targetSHA: []string{"sha-1"},
 			minStatus: 3,
@@ -210,22 +249,33 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 		{
 			name: "cancelled pipelinerun counted as finished",
 			pipelineRuns: []*pipelinev1.PipelineRun{
-				makePipelineRunWithStatus("pr-1", "sha-1", "Cancelled", corev1.ConditionFalse, now, now.Add(5*time.Second)),
+				withState(makePipelineRunWithStatus("pr-1", "sha-1", "Cancelled", corev1.ConditionFalse, now, now.Add(5*time.Second)), kubeinteraction.StateCompleted),
 			},
 			targetSHA: []string{"sha-1"},
 			minStatus: 1,
 			wantCount: 1,
+		},
+		{
+			name: "zero min status waits for one finished pipelinerun",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				withState(makePipelineRunWithStatus("pr-1", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)), kubeinteraction.StateCompleted),
+			},
+			targetSHA: []string{"sha-1"},
+			minStatus: 0,
+			wantCount: 1,
+			wantOrder: []string{"pr-1"},
 		},
 	}, UntilPipelineRunsFinished)
 }
 
 func TestUntilPipelineRunHasReason(t *testing.T) {
 	tests := []struct {
-		name         string
-		pipelineRuns []*pipelinev1.PipelineRun
-		targetSHA    []string
-		reason       string
-		wantErr      bool
+		name            string
+		pipelineRuns    []*pipelinev1.PipelineRun
+		targetSHA       []string
+		reason          string
+		minNumberStatus int
+		wantErr         bool
 	}{
 		{
 			name: "match by target sha and reason",
@@ -233,42 +283,55 @@ func TestUntilPipelineRunHasReason(t *testing.T) {
 				makePipelineRun("pr-1", "sha-1", "Succeeded"),
 				makePipelineRun("pr-2", "sha-2", "Cancelled"),
 			},
-			targetSHA: []string{"sha-2"},
-			reason:    "Cancelled",
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
 		},
 		{
 			name: "wrong reason for matching sha",
 			pipelineRuns: []*pipelinev1.PipelineRun{
 				makePipelineRun("pr-1", "sha-2", "Succeeded"),
 			},
-			targetSHA: []string{"sha-2"},
-			reason:    "Cancelled",
-			wantErr:   true,
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+			wantErr:         true,
 		},
 		{
 			name: "reason exists on a different sha only",
 			pipelineRuns: []*pipelinev1.PipelineRun{
 				makePipelineRun("pr-1", "sha-1", "Cancelled"),
 			},
-			targetSHA: []string{"sha-2"},
-			reason:    "Cancelled",
-			wantErr:   true,
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+			wantErr:         true,
 		},
 		{
 			name: "match without target sha filter",
 			pipelineRuns: []*pipelinev1.PipelineRun{
 				makePipelineRun("pr-1", "sha-1", "Cancelled"),
 			},
-			reason: "Cancelled",
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+		},
+		{
+			name: "zero min status waits for one matching reason",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				makePipelineRun("pr-1", "sha-1", "Succeeded"),
+			},
+			targetSHA: []string{"sha-1"},
+			reason:    "Succeeded",
 		},
 		{
 			name: "pipelinerun without conditions",
 			pipelineRuns: []*pipelinev1.PipelineRun{
 				makePipelineRun("pr-1", "sha-2", ""),
 			},
-			targetSHA: []string{"sha-2"},
-			reason:    "Cancelled",
-			wantErr:   true,
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+			wantErr:         true,
 		},
 	}
 
@@ -278,7 +341,7 @@ func TestUntilPipelineRunHasReason(t *testing.T) {
 			clients := seedAndMakeClients(ctx, t, tt.pipelineRuns)
 			opts := Opts{
 				Namespace:       "test-ns",
-				MinNumberStatus: 1,
+				MinNumberStatus: tt.minNumberStatus,
 				TargetSHA:       tt.targetSHA,
 				PollTimeout:     10 * time.Millisecond,
 			}

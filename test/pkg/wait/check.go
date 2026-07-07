@@ -40,7 +40,6 @@ func Succeeded(ctx context.Context, t *testing.T, runcnx *params.Run, opts optio
 		targetSHA = []string{sopt.SHA}
 	}
 	waitOpts := Opts{
-		RepoName:        sopt.TargetNS,
 		Namespace:       sopt.TargetNS,
 		MinNumberStatus: minNumberStatus,
 		PollTimeout:     DefaultTimeout,
