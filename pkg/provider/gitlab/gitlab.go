@@ -278,18 +278,18 @@ func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *inf
 
 	switch {
 	case runevent.Provider.GitProviderSecretFromGlobalRepo:
-		run.Clients.Log.Debugf("gitlab token auto-rotation skipped: git_provider.secret is inherited from global Repository secret namespace=%s", runevent.Provider.GitProviderSecretNamespace)
+		v.Logger.Debugf("gitlab token auto-rotation skipped: git_provider.secret is inherited from global Repository secret namespace=%s", runevent.Provider.GitProviderSecretNamespace)
 	case !rotateToken:
-		run.Clients.Log.Debugf("gitlab token auto-rotation skipped: client initialized before webhook validation")
+		v.Logger.Debugf("gitlab token auto-rotation skipped: client initialized before webhook validation")
 	case v.isTokenAutoRotationEnabled():
 		if newToken, rotateErr := v.maybeRotateToken(ctx); rotateErr != nil {
 			switch {
 			case errors.Is(rotateErr, errMissingSelfRotateScope):
-				run.Clients.Log.Debugf("gitlab token auto-rotation: %v", rotateErr)
+				v.Logger.Debugf("gitlab token auto-rotation: %v", rotateErr)
 			case errors.Is(rotateErr, errTokenRotatedSecretUpdateFailed):
 				return fmt.Errorf("gitlab token auto-rotation failed: %w", rotateErr)
 			default:
-				run.Clients.Log.Warnf("gitlab token auto-rotation check failed: %v", rotateErr)
+				v.Logger.Warnf("gitlab token auto-rotation check failed: %v", rotateErr)
 			}
 		} else if newToken != "" {
 			v.gitlabClient, err = gitlab.NewClient(newToken, gitlab.WithBaseURL(apiURL))
