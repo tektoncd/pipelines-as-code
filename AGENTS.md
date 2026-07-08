@@ -6,6 +6,10 @@
 - Targets arm64 and amd64 architectures
 - Uses `ko` for building container images in development
 
+## Provider Logging
+
+In provider code (`pkg/provider/`), always use the provider's own logger (`v.Logger`) for logging — never `run.Clients.Log`. The provider logger carries standard context variables (provider, repository, event-id) that `run.Clients.Log` lacks. This applies to all providers: GitHub, GitLab, Bitbucket, Bitbucket Data Center, and Gitea.
+
 ## Code Quality Workflow
 
 ### After Editing Code
