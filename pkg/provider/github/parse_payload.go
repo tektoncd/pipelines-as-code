@@ -217,9 +217,6 @@ func validateEnterpriseHostMatchesPayload(gheURL, payload string) error {
 }
 
 func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *info.Event, installationID int64, reason string, err error) {
-	if v.Logger == nil {
-		return
-	}
 	v.Logger.Errorw(
 		githubAppTokenExfiltrationBlockedLog,
 		"severity", "critical",
@@ -234,9 +231,6 @@ func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *in
 }
 
 func (v *Provider) logGitHubAppTokenMintValidationFailure(request *http.Request, event *info.Event, installationID int64, reason string, err error) {
-	if v.Logger == nil {
-		return
-	}
 	v.Logger.Warnw(
 		githubAppTokenMintBlockedLog,
 		"severity", "warning",

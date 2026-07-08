@@ -157,6 +157,7 @@ func TestSetClient(t *testing.T) {
 			}
 
 			v := Provider{}
+			v.SetLogger(testLog)
 			err := v.SetClient(ctx, fakeRun, tt.event, nil, nil)
 
 			if tt.wantErrSubstr != "" {

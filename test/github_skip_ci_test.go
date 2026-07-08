@@ -131,13 +131,12 @@ func TestGithubGHESkipCITestCommand(t *testing.T) {
 
 	// Wait for PipelineRun to be created
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	// Verify PipelineRun was created

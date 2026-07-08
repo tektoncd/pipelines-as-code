@@ -8,6 +8,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 )
@@ -30,15 +31,13 @@ func TestGitlabOpsCommentInThreadReply(t *testing.T) {
 	})
 	assert.NilError(t, err)
 
-	// Wait for repository status to reflect a successful run triggered by the MR
+	// Wait for PipelineRun to succeed after the MR
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       "",
 	}
-	_, err = twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	topts.ParamsRun.Clients.Log.Info("Updating discussion with /test comment in a reply thread")
@@ -48,8 +47,8 @@ func TestGitlabOpsCommentInThreadReply(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	waitOpts.MinNumberStatus = 2
-	_, err = twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
-	topts.ParamsRun.Clients.Log.Info("Repository status updated after /test comment")
+	topts.ParamsRun.Clients.Log.Info("PipelineRun completed after /test comment")
 }

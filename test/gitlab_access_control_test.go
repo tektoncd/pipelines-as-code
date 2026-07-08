@@ -119,15 +119,16 @@ func TestGitlabSuccessStatusAfterOkToTest(t *testing.T) {
 		TargetProjectID: &topts.ProjectInfo.ID,
 	})
 	assert.NilError(t, err)
+	mrIID := mr.IID
 	defer func() {
-		_, _, err := topts.GLProvider.Client().MergeRequests.UpdateMergeRequest(topts.ProjectID, mr.IID,
+		_, _, err := topts.GLProvider.Client().MergeRequests.UpdateMergeRequest(topts.ProjectID, mrIID,
 			&clientGitlab.UpdateMergeRequestOptions{StateEvent: clientGitlab.Ptr("close")})
 		if err != nil {
-			t.Logf("Error closing MR %d: %v", mr.IID, err)
+			t.Logf("Error closing MR %d: %v", mrIID, err)
 		}
 	}()
 
-	mr, _, err = topts.GLProvider.Client().MergeRequests.GetMergeRequest(topts.ProjectID, mr.IID, nil)
+	mr, _, err = topts.GLProvider.Client().MergeRequests.GetMergeRequest(topts.ProjectID, mrIID, nil)
 	assert.NilError(t, err)
 	topts.ParamsRun.Clients.Log.Infof("Created fork MR %q with SHA %s", mr.WebURL, mr.SHA)
 

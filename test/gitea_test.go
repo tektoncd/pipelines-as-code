@@ -44,6 +44,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -546,13 +547,12 @@ func TestGiteaConfigMaxKeepRun(t *testing.T) {
 	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
+		TargetSHA:       []string{topts.PullRequest.Head.Sha},
 	}
-	_, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	time.Sleep(15 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
@@ -656,13 +656,12 @@ func TestGiteaConfigCancelInProgressAfterPRClosed(t *testing.T) {
 
 	time.Sleep(3 * time.Second) // “Evil does not sleep. It waits.” - Galadriel
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetRefName,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.SHA,
+		TargetSHA:       []string{topts.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(context.Background(), topts.ParamsRun.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	closed := forgejo.StateClosed
@@ -882,14 +881,18 @@ func TestGiteaConcurrencyOrderedExecution(t *testing.T) {
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
 
-	repo, err := topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
+	prs, err := twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 3,
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{topts.PullRequest.Head.Sha},
+	})
 	assert.NilError(t, err)
-	// check the last 3 update in RepositoryRunStatus are in order
-	statusLen := len(repo.Status)
-	assert.Assert(t, strings.HasPrefix(repo.Status[statusLen-3].PipelineRunName, "abc"))
-	assert.Assert(t, strings.HasPrefix(repo.Status[statusLen-2].PipelineRunName, "pqr"))
-	assert.Assert(t, strings.HasPrefix(repo.Status[statusLen-1].PipelineRunName, "xyz"))
-	time.Sleep(time.Second * 10)
+
+	sort.PipelineRunSortByCompletionTime(prs)
+	assert.Assert(t, strings.HasPrefix(prs[len(prs)-1].Name, "abc"))
+	assert.Assert(t, strings.HasPrefix(prs[len(prs)-2].Name, "pqr"))
+	assert.Assert(t, strings.HasPrefix(prs[len(prs)-3].Name, "xyz"))
 }
 
 func TestGiteaOnPathChange(t *testing.T) {
@@ -1044,27 +1047,21 @@ func TestGiteaOnPullRequestLabels(t *testing.T) {
 	tgitea.AddLabelToIssue(t, topts, "bug")
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
+		TargetSHA:       []string{topts.PullRequest.Head.Sha},
 	}
-	_, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	topts.CheckForStatus = "success"
 	tgitea.WaitForStatus(t, topts, topts.TargetRefName, "", true)
 
-	prs, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
-	assert.NilError(t, err)
+	assert.Equal(t, len(prs), 1, "should have only one pipelinerun, but we have: %d", len(prs))
 
-	assert.Equal(t, len(prs.Items), 1, "should have only one pipelinerun, but we have: %d", len(prs.Items))
-
-	repo, err := topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
-	assert.NilError(t, err)
 	twait.GoldenPodLog(context.Background(), t, topts.ParamsRun, topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=task", repo.Status[0].PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=task", prs[0].GetName()),
 		"step-success", strings.ReplaceAll(fmt.Sprintf("%s.golden", t.Name()), "/", "-"), 2, nil)
 
 	// Make sure the on-label pr has triggered and post status
@@ -1348,7 +1345,6 @@ func TestGiteaPushToTagGreedy(t *testing.T) {
 	scmOpts.TargetRefName = "refs/tags/v1.0.0"
 	_ = scm.PushFilesToRefGit(t, scmOpts, map[string]string{"README.md": "hello new version from tag"})
 	waitOpts := twait.Opts{
-		RepoName:  topts.TargetNS,
 		Namespace: topts.TargetNS,
 		// 0 means 1 🙃 (we test for >, while we actually should do >=, but i
 		// need to go all over the code to verify it's not going to break
@@ -1356,7 +1352,7 @@ func TestGiteaPushToTagGreedy(t *testing.T) {
 		MinNumberStatus: 0,
 		PollTimeout:     twait.DefaultTimeout,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 }
 

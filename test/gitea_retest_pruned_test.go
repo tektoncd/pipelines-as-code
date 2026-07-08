@@ -50,22 +50,19 @@ func TestGiteaRetestAfterPipelineRunPruning(t *testing.T) {
 	// Wait for both PipelineRuns to appear
 	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to appear")
 	err := twait.UntilMinPRAppeared(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:    topts.TargetNS,
 		Namespace:   topts.TargetNS,
 		PollTimeout: twait.DefaultTimeout,
-		TargetSHA:   formatting.CleanValueKubernetes(sha),
+		TargetSHA:   []string{formatting.CleanValueKubernetes(sha)},
 	}, 2)
 	assert.NilError(t, err)
 
-	// Wait for repository to have at least 2 status entries
-	topts.ParamsRun.Clients.Log.Infof("Waiting for Repository status to have 2 entries")
-	_, err = twait.UntilRepositoryUpdated(ctx, topts.ParamsRun.Clients, twait.Opts{
-		RepoName:            topts.TargetNS,
-		Namespace:           topts.TargetNS,
-		MinNumberStatus:     2,
-		PollTimeout:         twait.DefaultTimeout,
-		TargetSHA:           sha,
-		FailOnRepoCondition: "no-match",
+	// Wait for both PipelineRuns to finish (1 success + 1 failure)
+	topts.ParamsRun.Clients.Log.Infof("Waiting for 2 PipelineRuns to finish")
+	_, err = twait.UntilPipelineRunsFinished(ctx, topts.ParamsRun.Clients, twait.Opts{
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 2,
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{sha},
 	})
 	assert.NilError(t, err)
 

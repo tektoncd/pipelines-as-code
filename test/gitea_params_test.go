@@ -125,13 +125,12 @@ func TestGiteaRetestPreservesSourceURL(t *testing.T) {
 
 	tgitea.PostCommentOnPullRequest(t, topts, fmt.Sprintf("/retest %s", originalPRName))
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
+		TargetSHA:       []string{topts.PullRequest.Head.Sha},
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	assert.NilError(t, twait.UntilMinPRAppeared(context.Background(), topts.ParamsRun.Clients, waitOpts, 2))
 
@@ -307,19 +306,18 @@ func TestGiteaGlobalRepoParams(t *testing.T) {
 	defer f()
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	last := repo.Status[len(repo.Status)-1]
+	last := prs[len(prs)-1]
 	err = twait.RegexpMatchingInPodLog(
 		context.Background(),
 		topts.ParamsRun,
 		topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.Name),
 		"step-test-params-value",
 		regexp.Regexp{},
 		t.Name(),
@@ -387,19 +385,18 @@ func TestGiteaGlobalRepoUseLocalDef(t *testing.T) {
 	defer f()
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	last := repo.Status[len(repo.Status)-1]
+	last := prs[len(prs)-1]
 	err = twait.RegexpMatchingInPodLog(
 		context.Background(),
 		topts.ParamsRun,
 		topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", last.Name),
 		"step-test-params-value",
 		regexp.Regexp{},
 		t.Name(),
@@ -476,20 +473,18 @@ func TestGiteaParamsOnRepoCR(t *testing.T) {
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
 
-	// Wait for Repository status to be updated
+	// Wait for PipelineRun to succeed
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       "",
 	}
-	repo, err := twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	assert.Assert(t, len(repo.Status) != 0)
+	assert.Assert(t, len(prs) != 0)
 	assert.NilError(t,
 		twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=params",
-			repo.Status[0].PipelineRunName), "step-test-params-value", *regexp.MustCompile(
+			prs[0].Name), "step-test-params-value", *regexp.MustCompile(
 			"I am the most Kawaī params\nSHHHHHHH\nFollow me on my ig #nofilter\n{{ no_match }}\nHey I show up from a payload match\n{{ secret_nothere }}\n{{ no_initial_value }}",
 		), "", 2, nil))
 }
@@ -513,16 +508,19 @@ func TestGiteaParamsBodyHeadersCEL(t *testing.T) {
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
 
-	// check the repos CR only one pr should have run
-	repo, err := topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
+	prs, err := twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 1,
+		PollTimeout:     twait.DefaultTimeout,
+	})
 	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 1, repo.Status)
+	assert.Equal(t, len(prs), 1, prs)
 
 	// check the output logs if the CEL body headers has expanded  properly
 	output := `Look mum I know that we are acting on a pull_request
 my email is a true beauty and like groot, I AM pac`
 	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=cel-pullrequest-params",
-		repo.Status[0].PipelineRunName), "step-test-cel-params-value", *regexp.MustCompile(output), "", 2, nil)
+		prs[0].GetName()), "step-test-cel-params-value", *regexp.MustCompile(output), "", 2, nil)
 	assert.NilError(t, err)
 
 	// Merge the pull request so we can generate a push event and wait that it is updated
@@ -538,30 +536,31 @@ my email is a true beauty and like groot, I AM pac`
 	assert.Assert(t, merged)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	time.Sleep(5 * time.Second)
 
-	// check the repository CR now we should have two status the previous pull request and new one on push
-	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
+	// check we have two PipelineRuns: the previous pull request and new one on push
+	prs, err = twait.UntilPipelineRunsFinished(context.Background(), topts.ParamsRun.Clients, twait.Opts{
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 2,
+		PollTimeout:     twait.DefaultTimeout,
+	})
 	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 2, repo.Status)
+	assert.Equal(t, len(prs), 2, prs)
 
-	// sort status to make sure we get the latest PipelineRun that has been created
-	sortedstatus := sort.RepositorySortRunStatus(repo.Status)
+	prs = sort.PipelineRunSortByCompletionTime(prs)
 
 	// check the output of the last status PipelineRun which should be a
 	// push matching the expanded CEL body and headers values
 	output = `Look mum I know that we are acting on a push
 my email is a true beauty and you can call me pacman`
-	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=cel-push-params", sortedstatus[0].PipelineRunName), "step-test-cel-params-value", *regexp.MustCompile(output), "", 2, nil)
+	err = twait.RegexpMatchingInPodLog(context.Background(), topts.ParamsRun, topts.TargetNS, fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=cel-push-params", prs[0].GetName()), "step-test-cel-params-value", *regexp.MustCompile(output), "", 2, nil)
 	assert.NilError(t, err)
 }
 
@@ -601,12 +600,12 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
 
-	// check the repos CR only one pr should have run
-	repo, err := topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
+	// check that we have only one PipelineRun created
+	prsList, err := topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 1, repo.Status)
+	assert.Equal(t, len(prsList.Items), 1, "Expected exactly one PipelineRun")
 	twait.GoldenPodLog(context.Background(), t, topts.ParamsRun, topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-pullrequest-params", repo.Status[0].PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-pullrequest-params", prsList.Items[0].Name),
 		"step-test-changed-files-params-pull", strings.ReplaceAll(fmt.Sprintf("%s-changed-files-pullrequest-params-1.golden", t.Name()), "/", "-"), 2, nil)
 	// ======================================================================================================================
 	// Merge the pull request so we can generate a push event and wait that it is updated
@@ -623,37 +622,31 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	assert.Assert(t, merged)
 
 	waitOpts := twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 2, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	time.Sleep(5 * time.Second)
-
-	// check the repository CR now we should have two status the previous pull request and new one on push
-	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 2, repo.Status)
-	// sort status to make sure we get the latest PipelineRun that has been created
-	sortedstatus := sort.RepositorySortRunStatus(repo.Status)
+	prs = sort.PipelineRunSortByCompletionTime(prs)
 
 	twait.GoldenPodLog(context.Background(), t, topts.ParamsRun, topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-push-params", sortedstatus[0].PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-push-params", prs[0].GetName()),
 		"step-test-changed-files-params-push", strings.ReplaceAll(fmt.Sprintf("%s-changed-files-push-params-1.golden", t.Name()), "/", "-"), 2, nil)
 
 	// ======================================================================================================================
 	// Create second pull request with all change types
 	// ======================================================================================================================
 	tgitea.NewPR(t, topts)
-	// check the repository CR now we should have three status the previous pull request and push plus a new pull request
-	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
+
+	prsList, err = topts.ParamsRun.Clients.Tekton.TektonV1().PipelineRuns(topts.TargetNS).List(context.Background(), metav1.ListOptions{})
 	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 3, repo.Status)
+	assert.Equal(t, len(prsList.Items), 3, "Expected exactly three PipelineRuns")
+	twait.SortPipelineRunsByCompletionMillis(prsList.Items)
+
 	twait.GoldenPodLog(context.Background(), t, topts.ParamsRun, topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-pullrequest-params", repo.Status[2].PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-pullrequest-params", prsList.Items[2].Name),
 		"step-test-changed-files-params-pull", strings.ReplaceAll(fmt.Sprintf("%s-changed-files-pullrequest-params-2.golden", t.Name()), "/", "-"), 2, nil)
 
 	// ======================================================================================================================
@@ -671,26 +664,19 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	assert.Assert(t, merged)
 
 	waitOpts = twait.Opts{
-		RepoName:        topts.TargetNS,
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 4, // 1 means 2 🙃
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       topts.PullRequest.Head.Sha,
 	}
-	_, err = twait.UntilRepositoryUpdated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	prs, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 	time.Sleep(5 * time.Second)
+	sort.PipelineRunSortByCompletionTime(prs)
 
-	// check the repository CR now we should have two status the previous pull request and new one on push
-	repo, err = topts.ParamsRun.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(topts.TargetNS).Get(context.Background(), topts.TargetNS, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Equal(t, len(repo.Status), 4, repo.Status)
-	// sort status to make sure we get the latest PipelineRun that has been created
-	sortedstatus = sort.RepositorySortRunStatus(repo.Status)
 	// check the output of the last status PipelineRun which should be a
 	// push matching the expanded CEL body and headers values
 	twait.GoldenPodLog(context.Background(), t, topts.ParamsRun, topts.TargetNS,
-		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-push-params", sortedstatus[0].PipelineRunName),
+		fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=changed-files-push-params", prs[0].GetName()),
 		"step-test-changed-files-params-push", strings.ReplaceAll(fmt.Sprintf("%s-changed-files-push-params-2.golden", t.Name()), "/", "-"), 2, nil)
 }
 

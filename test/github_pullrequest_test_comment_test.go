@@ -9,11 +9,14 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v85/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
+	"knative.dev/pkg/apis"
 )
 
 func TestGithubGHEPullRequestTest(t *testing.T) {
@@ -33,18 +36,19 @@ func TestGithubGHEPullRequestTest(t *testing.T) {
 		&github.IssueComment{Body: github.Ptr("/test pipeline")})
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Wait for the second repository update to be updated")
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	repo, err := twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	assert.Assert(t, repo.Status[len(repo.Status)-1].Conditions[0].Status == corev1.ConditionTrue)
+	g.Cnx.Clients.Log.Infof("Check if we have the pipelinerun set as succeeded")
+	cond := prs[len(prs)-1].Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 }
 
 func TestGithubGHEOnCommentAnnotation(t *testing.T) {
@@ -73,23 +77,24 @@ func TestGithubGHEOnCommentAnnotation(t *testing.T) {
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	repo, err := twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	assert.Equal(t, repo.Status[len(repo.Status)-1].Conditions[0].Status, corev1.ConditionTrue)
-	assert.Equal(t, *repo.Status[len(repo.Status)-1].EventType, opscomments.OnCommentEventType.String())
-	lastPrName := repo.Status[len(repo.Status)-1].PipelineRunName
+	g.Cnx.Clients.Log.Infof("Check if we have the pipelinerun set as succeeded")
+	lastPR := prs[len(prs)-1]
+	cond := lastPR.Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
+	assert.Equal(t, lastPR.Annotations[keys.EventType], opscomments.OnCommentEventType.String())
 
-	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPrName), "step-task", *regexp.MustCompile(triggerComment), "", 2, nil)
+	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPR.Name), "step-task", *regexp.MustCompile(triggerComment), "", 2, nil)
 	assert.NilError(t, err)
 
-	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPrName), "step-task", *regexp.MustCompile(fmt.Sprintf(
+	err = twait.RegexpMatchingInPodLog(context.Background(), g.Cnx, g.TargetNamespace, fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPR.Name), "step-task", *regexp.MustCompile(fmt.Sprintf(
 		"The event is %s", opscomments.OnCommentEventType.String(),
 	)), "", 2, nil)
 	assert.NilError(t, err)

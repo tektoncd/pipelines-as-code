@@ -167,7 +167,6 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 		Title:           g.CommitTitle,
 		TargetNS:        g.TargetNamespace,
 		NumberofPRMatch: 2,
-		SHA:             g.SHA,
 		OnEvent:         "pull_request",
 	}
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
@@ -213,7 +212,9 @@ func TestGithubGHEWebhookCommentStrategyUpdateMultiplePLRs(t *testing.T) {
 	g.Cnx.Clients.Log.Infof("Pushed trigger commit: %s", sha)
 
 	sopt.NumberofPRMatch = 4
-	sopt.SHA = sha
+	// if there are multiple pipelineruns, we don't need to SHA because after a new commit is pushed,
+	// we cannot poll for the two SHA in Succeeded polling function.
+	// sopt.SHA = sha
 	sopt.Title = "test: trigger re-run"
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, sopt)
 
@@ -259,8 +260,9 @@ func TestGithubGHEWebhookCommentStrategyUpdateMarkerMatchingWithRegexChars(t *te
 			"testdata/pipelinerun-regex-name.yaml",
 			"testdata/pipelinerun2-regex-name.yaml",
 		},
-		GHE:     true,
-		Webhook: true,
+		GHE:           true,
+		Webhook:       true,
+		NoStatusCheck: true, // Succeeded is called so it will check the status of the pipelineruns.
 	}
 
 	commentStrategy := &v1alpha1.Settings{

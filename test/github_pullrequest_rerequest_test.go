@@ -16,7 +16,7 @@ import (
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"knative.dev/pkg/apis"
 )
 
 // TestGithubPullRerequest is a test that will create a pull request and check
@@ -88,20 +88,19 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	)
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Wait for the second repository update to be updated")
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
+	prs, err := twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	})
 	assert.NilError(t, err)
+	assert.Assert(t, len(prs) >= 1, "no successful pipelineruns found")
+	cond := prs[len(prs)-1].Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 
-	g.Cnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Assert(t, repo.Status[len(repo.Status)-1].Conditions[0].Status == corev1.ConditionTrue)
 	csEvent := github.CheckSuiteEvent{
 		Action: github.Ptr("rerequested"),
 		Installation: &github.Installation{
@@ -139,13 +138,12 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	)
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Wait for the second repository update to be updated")
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
+	_, err = twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	})
 	assert.NilError(t, err)
 
@@ -185,18 +183,16 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	)
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Wait for the third repository update (null head_branch resolved from SHA)")
-	_, err = twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, twait.Opts{
-		RepoName:        g.TargetNamespace,
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed (null head_branch resolved from SHA)")
+	prs, err = twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 3,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	})
 	assert.NilError(t, err)
+	assert.Assert(t, len(prs) >= 3, "no successful pipelineruns found")
 
 	g.Cnx.Clients.Log.Infof("Check if the third run succeeded (null head_branch case)")
-	repo, err = g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Assert(t, repo.Status[len(repo.Status)-1].Conditions[0].Status == corev1.ConditionTrue)
+	assert.Assert(t, prs[len(prs)-1].Status.Conditions[0].Status == corev1.ConditionTrue)
 }

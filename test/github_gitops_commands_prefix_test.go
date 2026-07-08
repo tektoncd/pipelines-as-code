@@ -16,6 +16,7 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
+	"knative.dev/pkg/apis"
 )
 
 func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
@@ -43,19 +44,19 @@ func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
 		&github.IssueComment{Body: github.Ptr(customTestComment)})
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Wait for repository to be updated with custom prefix command")
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRuns to succeed with custom prefix command")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
 	}
-	repo, err := twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
-	g.Cnx.Clients.Log.Infof("Check if repository status shows succeeded")
-	assert.Equal(t, corev1.ConditionTrue, repo.Status[len(repo.Status)-1].Conditions[0].Status)
+	g.Cnx.Clients.Log.Infof("Check if pipelinerun status shows succeeded")
+	cond := prs[len(prs)-1].Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 
 	customTestComment = fmt.Sprintf("/%s test pr-gitops-comment", customPrefix)
 	g.Cnx.Clients.Log.Infof("Creating %s comment on PullRequest", customTestComment)
@@ -70,7 +71,6 @@ func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
 		OnEvent:         opscomments.TestSingleCommentEventType.String(),
 		NumberofPRMatch: 3,
 		MinNumberStatus: 3,
-		SHA:             g.SHA,
 	})
 }
 
@@ -93,13 +93,12 @@ func TestGithubPullRequestCustomPrefixCancel(t *testing.T) {
 	defer g.TearDown(ctx, t)
 
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 	// Cancel with custom prefix
 	customCancelComment := fmt.Sprintf("/%s cancel", customPrefix)
@@ -110,6 +109,6 @@ func TestGithubPullRequestCustomPrefixCancel(t *testing.T) {
 		&github.IssueComment{Body: github.Ptr(customCancelComment)})
 	assert.NilError(t, err)
 
-	err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 }

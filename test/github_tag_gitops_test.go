@@ -112,14 +112,13 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 		assert.NilError(t, err)
 
 		waitOpts := twait.Opts{
-			RepoName:        targetNS,
 			Namespace:       targetNS,
 			MinNumberStatus: numberOfPRs,
 			PollTimeout:     twait.DefaultTimeout,
-			TargetSHA:       sha, // this is the commit sha of the tag v1.0.0
+			TargetSHA:       []string{sha}, // this is the commit sha of the tag v1.0.0
 		}
 		runcnx.Clients.Log.Info("Waiting for PipelineRun to be created")
-		err = twait.UntilPipelineRunCreated(ctx, runcnx.Clients, waitOpts)
+		_, err = twait.UntilPipelineRunCreated(ctx, runcnx.Clients, waitOpts)
 		assert.NilError(t, err)
 	}
 }

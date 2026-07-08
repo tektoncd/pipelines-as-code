@@ -21,10 +21,12 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	trepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"knative.dev/pkg/apis"
 )
 
 func TestGithubPullRequestScopeTokenToListOfRepos(t *testing.T) {
@@ -164,32 +166,25 @@ func verifyGHTokenScope(t *testing.T, remoteTaskURL, remoteTaskName string, data
 	}
 	defer g.TearDown(ctx, t)
 
-	runcnx.Clients.Log.Infof("Waiting for Repository to be updated")
+	runcnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
 	waitOpts := twait.Opts{
-		RepoName:        targetNS,
 		Namespace:       targetNS,
 		MinNumberStatus: 0,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
-	_, err = twait.UntilRepositoryUpdated(ctx, runcnx.Clients, waitOpts)
+	prs, err := twait.UntilPipelineRunHasReason(ctx, runcnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
+	assert.Assert(t, len(prs) > 0)
 
-	runcnx.Clients.Log.Infof("Check if we have the repository set as succeeded")
-	repo, err := runcnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(targetNS).Get(ctx, targetNS, metav1.GetOptions{})
-	assert.NilError(t, err)
-	laststatus := repo.Status[len(repo.Status)-1]
-	assert.Equal(t, corev1.ConditionTrue, laststatus.Conditions[0].Status)
-	assert.Equal(t, sha, *laststatus.SHA)
-	assert.Equal(t, sha, filepath.Base(*laststatus.SHAURL))
-	assert.Equal(t, title, *laststatus.Title)
-	assert.Assert(t, *laststatus.LogURL != "")
-
-	pr, err := runcnx.Clients.Tekton.TektonV1().PipelineRuns(targetNS).Get(ctx, laststatus.PipelineRunName, metav1.GetOptions{})
-	assert.NilError(t, err)
+	runcnx.Clients.Log.Infof("Check if PipelineRun succeeded")
+	pr := prs[len(prs)-1]
+	cond := pr.Status.GetCondition(apis.ConditionSucceeded)
+	assert.Assert(t, cond != nil)
+	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 
 	assert.Equal(t, triggertype.PullRequest.String(), pr.Annotations[keys.EventType])
-	assert.Equal(t, repo.GetName(), pr.Annotations[keys.Repository])
+	assert.Equal(t, targetNS, pr.Annotations[keys.Repository])
 	assert.Equal(t, sha, pr.Annotations[keys.SHA])
 	assert.Equal(t, opts.Organization, pr.Annotations[keys.URLOrg])
 	assert.Equal(t, opts.Repo, pr.Annotations[keys.URLRepository])

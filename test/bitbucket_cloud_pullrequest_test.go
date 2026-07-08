@@ -85,13 +85,12 @@ func TestBitbucketCloudPullRequestCancelInProgressMerged(t *testing.T) {
 	assert.Assert(t, ok)
 
 	waitOpts := twait.Opts{
-		RepoName:        targetNS,
 		Namespace:       targetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       sha,
+		TargetSHA:       []string{sha},
 	}
-	err = twait.UntilPipelineRunCreated(ctx, runcnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, runcnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	po := &bitbucket.PullRequestsOptions{

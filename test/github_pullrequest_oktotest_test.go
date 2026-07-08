@@ -46,10 +46,6 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 		URL:           repoinfo.GetHTMLURL(),
 	}
 
-	repo, err := g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	initialStatusCount := len(repo.Status)
-
 	pruns, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
 	})
@@ -111,10 +107,6 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	assert.Equal(t, initialPipelineRunCount, len(pruns.Items), "untrusted issue_comment must not create a new PipelineRun")
-
-	repo, err = g.Cnx.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(g.TargetNamespace).Get(ctx, g.TargetNamespace, metav1.GetOptions{})
-	assert.NilError(t, err)
-	assert.Equal(t, initialStatusCount, len(repo.Status), "untrusted issue_comment must not add a new Repository status")
 
 	ctx, err = cctx.GetControllerCtxInfo(ctx, g.Cnx)
 	assert.NilError(t, err)

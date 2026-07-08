@@ -46,6 +46,7 @@ func Setup(ctx context.Context, onGHE, viaDirectWebhook bool) (context.Context, 
 	}
 	gprovider := github.New()
 	gprovider.Run = run
+	gprovider.SetLogger(run.Clients.Log)
 	event := info.NewEvent()
 
 	if err := setupGithubAppToken(ctx, config, viaDirectWebhook, run, gprovider); err != nil {

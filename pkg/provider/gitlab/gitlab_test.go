@@ -1046,12 +1046,14 @@ func TestSetClient(t *testing.T) {
 	}
 
 	v := &Provider{}
+	v.SetLogger(fakelogger)
 	assert.Assert(t, v.SetClient(ctx, run, info.NewEvent(), nil, nil) != nil)
 
 	client, _, tearDown := thelp.Setup(t)
 	defer tearDown()
 
 	vv := &Provider{gitlabClient: client}
+	vv.SetLogger(fakelogger)
 	err := vv.SetClient(ctx, run, &info.Event{
 		Provider: &info.Provider{
 			Token: "hello",
@@ -1134,6 +1136,7 @@ func TestSetClientFieldsInitializedOnError(t *testing.T) {
 			}
 
 			v := &Provider{gitlabClient: mockClient}
+			v.SetLogger(fakelogger)
 			repo := &v1alpha1.Repository{}
 			repo.SetName("test-repo")
 			eventsEmitter := events.NewEventEmitter(run.Clients.Kube, fakelogger)
@@ -1238,6 +1241,7 @@ func TestSetClientRepositoryAccessCheck(t *testing.T) {
 			}
 
 			v := &Provider{gitlabClient: mockClient}
+			v.SetLogger(fakelogger)
 			event := &info.Event{
 				Provider: &info.Provider{
 					Token: "test-token",
@@ -1375,6 +1379,7 @@ func TestSetClientDetectAPIURL(t *testing.T) {
 				repoURL:           tc.repoURL,
 				pathWithNamespace: tc.pathWithNamespace,
 			}
+			v.SetLogger(fakelogger)
 			event := info.NewEvent()
 			event.Provider.Token = tc.providerToken
 			event.Provider.URL = tc.providerURL
@@ -2438,6 +2443,7 @@ func TestSetClientSourceRepoAccessPostsComment(t *testing.T) {
 			}
 
 			v := &Provider{gitlabClient: mockClient}
+			v.SetLogger(fakelogger)
 			event := &info.Event{
 				Provider: &info.Provider{
 					Token: "test-token",

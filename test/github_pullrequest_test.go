@@ -276,13 +276,12 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for one pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 	time.Sleep(10 * time.Second)
 
@@ -293,13 +292,12 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts = twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Sleeping for 10 seconds to let the pipelinerun to be cancelled")
@@ -348,13 +346,12 @@ func TestGithubGHECancelInProgressPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Closing the PullRequest")
@@ -491,13 +488,12 @@ func TestGithubGHEPullRequestNoPipelineRunCancelledOnPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Closing the PullRequest")
@@ -569,20 +565,19 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPR(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
 
-	err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	// we want one PipelineRun to be cancelled
 	waitOpts.MinNumberStatus = 1
 
-	err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 }
 
@@ -616,20 +611,19 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPush(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 2,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
 
-	err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
+	_, err = twait.UntilPipelineRunCreated(ctx, g.Cnx.Clients, waitOpts)
 	assert.NilError(t, err)
 
 	// we want one PipelineRun to be cancelled
 	waitOpts.MinNumberStatus = 1
 
-	err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 }
 
@@ -728,15 +722,14 @@ func TestGithubGHEPullRequestCelPrefix(t *testing.T) {
 	g.RunPullRequest(ctx, t)
 	defer g.TearDown(ctx, t)
 
-	// Wait for repository status to be updated
+	// Wait for PipelineRun to succeed
 	waitOpts := twait.Opts{
-		RepoName:        g.TargetNamespace,
 		Namespace:       g.TargetNamespace,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
-		TargetSHA:       g.SHA,
+		TargetSHA:       []string{g.SHA},
 	}
-	_, err := twait.UntilRepositoryUpdated(ctx, g.Cnx.Clients, waitOpts)
+	_, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
 	assert.NilError(t, err)
 
 	prs, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{})
