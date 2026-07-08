@@ -23,7 +23,8 @@ func CreateCRD(ctx context.Context, t *testing.T, bprovider bitbucketcloud.Provi
 		&bitbucket.RepositoryOptions{
 			Owner:    opts.Organization,
 			RepoSlug: opts.Repo,
-		})
+		},
+	)
 	assert.NilError(t, err, "failed to get repository %s/%s: %v", opts.Organization, opts.Repo, err)
 
 	links := &types.Links{}

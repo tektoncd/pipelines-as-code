@@ -60,7 +60,17 @@ func TestGiteaParamsStandardCheckForPushAndPullEvent(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, resp.StatusCode < 400, resp)
 	assert.Assert(t, merged)
-	tgitea.WaitForStatus(t, topts, topts.PullRequest.Head.Sha, "", false)
+
+	// wait for both the pull_request and the push (from the merge)
+	// pipelineruns to succeed, the merge push event can take a while to be
+	// delivered so we cannot just wait on the PR head sha status.
+	waitOpts := twait.Opts{
+		Namespace:       topts.TargetNS,
+		MinNumberStatus: 2, // 1 means 2 🙃
+		PollTimeout:     twait.DefaultTimeout,
+	}
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	assert.NilError(t, err)
 	time.Sleep(5 * time.Second)
 
 	// get standard parameter info for pull_request

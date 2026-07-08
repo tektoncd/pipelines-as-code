@@ -30,6 +30,7 @@ import (
 	"gotest.tools/v3/golden"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"knative.dev/pkg/apis"
 )
 
 type TestOpts struct {
@@ -629,15 +630,24 @@ func GetStandardParams(t *testing.T, topts *TestOpts, eventType string) (repoURL
 		for i, pr := range prs.Items {
 			names[i] = pr.Name
 		}
-		assert.Equal(t, len(prs.Items), 1, "should have only one "+eventType+" pipelinerun", names)
+		if len(prs.Items) > 1 {
+			t.Fatalf("should have only one %s pipelinerun, got %d: %v", eventType, len(prs.Items), names)
+		}
 
-		if prs.Items[0].Status.Status.Conditions[0].Reason == "Succeeded" || prs.Items[0].Status.Status.Conditions[0].Reason == "Failed" {
-			break
+		// the pipelinerun may not have been created yet (e.g., the webhook
+		// event is still in flight) or may not have status conditions yet,
+		// keep retrying until it is finished.
+		if len(prs.Items) == 1 {
+			if cond := prs.Items[0].Status.GetCondition(apis.ConditionSucceeded); cond != nil {
+				if cond.Reason == "Succeeded" || cond.Reason == "Failed" {
+					break
+				}
+			}
+		}
+		if i == 20 {
+			t.Fatalf("%s pipelinerun has not finished, something is fishy", eventType)
 		}
 		time.Sleep(5 * time.Second)
-		if i == 20 {
-			t.Fatalf("pipelinerun has not finished, something is fishy")
-		}
 	}
 	numLines := int64(10)
 	out, err := tlogs.GetPodLog(context.Background(),
