@@ -36,7 +36,6 @@ to reduce its own cache memory usage.
 | --- | --- |
 | `metadata.managedFields` | Written by the API server for server-side apply tracking; not read by any reconciler logic |
 | `metadata.annotations` | No reconciler logic reads Repository annotations from the lister; the largest annotation (`kubectl.kubernetes.io/last-applied-configuration`) can be 500-2000 bytes alone |
-| `status` | The reconciler always fetches `Repository.Status` via a direct API call before updating it; it is never read from the lister |
 
 **Benchmark result:** ~89% JSON size reduction per Repository object.
 

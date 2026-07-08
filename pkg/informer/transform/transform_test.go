@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-func makeRepo(annotations map[string]string, managedFields []metav1.ManagedFieldsEntry, status []pacv1alpha1.RepositoryRunStatus) *pacv1alpha1.Repository {
+func makeRepo(annotations map[string]string, managedFields []metav1.ManagedFieldsEntry) *pacv1alpha1.Repository {
 	return &pacv1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:          "test-repo",
@@ -18,37 +18,31 @@ func makeRepo(annotations map[string]string, managedFields []metav1.ManagedField
 			Annotations:   annotations,
 			ManagedFields: managedFields,
 		},
-		Spec:   pacv1alpha1.RepositorySpec{URL: "https://github.com/org/repo"},
-		Status: status,
+		Spec: pacv1alpha1.RepositorySpec{URL: "https://github.com/org/repo"},
 	}
 }
 
 func TestRepositoryForCache(t *testing.T) {
 	tests := []struct {
-		name          string
-		input         any
-		wantStatusNil bool
-		wantSpecURL   string
+		name        string
+		input       any
+		wantSpecURL string
 	}{
 		{
-			name: "strips managedFields, annotations, and status, keeps spec",
+			name: "strips managedFields and annotations, keeps spec",
 			input: makeRepo(
 				map[string]string{"keep-me": "yes"},
 				[]metav1.ManagedFieldsEntry{{Manager: "kubectl"}},
-				[]pacv1alpha1.RepositoryRunStatus{{PipelineRunName: "pr-1"}},
 			),
-			wantStatusNil: true,
-			wantSpecURL:   "https://github.com/org/repo",
+			wantSpecURL: "https://github.com/org/repo",
 		},
 		{
 			name: "nil annotations handled safely",
 			input: makeRepo(
 				nil,
 				[]metav1.ManagedFieldsEntry{{Manager: "controller"}},
-				nil,
 			),
-			wantStatusNil: true,
-			wantSpecURL:   "https://github.com/org/repo",
+			wantSpecURL: "https://github.com/org/repo",
 		},
 		{
 			name:  "non-Repository object passed through unchanged",
@@ -61,11 +55,9 @@ func TestRepositoryForCache(t *testing.T) {
 				Obj: makeRepo(
 					map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "data"},
 					[]metav1.ManagedFieldsEntry{{Manager: "kubectl"}},
-					[]pacv1alpha1.RepositoryRunStatus{{PipelineRunName: "pr-1"}},
 				),
 			},
-			wantStatusNil: true,
-			wantSpecURL:   "https://github.com/org/repo",
+			wantSpecURL: "https://github.com/org/repo",
 		},
 	}
 
@@ -79,15 +71,11 @@ func TestRepositoryForCache(t *testing.T) {
 				assert.Assert(t, v.ManagedFields == nil, "ManagedFields should be nil")
 				assert.Assert(t, v.Annotations == nil, "Annotations should be nil")
 				assert.Equal(t, v.Spec.URL, tt.wantSpecURL)
-				if tt.wantStatusNil {
-					assert.Assert(t, v.Status == nil, "Status should be nil")
-				}
 			case cache.DeletedFinalStateUnknown:
 				repo, ok := v.Obj.(*pacv1alpha1.Repository)
 				assert.Assert(t, ok, "tombstone Obj should be *Repository")
 				assert.Assert(t, repo.ManagedFields == nil, "ManagedFields should be nil after tombstone transform")
 				assert.Assert(t, repo.Annotations == nil, "Annotations should be nil after tombstone transform")
-				assert.Assert(t, repo.Status == nil, "Status should be nil after tombstone transform")
 				assert.Equal(t, repo.Spec.URL, tt.wantSpecURL)
 			default:
 				// non-Repository pass-through: just verify no error

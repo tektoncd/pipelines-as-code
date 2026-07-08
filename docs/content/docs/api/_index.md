@@ -11,6 +11,5 @@ This section provides reference documentation for Pipelines-as-Code custom resou
 
 - [Repository CR]({{< relref "repository" >}}) -- The core custom resource that connects Pipelines-as-Code to your Git repository.
 - [Repository Spec]({{< relref "repository-spec" >}}) -- Detailed field reference for the Repository `spec`.
-- [Repository Status]({{< relref "repository-status" >}}) -- Field reference for the Repository `pipelinerun_status`.
 - [ConfigMap Reference]({{< relref "configmap" >}}) -- Global settings that apply to all repositories.
 - [Settings Reference]({{< relref "settings" >}}) -- Repository-level settings for authorization, provider behavior, and AI analysis.

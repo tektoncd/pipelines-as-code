@@ -26,8 +26,6 @@ import (
 //   - ManagedFields: written by the API server, not needed for reconciliation
 //   - Annotations: no reconciler logic reads Repository annotations from the
 //     lister; the largest annotation is kubectl.kubernetes.io/last-applied-configuration
-//   - Status: the reconciler always fetches Repository.Status via a direct API
-//     call before updating it; it is never read from the lister
 func RepositoryForCache(obj any) (any, error) {
 	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 		transformed, err := RepositoryForCache(tombstone.Obj)
@@ -44,7 +42,6 @@ func RepositoryForCache(obj any) (any, error) {
 
 	repo.ManagedFields = nil
 	repo.Annotations = nil
-	repo.Status = nil
 
 	return repo, nil
 }

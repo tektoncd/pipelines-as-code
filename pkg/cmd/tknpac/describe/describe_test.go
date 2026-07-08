@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v85/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -27,6 +26,34 @@ import (
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
+func makePR(clock *clockwork.FakeClock, name, ns, reason string, conditionStatus corev1.ConditionStatus, annotations map[string]string, startShift, endShift time.Duration) *tektonv1.PipelineRun {
+	return &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels: map[string]string{
+				keys.Repository: "test-run",
+			},
+			Annotations: annotations,
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapis.ConditionSucceeded,
+						Status: conditionStatus,
+						Reason: reason,
+					},
+				},
+			},
+			PipelineRunStatusFields: tektonv1.PipelineRunStatusFields{
+				StartTime:      &metav1.Time{Time: clock.Now().Add(startShift)},
+				CompletionTime: &metav1.Time{Time: clock.Now().Add(endShift)},
+			},
+		},
+	}
+}
+
 func TestDescribe(t *testing.T) {
 	t1 := time.Date(1999, time.February, 3, 4, 5, 6, 7, time.UTC)
 	cw := clockwork.NewFakeClockAt(t1)
@@ -35,7 +62,6 @@ func TestDescribe(t *testing.T) {
 	type args struct {
 		currentNamespace string
 		repoName         string
-		statuses         []v1alpha1.RepositoryRunStatus
 		opts             *describeOpts
 		pruns            []*tektonv1.PipelineRun
 		events           []*corev1.Event
@@ -45,44 +71,6 @@ func TestDescribe(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		{
-			name: "live run and repository run",
-			args: args{
-				repoName:         "test-run",
-				currentNamespace: ns,
-				opts:             &describeOpts{},
-				pruns: []*tektonv1.PipelineRun{
-					tektontest.MakePRCompletion(cw, "running", ns, running, map[string]string{
-						keys.Branch:    "tartanpion",
-						keys.EventType: "papayolo",
-					}, map[string]string{
-						keys.Repository: "test-run",
-					}, 30),
-				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						PipelineRunName: "pipelinerun1",
-						LogURL:          github.Ptr("https://everywhere.anwywhere"),
-						StartTime:       &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:  &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:             github.Ptr("SHA"),
-						SHAURL:          github.Ptr("https://anurl.com/commit/SHA"),
-						Title:           github.Ptr("A title"),
-						TargetBranch:    github.Ptr("TargetBranch"),
-						EventType:       github.Ptr("propseryouplaboun"),
-					},
-				},
-			},
-			wantErr: false,
-		},
 		{
 			name: "one live run",
 			args: args{
@@ -96,7 +84,53 @@ func TestDescribe(t *testing.T) {
 						keys.Repository: "test-run",
 					}, 30),
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{},
+			},
+			wantErr: false,
+		},
+		{
+			name: "two pipelineruns",
+			args: args{
+				repoName:         "test-run",
+				currentNamespace: ns,
+				opts:             &describeOpts{},
+				pruns: []*tektonv1.PipelineRun{
+					tektontest.MakePRCompletion(cw, "running", ns, running, map[string]string{
+						keys.Branch:    "tartanpion",
+						keys.EventType: "papayolo",
+					}, map[string]string{
+						keys.Repository: "test-run",
+					}, 30),
+					makePR(cw, "pipelinerun1", ns, "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:       "SHA",
+							keys.ShaURL:    "https://anurl.com/commit/SHA",
+							keys.ShaTitle:  "A title",
+							keys.Branch:    "TargetBranch",
+							keys.EventType: "propseryouplaboun",
+						}, -16*time.Minute, -15*time.Minute),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "collect failures",
+			args: args{
+				repoName:         "test-run",
+				currentNamespace: "namespace",
+				opts: &describeOpts{
+					PacCliOpts: cli.PacCliOpts{
+						Namespace: "optnamespace",
+					},
+				},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "optnamespace", "Failed", corev1.ConditionFalse,
+						map[string]string{
+							keys.SHA:      "SHA",
+							keys.ShaURL:   "https://anurl.com/commit/SHA",
+							keys.ShaTitle: "A title",
+							keys.Branch:   "TargetBranch",
+						}, -16*time.Minute, -15*time.Minute),
+				},
 			},
 			wantErr: false,
 		},
@@ -118,7 +152,6 @@ func TestDescribe(t *testing.T) {
 						keys.Repository: "test-run",
 					}, 30),
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{},
 			},
 			wantErr: false,
 		},
@@ -140,51 +173,6 @@ func TestDescribe(t *testing.T) {
 						keys.Repository: "test-run",
 					}, 30),
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{},
-			},
-			wantErr: false,
-		},
-		{
-			name: "collect failures",
-			args: args{
-				repoName:         "test-run",
-				currentNamespace: "namespace",
-				opts: &describeOpts{
-					PacCliOpts: cli.PacCliOpts{
-						Namespace: "optnamespace",
-					},
-				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{
-							"task1": {
-								Reason:      tektonv1.PipelineRunReasonFailed.String(),
-								DisplayName: "And here's to you, Mrs. Robinson",
-								LogSnippet:  "We'd like to help you learn to help yourself",
-							},
-
-							"task2": {
-								Message: "I was sleeping and I forgot to wake up",
-								Reason:  tektonv1.PipelineRunReasonTimedOut.String(),
-							},
-						},
-						PipelineRunName: "pipelinerun1",
-						LogURL:          github.Ptr("https://everywhere.anwywhere"),
-						StartTime:       &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:  &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:             github.Ptr("SHA"),
-						SHAURL:          github.Ptr("https://anurl.com/commit/SHA"),
-						Title:           github.Ptr("A title"),
-						TargetBranch:    github.Ptr("TargetBranch"),
-					},
-				},
 			},
 			wantErr: false,
 		},
@@ -199,31 +187,20 @@ func TestDescribe(t *testing.T) {
 						UseRealTime: true,
 					},
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						PipelineRunName:    "pipelinerun1",
-						LogURL:             github.Ptr("https://everywhere.anwywhere"),
-						StartTime:          &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:     &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:                github.Ptr("SHA"),
-						SHAURL:             github.Ptr("https://anurl.com/commit/SHA"),
-						Title:              github.Ptr("A title"),
-						TargetBranch:       github.Ptr("TargetBranch"),
-					},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "optnamespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:      "SHA",
+							keys.ShaURL:   "https://anurl.com/commit/SHA",
+							keys.ShaTitle: "A title",
+							keys.Branch:   "TargetBranch",
+						}, -16*time.Minute, -15*time.Minute),
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "one repository status and optnamespace",
+			name: "one pipelinerun and optnamespace",
 			args: args{
 				repoName:         "test-run",
 				currentNamespace: "namespace",
@@ -232,25 +209,14 @@ func TestDescribe(t *testing.T) {
 						Namespace: "optnamespace",
 					},
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						PipelineRunName:    "pipelinerun1",
-						LogURL:             github.Ptr("https://everywhere.anwywhere"),
-						StartTime:          &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:     &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:                github.Ptr("SHA"),
-						SHAURL:             github.Ptr("https://anurl.com/commit/SHA"),
-						Title:              github.Ptr("A title"),
-						TargetBranch:       github.Ptr("TargetBranch"),
-					},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "optnamespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:      "SHA",
+							keys.ShaURL:   "https://anurl.com/commit/SHA",
+							keys.ShaTitle: "A title",
+							keys.Branch:   "TargetBranch",
+						}, -16*time.Minute, -15*time.Minute),
 				},
 			},
 			wantErr: false,
@@ -281,25 +247,14 @@ func TestDescribe(t *testing.T) {
 						},
 					},
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						PipelineRunName:    "pipelinerun1",
-						LogURL:             github.Ptr("https://everywhere.anwywhere"),
-						StartTime:          &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:     &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:                github.Ptr("SHA"),
-						SHAURL:             github.Ptr("https://anurl.com/commit/SHA"),
-						Title:              github.Ptr("A title"),
-						TargetBranch:       github.Ptr("TargetBranch"),
-					},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "namespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:      "SHA",
+							keys.ShaURL:   "https://anurl.com/commit/SHA",
+							keys.ShaTitle: "A title",
+							keys.Branch:   "TargetBranch",
+						}, -16*time.Minute, -15*time.Minute),
 				},
 			},
 			wantErr: false,
@@ -356,92 +311,49 @@ func TestDescribe(t *testing.T) {
 						},
 					},
 				},
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						PipelineRunName:    "pipelinerun1",
-						LogURL:             github.Ptr("https://everywhere.anwywhere"),
-						StartTime:          &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:     &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:                github.Ptr("SHA"),
-						SHAURL:             github.Ptr("https://anurl.com/commit/SHA"),
-						Title:              github.Ptr("A title"),
-						TargetBranch:       github.Ptr("TargetBranch"),
-					},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "namespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:      "SHA",
+							keys.ShaURL:   "https://anurl.com/commit/SHA",
+							keys.ShaTitle: "A title",
+							keys.Branch:   "TargetBranch",
+						}, -16*time.Minute, -15*time.Minute),
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "multiple repo status",
+			name: "multiple pipelineruns",
 			args: args{
 				opts:             &describeOpts{},
 				repoName:         "test-run",
 				currentNamespace: "namespace",
-				statuses: []v1alpha1.RepositoryRunStatus{
-					{
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						PipelineRunName: "pipelinerun1",
-						LogURL:          github.Ptr("https://everywhere.anwywhere"),
-						StartTime:       &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-						CompletionTime:  &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-						SHA:             github.Ptr("SHA"),
-						SHAURL:          github.Ptr("https://anurl.com/commit/SHA"),
-						Title:           github.Ptr("A title"),
-						TargetBranch:    github.Ptr("TargetBranch"),
-						EventType:       github.Ptr("pull_request"),
-					},
-					{
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						PipelineRunName: "pipelinerun2",
-						LogURL:          github.Ptr("https://everywhere.anwywhere"),
-						StartTime:       &metav1.Time{Time: cw.Now().Add(-18 * time.Minute)},
-						CompletionTime:  &metav1.Time{Time: cw.Now().Add(-17 * time.Minute)},
-						SHA:             github.Ptr("SHA2"),
-						SHAURL:          github.Ptr("https://anurl.com/commit/SHA2"),
-						Title:           github.Ptr("Another Update"),
-						TargetBranch:    github.Ptr("TargetBranch"),
-						EventType:       github.Ptr("pull_request"),
-					},
-					{
-						CollectedTaskInfos: &map[string]v1alpha1.TaskInfos{},
-						Status: knativeduckv1.Status{
-							Conditions: []knativeapis.Condition{
-								{
-									Reason: "Success",
-								},
-							},
-						},
-						PipelineRunName: "pipelinerun3",
-						LogURL:          github.Ptr("https://everywhere.anwywhere"),
-						StartTime:       &metav1.Time{Time: cw.Now().Add(-20 * time.Minute)},
-						CompletionTime:  &metav1.Time{Time: cw.Now().Add(-19 * time.Minute)},
-						SHA:             github.Ptr("SHA"),
-						SHAURL:          github.Ptr("https://anurl.com/commit/SHA"),
-						Title:           github.Ptr("Another title"),
-						TargetBranch:    github.Ptr("refs/heads/PushBranch"),
-						EventType:       github.Ptr("push"),
-					},
+				pruns: []*tektonv1.PipelineRun{
+					makePR(cw, "pipelinerun1", "namespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:       "SHA",
+							keys.ShaURL:    "https://anurl.com/commit/SHA",
+							keys.ShaTitle:  "A title",
+							keys.Branch:    "TargetBranch",
+							keys.EventType: "pull_request",
+						}, -16*time.Minute, -15*time.Minute),
+					makePR(cw, "pipelinerun2", "namespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:       "SHA2",
+							keys.ShaURL:    "https://anurl.com/commit/SHA2",
+							keys.ShaTitle:  "Another Update",
+							keys.Branch:    "TargetBranch",
+							keys.EventType: "pull_request",
+						}, -18*time.Minute, -17*time.Minute),
+					makePR(cw, "pipelinerun3", "namespace", "Success", corev1.ConditionTrue,
+						map[string]string{
+							keys.SHA:       "SHA",
+							keys.ShaURL:    "https://anurl.com/commit/SHA",
+							keys.ShaTitle:  "Another title",
+							keys.Branch:    "refs/heads/PushBranch",
+							keys.EventType: "push",
+						}, -20*time.Minute, -19*time.Minute),
 				},
 			},
 			wantErr: false,
@@ -462,7 +374,6 @@ func TestDescribe(t *testing.T) {
 					Spec: v1alpha1.RepositorySpec{
 						URL: "https://anurl.com",
 					},
-					Status: tt.args.statuses,
 				},
 			}
 

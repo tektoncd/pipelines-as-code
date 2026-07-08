@@ -19,11 +19,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	knativeapi "knative.dev/pkg/apis"
-	knativeduckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
 func TestTimeout(t *testing.T) {
@@ -62,69 +59,33 @@ func TestDuration(t *testing.T) {
 func TestPRDuration(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 	infiveminutes := clock.Now().Add(time.Duration(5 * int(time.Minute)))
-	type args struct {
-		rr v1alpha1.RepositoryRunStatus
-	}
+	now := clock.Now()
 	tests := []struct {
-		name string
-		args args
-		want string
+		name           string
+		startTime      *metav1.Time
+		completionTime *metav1.Time
+		want           string
 	}{
 		{
 			name: "no start time",
-			args: args{},
 			want: nonAttributedStr,
 		},
 		{
-			name: "with completion time",
-			args: args{
-				rr: v1alpha1.RepositoryRunStatus{
-					StartTime: &metav1.Time{
-						Time: clock.Now(),
-					},
-					CompletionTime: &metav1.Time{
-						Time: infiveminutes,
-					},
-				},
-			},
-			want: "5 minutes",
+			name:           "no completion time",
+			startTime:      &metav1.Time{Time: now},
+			completionTime: nil,
+			want:           nonAttributedStr,
 		},
 		{
-			name: "completion from first condition",
-			args: args{
-				rr: v1alpha1.RepositoryRunStatus{
-					StartTime: &metav1.Time{
-						Time: clock.Now(),
-					},
-					Status: knativeduckv1.Status{
-						Conditions: knativeduckv1.Conditions{
-							{
-								LastTransitionTime: knativeapi.VolatileTime{
-									Inner: metav1.Time{Time: infiveminutes},
-								},
-							},
-						},
-					},
-				},
-			},
-			want: "5 minutes",
-		},
-		{
-			name: "with status but no conditions",
-			args: args{
-				rr: v1alpha1.RepositoryRunStatus{
-					StartTime: &metav1.Time{
-						Time: clock.Now(),
-					},
-					Status: knativeduckv1.Status{},
-				},
-			},
-			want: nonAttributedStr,
+			name:           "with both times",
+			startTime:      &metav1.Time{Time: now},
+			completionTime: &metav1.Time{Time: infiveminutes},
+			want:           "5 minutes",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PRDuration(tt.args.rr); got != tt.want {
+			if got := PRDuration(tt.startTime, tt.completionTime); got != tt.want {
 				t.Errorf("PRDuration() = %v, want %v", got, tt.want)
 			}
 		})

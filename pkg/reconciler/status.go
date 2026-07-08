@@ -6,9 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v85/github"
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	pacv1a1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	kstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction/status"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -24,63 +22,10 @@ import (
 	"knative.dev/pkg/apis"
 )
 
-const (
-	maxPipelineRunStatusRun = 5
-)
-
 var backoffSchedule = []time.Duration{
 	1 * time.Second,
 	3 * time.Second,
 	5 * time.Second,
-}
-
-func (r *Reconciler) updateRepoRunStatus(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, repo *pacv1a1.Repository, event *info.Event) error {
-	refsanitized := formatting.SanitizeBranch(event.BaseBranch)
-	repoStatus := pacv1a1.RepositoryRunStatus{
-		Status:          pr.Status.Status,
-		PipelineRunName: pr.Name,
-		StartTime:       pr.Status.StartTime,
-		CompletionTime:  pr.Status.CompletionTime,
-		SHA:             &event.SHA,
-		SHAURL:          &event.SHAURL,
-		Title:           &event.SHATitle,
-		LogURL:          github.Ptr(r.run.Clients.ConsoleUI().DetailURL(pr)),
-		EventType:       &event.EventType,
-		TargetBranch:    &refsanitized,
-	}
-
-	// Get repository again in case it was updated while we were running the CI
-	// we try multiple time until we get right in case of conflicts.
-	// that's what the error message tell us anyway, so i guess we listen.
-	maxRun := 10
-	for i := 0; i < maxRun; i++ {
-		lastrepo, err := r.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(
-			pr.GetNamespace(),
-		).Get(ctx, repo.Name, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-
-		// Append PipelineRun status files to the repo status
-		if len(lastrepo.Status) >= maxPipelineRunStatusRun {
-			copy(lastrepo.Status, lastrepo.Status[len(lastrepo.Status)-maxPipelineRunStatusRun+1:])
-			lastrepo.Status = lastrepo.Status[:maxPipelineRunStatusRun-1]
-		}
-
-		lastrepo.Status = append(lastrepo.Status, repoStatus)
-		nrepo, err := r.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(lastrepo.Namespace).Update(
-			ctx, lastrepo, metav1.UpdateOptions{},
-		)
-		if err != nil {
-			logger.Infof("Could not update repo %s, retrying %d/%d: %s", lastrepo.Namespace, i, maxRun, err.Error())
-			continue
-		}
-		logger.Infof("Repository status of %s has been updated", nrepo.Name)
-		logger.Warn("The `pipelinerun_status` field in the Repository CR is scheduled for deprecation and will be removed in a future release. Please avoid relying on it.")
-		return nil
-	}
-
-	return fmt.Errorf("cannot update %s", repo.Name)
 }
 
 func (r *Reconciler) getFailureSnippet(ctx context.Context, pr *tektonv1.PipelineRun) string {

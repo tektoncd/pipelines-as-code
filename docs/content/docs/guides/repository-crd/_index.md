@@ -11,13 +11,8 @@ The Repository CR serves the following purposes:
 - Specifying the namespace where PipelineRuns execute.
 - Referencing an API secret, username, or API URL when required by your Git provider
   (for example, when using webhooks instead of the GitHub App).
-- Storing the most recent PipelineRun statuses for the repository (5 by default).
 - Letting you declare [custom parameters]({{< relref "/docs/advanced/custom-parameters" >}})
   within the PipelineRun that Pipelines-as-Code expands based on certain filters.
-
-{{< callout type="error" >}}
-The `pipelinerun_status` field in the `Repository` CR is scheduled for deprecation and will be removed in a future release. Please avoid relying on it.
-{{< /callout >}}
 
 To configure Pipelines-as-Code, create a Repository CR in the
 namespace where your CI runs -- for example, `project-repository`.

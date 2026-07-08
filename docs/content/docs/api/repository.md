@@ -42,10 +42,6 @@ Standard Kubernetes metadata, including name, namespace, labels, and annotations
 Defines the desired behavior of the repository. See [Repository Spec]({{< relref "repository-spec" >}}) for detailed field documentation.
 {{< /param >}}
 
-{{< param name="pipelinerun_status" type="[]RepositoryRunStatus" id="param-pipelinerun-status" >}}
-Contains status information for PipelineRuns that Pipelines-as-Code has executed for this repository. See [Repository Status]({{< relref "repository-status" >}}) for detailed field documentation.
-{{< /param >}}
-
 ## Resource shortcuts
 
 The Repository CR supports the following short name:
@@ -108,5 +104,4 @@ spec:
 ## Related resources
 
 - [Repository Spec]({{< relref "repository-spec" >}}) -- Detailed specification fields
-- [Repository Status]({{< relref "repository-status" >}}) -- Status field reference
 - [Settings Reference]({{< relref "settings" >}}) -- Settings configuration options

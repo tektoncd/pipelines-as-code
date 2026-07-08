@@ -18,53 +18,11 @@ import (
 // createRealisticRepository creates a Repository with realistic field sizes
 // that would be seen in production environments.
 func createRealisticRepository(name string) *pacv1alpha1.Repository {
-	// Realistic managedFields (typically 500-2000 bytes).
 	fieldsV1Data1 := []byte(`{"f:metadata":{"f:annotations":{"f:kubectl.kubernetes.io/last-applied-configuration":{}},"f:labels":{}},"f:spec":{"f:url":{},"f:git_provider":{"f:url":{},"f:type":{},"f:secret":{"f:name":{},"f:key":{}},"f:webhook_secret":{"f:name":{},"f:key":{}}},"f:settings":{"f:pipelinerun_provenance":{},"f:policy":{"f:ok_to_test":{},"f:pull_request":{}}},"f:params":{}}}`)
-	fieldsV1Data2 := []byte(`{"f:pipelinerun_status":{}}`)
 
 	now := metav1.NewTime(time.Now())
 
-	// Realistic last-applied-configuration value: the applied Repository spec as JSON (typically 500-2000 bytes).
 	lastAppliedJSON := []byte(`{"apiVersion":"pipelinesascode.tekton.dev/v1alpha1","kind":"Repository","metadata":{"name":"` + name + `","namespace":"pipelines"},"spec":{"url":"https://github.com/org/repo","git_provider":{"url":"https://api.github.com","type":"github","secret":{"name":"github-token","key":"token"},"webhook_secret":{"name":"github-webhook-secret","key":"secret"}},"settings":{"pipelinerun_provenance":"source","policy":{"ok_to_test":["user1","user2","user3"],"pull_request":["user4","user5"]}},"params":[{"name":"deploy-env","value":"staging"},{"name":"registry","value":"quay.io/myorg"},{"name":"image-tag","value":"latest"}]}}`)
-
-	// PAC stores the last 5 pipeline run statuses in the Repository status.
-	status := make([]pacv1alpha1.RepositoryRunStatus, 5)
-	for i := range 5 {
-		sha := fmt.Sprintf("abc%d%06d", i, i)
-		shaURL := fmt.Sprintf("https://github.com/org/repo/commit/%s", sha)
-		logURL := fmt.Sprintf("https://console.example.com/k8s/ns/pipelines/tekton.dev~v1~PipelineRun/pr-%s/logs", sha)
-		branch := "main"
-		eventType := "push"
-		title := fmt.Sprintf("feat: add feature number %d", i)
-		taskInfos := map[string]pacv1alpha1.TaskInfos{
-			"build": {
-				Name:        "build",
-				DisplayName: "Build Image",
-				Reason:      "Error",
-				Message:     "container image build failed with exit code 1",
-				LogSnippet:  "error: exit status 1\nbuild failed: cannot find package",
-			},
-		}
-		status[i] = pacv1alpha1.RepositoryRunStatus{
-			Status: duckv1.Status{
-				Conditions: []apis.Condition{{
-					Type:   apis.ConditionSucceeded,
-					Status: "True",
-					Reason: "Succeeded",
-				}},
-			},
-			PipelineRunName:    fmt.Sprintf("pr-%s", sha),
-			StartTime:          &now,
-			CompletionTime:     &now,
-			SHA:                &sha,
-			SHAURL:             &shaURL,
-			Title:              &title,
-			LogURL:             &logURL,
-			TargetBranch:       &branch,
-			EventType:          &eventType,
-			CollectedTaskInfos: &taskInfos,
-		}
-	}
 
 	return &pacv1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,14 +36,6 @@ func createRealisticRepository(name string) *pacv1alpha1.Repository {
 					Time:       &now,
 					FieldsType: "FieldsV1",
 					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data1},
-				},
-				{
-					Manager:    "pipelines-as-code-controller",
-					Operation:  metav1.ManagedFieldsOperationUpdate,
-					APIVersion: "pipelinesascode.tekton.dev/v1alpha1",
-					Time:       &now,
-					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data2},
 				},
 			},
 			Annotations: map[string]string{
@@ -123,7 +73,6 @@ func createRealisticRepository(name string) *pacv1alpha1.Repository {
 				{Name: "image-tag", Value: "latest"},
 			},
 		},
-		Status: status,
 	}
 }
 
@@ -240,17 +189,15 @@ func TestMeasureRepoTransformSavings(t *testing.T) {
 	t.Logf("\n=== Fields Stripped ===")
 	t.Logf("ManagedFields: %v (was %d entries)", transformedRepo.ManagedFields == nil, len(original.ManagedFields))
 	t.Logf("Annotations:   %v (was %d entries)", transformedRepo.Annotations == nil, len(original.Annotations))
-	t.Logf("Status:        %v (was %d entries)", transformedRepo.Status == nil, len(original.Status))
 	t.Logf("=======================")
 
 	t.Logf("\n=== Individual Field Sizes ===")
 	t.Logf("ManagedFields: %d bytes", measureObjectSize(original.ManagedFields))
 	t.Logf("Annotations:   %d bytes", measureObjectSize(original.Annotations))
-	t.Logf("Status:        %d bytes", measureObjectSize(original.Status))
 	t.Logf("==============================")
 
-	if jsonSavings < 20 {
-		t.Errorf("Expected at least 20%% size reduction, got %.1f%%", jsonSavings)
+	if jsonSavings < 10 {
+		t.Errorf("Expected at least 10%% size reduction, got %.1f%%", jsonSavings)
 	}
 }
 

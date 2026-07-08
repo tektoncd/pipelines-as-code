@@ -4,7 +4,7 @@ URL:         https://anurl.com
 
 Last Run:
 Status:         Success
-Log:            https://everywhere.anwywhere
+Log:            https://dashboard.is.not.configured
 Commit URL:     https://anurl.com/commit/SHA
 PipelineRun:    pipelinerun1
 Event:          pull_request

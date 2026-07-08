@@ -11,7 +11,7 @@
 
 {{ $.ColorScheme.Underline "Last Run:" }}
 {{- end }}
-{{ $.ColorScheme.Bold "Status:" }}	{{ $.ColorScheme.ColorStatus (index $status.Status.Conditions 0).Reason  }}
+{{ $.ColorScheme.Bold "Status:" }}	{{ $.ColorScheme.ColorStatus $status.Reason }}
 {{ $.ColorScheme.Bold "Log:"  }}	{{ $status.LogURL}}
 {{ $.ColorScheme.Bold "Commit URL:" }}	{{ $status.SHAURL }}
 {{ $.ColorScheme.Bold "PipelineRun:" }}	{{ $.ColorScheme.HyperLink $status.PipelineRunName $status.LogURL }}
@@ -19,7 +19,7 @@
 {{ $.ColorScheme.Bold "Branch:" }}	{{ sanitizeBranch $status.TargetBranch }}
 {{ $.ColorScheme.Bold "Commit Title:" }}	{{ $status.Title }}
 {{ $.ColorScheme.Bold "StartTime:" }}	{{ if $.Opts.UseRealTime }}{{ $status.StartTime.Format "2006-01-02T15:04:05Z07:00" }} {{ else }}{{ formatTime $status.StartTime $.Clock }}{{ end }} 
-{{ $.ColorScheme.Bold "Duration:" }}	{{ formatDuration $status }}
+{{ $.ColorScheme.Bold "Duration:" }}	{{ formatDuration $status.StartTime $status.CompletionTime }}
 {{- if and $status.CollectedTaskInfos (gt (len $status.CollectedTaskInfos) 0) }}
 
 {{ $.ColorScheme.Underline "Failures:" }}

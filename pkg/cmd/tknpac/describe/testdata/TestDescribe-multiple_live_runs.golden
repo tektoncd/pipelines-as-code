@@ -1,12 +1,19 @@
-Name:           test-run
-Namespace:      ns
-URL:            https://anurl.com
+Name:        test-run
+Namespace:   ns
+URL:         https://anurl.com
+
+Last Run:
 Status:         Running
 Log:            https://dashboard.is.not.configured
 Commit URL:     
-PipelineRun:    running2
+PipelineRun:    running
 Event:          
-Branch:         vavaroom
+Branch:         tartanpion
 Commit Title:   
 StartTime:      -35 minutes ago 
-Duration:       ---
+Duration:       -1 hour
+
+Other Runs:
+
+STATUS    Event   Branch     SHA   STARTED TIME      DURATION   PIPELINERUN
+Running           vavaroom         -35 minutes ago   -1 hour    running2

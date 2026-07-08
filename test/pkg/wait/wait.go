@@ -131,7 +131,7 @@ func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts 
 // or failed). The watcher patches the state annotation as its last action,
 // after all status reporting and annotation patching (log-url, check-run-id,
 // ...), so waiting on it guarantees those annotations are present — the same
-// ordering the old Repository.Status-based wait provided.
+// ordering the previous wait implementation provided.
 // Results are sorted by completion time ascending (oldest first, newest last).
 func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)

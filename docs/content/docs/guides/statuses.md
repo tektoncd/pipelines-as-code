@@ -103,13 +103,6 @@ Repository CR.
 
 ## Repository CR
 
-Pipelines-as-Code stores the most recent five statuses of PipelineRuns associated with a repository
-in the corresponding Repository CR.
-
-{{< callout type="error" >}}
-The `pipelinerun_status` field in the `Repository` CR is scheduled for deprecation and will be removed in a future release. Please avoid relying on it.
-{{< /callout >}}
-
 ```console
 % kubectl get repo -n pipelines-as-code-ci
 NAME                  URL                                                        NAMESPACE             SUCCEEDED   REASON      STARTTIME   COMPLETIONTIME

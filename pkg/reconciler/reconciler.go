@@ -371,10 +371,6 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 			fmt.Sprintf("AI/LLM analysis failed for repository %s/%s and pipeline run %s: %v", repo.Namespace, repo.Name, newPr.Name, err))
 	}
 
-	if err := r.updateRepoRunStatus(ctx, logger, newPr, repo, event); err != nil {
-		return repo, fmt.Errorf("cannot update run status: %w", err)
-	}
-
 	if _, err := r.updatePipelineRunState(ctx, logger, pr, finalState); err != nil {
 		return repo, fmt.Errorf("cannot update state: %w", err)
 	}

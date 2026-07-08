@@ -54,8 +54,9 @@ for FILENAME in "${CRD_FILES[@]}"; do
   counter=0 limit=5
   while [ "$counter" -lt "$limit" ]; do
     set +e
-    # Use controller-gen to generate the schema
+    # Use controller-gen to generate the schema and deepcopy
     go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.1 \
+      object \
       crd:crdVersions=v1 \
       output:crd:artifacts:config=$TEMP_DIR \
       paths=$API_PATH/$API_SUBDIR/... >$LOG_FILE 2>&1
@@ -88,9 +89,8 @@ for FILENAME in "${CRD_FILES[@]}"; do
         echo "  Manual action required: Copy schema from auto-generated CRD to $BASENAME"
       fi
 
-      # Now generate directly to the config directory for the final step
-      # but we'll delete the auto-generated file afterward
       go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.1 \
+        object \
         crd:crdVersions=v1 \
         output:crd:artifacts:config=$CRD_PATH \
         paths=$API_PATH/$API_SUBDIR/... >/dev/null 2>&1

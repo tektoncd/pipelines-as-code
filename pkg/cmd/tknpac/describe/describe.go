@@ -47,15 +47,15 @@ func formatError(cs *cli.ColorScheme, log string) string {
 	return n
 }
 
-func formatStatus(status v1alpha1.RepositoryRunStatus, cs *cli.ColorScheme, c clockwork.Clock) string {
+func formatRunStatus(rs status.RunStatus, cs *cli.ColorScheme, c clockwork.Clock) string {
 	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s",
-		cs.ColorStatus(status.Status.Conditions[0].Reason),
-		*status.EventType,
-		formatting.SanitizeBranch(*status.TargetBranch),
-		cs.HyperLink(formatting.ShortSHA(*status.SHA), *status.SHAURL),
-		formatting.Age(status.StartTime, c),
-		formatting.PRDuration(status),
-		cs.HyperLink(status.PipelineRunName, *status.LogURL))
+		cs.ColorStatus(rs.Reason),
+		rs.EventType,
+		formatting.SanitizeBranch(rs.TargetBranch),
+		cs.HyperLink(formatting.ShortSHA(rs.SHA), rs.SHAURL),
+		formatting.Age(rs.StartTime, c),
+		formatting.PRDuration(rs.StartTime, rs.CompletionTime),
+		cs.HyperLink(rs.PipelineRunName, rs.LogURL))
 }
 
 type describeOpts struct {
@@ -155,12 +155,11 @@ func Root(run *params.Run, ioStreams *cli.IOStreams) *cobra.Command {
 	return cmd
 }
 
-func filterOnlyToPipelineRun(opts *describeOpts, statuses []v1alpha1.RepositoryRunStatus) []v1alpha1.RepositoryRunStatus {
-	ret := []v1alpha1.RepositoryRunStatus{}
-
-	for _, rrs := range statuses {
-		if rrs.PipelineRunName == opts.TargetPipelineRun {
-			ret = append(ret, rrs)
+func filterOnlyToPipelineRun(opts *describeOpts, statuses []status.RunStatus) []status.RunStatus {
+	var ret []status.RunStatus
+	for _, rs := range statuses {
+		if rs.PipelineRunName == opts.TargetPipelineRun {
+			ret = append(ret, rs)
 		}
 	}
 	return ret
@@ -234,7 +233,7 @@ func describe(ctx context.Context, cs *params.Run, clock clockwork.Clock, opts *
 	colorScheme := ioStreams.ColorScheme()
 	funcMap := template.FuncMap{
 		"formatError":     formatError,
-		"formatStatus":    formatStatus,
+		"formatStatus":    formatRunStatus,
 		"formatEventType": formatting.CamelCasit,
 		"formatDuration":  formatting.PRDuration,
 		"formatTime":      formatting.Age,
@@ -242,7 +241,7 @@ func describe(ctx context.Context, cs *params.Run, clock clockwork.Clock, opts *
 		"shortSHA":        formatting.ShortSHA,
 	}
 
-	statuses := status.MixLivePRandRepoStatus(ctx, cs, *repository)
+	statuses := status.GetRunStatus(ctx, cs, *repository)
 
 	if opts.TargetPipelineRun != "" {
 		statuses = filterOnlyToPipelineRun(opts, statuses)
@@ -253,7 +252,7 @@ func describe(ctx context.Context, cs *params.Run, clock clockwork.Clock, opts *
 
 	data := struct {
 		Repository  *v1alpha1.Repository
-		Statuses    []v1alpha1.RepositoryRunStatus
+		Statuses    []status.RunStatus
 		ColorScheme *cli.ColorScheme
 		Clock       clockwork.Clock
 		Opts        *describeOpts

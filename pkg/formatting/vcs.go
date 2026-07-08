@@ -22,6 +22,8 @@ func SanitizeBranch(s string) string {
 	return s
 }
 
+var shortShaLength = 7
+
 // ShortSHA returns a shortsha.
 func ShortSHA(sha string) string {
 	if sha == "" {

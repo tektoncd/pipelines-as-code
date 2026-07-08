@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v85/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -40,6 +39,34 @@ func newIOStream() (*cli.IOStreams, *bytes.Buffer) {
 	}, out
 }
 
+func makePR(clock *clockwork.FakeClock, name, ns, reason string, annotations map[string]string, repoName string, startShift, endShift time.Duration) *tektonv1.PipelineRun {
+	return &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels: map[string]string{
+				keys.Repository: repoName,
+			},
+			Annotations: annotations,
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapis.ConditionSucceeded,
+						Status: corev1.ConditionTrue,
+						Reason: reason,
+					},
+				},
+			},
+			PipelineRunStatusFields: tektonv1.PipelineRunStatusFields{
+				StartTime:      &metav1.Time{Time: clock.Now().Add(startShift)},
+				CompletionTime: &metav1.Time{Time: clock.Now().Add(endShift)},
+			},
+		},
+	}
+}
+
 func TestList(t *testing.T) {
 	running := tektonv1.PipelineRunReasonRunning.String()
 	t1 := time.Date(1999, time.February, 3, 4, 5, 6, 7, time.UTC)
@@ -63,24 +90,6 @@ func TestList(t *testing.T) {
 		Spec: pacv1alpha1.RepositorySpec{
 			URL: "https://anurl.com/owner/repo",
 		},
-		Status: []pacv1alpha1.RepositoryRunStatus{
-			{
-				Status: knativeduckv1.Status{
-					Conditions: []knativeapis.Condition{
-						{
-							Reason: "Success",
-						},
-					},
-				},
-				PipelineRunName: "pipelinerun1",
-				StartTime:       &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-				CompletionTime:  &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-				SHA:             github.Ptr(repoNamespace1SHA),
-				SHAURL:          github.Ptr("https://somewhereandnowhere/1"),
-				Title:           github.Ptr("A title"),
-				LogURL:          github.Ptr("https://help.me.obiwan.kenobi/1"),
-			},
-		},
 	}
 	repoNamespace2 := &pacv1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
@@ -90,25 +99,21 @@ func TestList(t *testing.T) {
 		Spec: pacv1alpha1.RepositorySpec{
 			URL: "https://anurl.com/owner/repo",
 		},
-		Status: []pacv1alpha1.RepositoryRunStatus{
-			{
-				Status: knativeduckv1.Status{
-					Conditions: []knativeapis.Condition{
-						{
-							Reason: "Success",
-						},
-					},
-				},
-				PipelineRunName: "pipelinerun2",
-				StartTime:       &metav1.Time{Time: cw.Now().Add(-16 * time.Minute)},
-				CompletionTime:  &metav1.Time{Time: cw.Now().Add(-15 * time.Minute)},
-				SHA:             github.Ptr("SHA"),
-				SHAURL:          github.Ptr("https://somewhereandnowhere/2"),
-				Title:           github.Ptr("A title"),
-				LogURL:          github.Ptr("https://help.me.obiwan.kenobi"),
-			},
-		},
 	}
+
+	prNamespace1 := makePR(cw, "pipelinerun1", namespace1.GetName(), "Success",
+		map[string]string{
+			keys.SHA:      repoNamespace1SHA,
+			keys.ShaURL:   "https://somewhereandnowhere/1",
+			keys.ShaTitle: "A title",
+		}, "repo1", -16*time.Minute, -15*time.Minute)
+
+	prNamespace2 := makePR(cw, "pipelinerun2", namespace2.GetName(), "Success",
+		map[string]string{
+			keys.SHA:      "SHA",
+			keys.ShaURL:   "https://somewhereandnowhere/2",
+			keys.ShaTitle: "A title",
+		}, "repo2", -16*time.Minute, -15*time.Minute)
 
 	type args struct {
 		namespaces       []*corev1.Namespace
@@ -141,6 +146,7 @@ func TestList(t *testing.T) {
 					namespace1,
 				},
 				repositories: []*pacv1alpha1.Repository{repoNamespace1},
+				pipelineruns: []*tektonv1.PipelineRun{prNamespace1},
 			},
 		},
 		{
@@ -150,6 +156,7 @@ func TestList(t *testing.T) {
 				currentNamespace: "namespace",
 				namespaces:       []*corev1.Namespace{namespace1, namespace2},
 				repositories:     []*pacv1alpha1.Repository{repoNamespace1, repoNamespace2},
+				pipelineruns:     []*tektonv1.PipelineRun{prNamespace1, prNamespace2},
 			},
 		},
 		{
@@ -159,6 +166,7 @@ func TestList(t *testing.T) {
 				currentNamespace: namespace2.GetName(),
 				namespaces:       []*corev1.Namespace{namespace1, namespace2},
 				repositories:     []*pacv1alpha1.Repository{repoNamespace1, repoNamespace2},
+				pipelineruns:     []*tektonv1.PipelineRun{prNamespace1, prNamespace2},
 			},
 		},
 		{
@@ -168,6 +176,7 @@ func TestList(t *testing.T) {
 				currentNamespace: namespace2.GetName(),
 				namespaces:       []*corev1.Namespace{namespace1, namespace2},
 				repositories:     []*pacv1alpha1.Repository{repoNamespace1, repoNamespace2},
+				pipelineruns:     []*tektonv1.PipelineRun{prNamespace1, prNamespace2},
 			},
 		},
 		{

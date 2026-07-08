@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -15,26 +14,12 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"knative.dev/pkg/ptr"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
 var shaValues = []string{"1234", "abcd"}
 
-func TestRepositoryRunStatusRemoveSameSHA(t *testing.T) {
-	inputRepoStatus := []v1alpha1.RepositoryRunStatus{{
-		SHA: ptr.String(shaValues[0]),
-	}, {
-		SHA: ptr.String(shaValues[1]),
-	}}
-	wantRepoStatus := []v1alpha1.RepositoryRunStatus{{SHA: ptr.String("abcd")}}
-	res := RepositoryRunStatusRemoveSameSHA(inputRepoStatus, "1234")
-	if res := cmp.Diff(res, wantRepoStatus); res != "" {
-		t.Errorf("Diff %s:", res)
-	}
-}
-
-func TestMixLivePRandRepoStatus(t *testing.T) {
+func TestGetRunStatus(t *testing.T) {
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "namespace1",
@@ -49,7 +34,6 @@ func TestMixLivePRandRepoStatus(t *testing.T) {
 			GitProvider: nil,
 			URL:         "https://anurl.com/owner/repo",
 		},
-		Status: []v1alpha1.RepositoryRunStatus{{SHA: ptr.String("1234")}},
 	}
 
 	pipelineRun := getPipelineRun("pr", shaValues[0], repo1)
@@ -69,7 +53,7 @@ func TestMixLivePRandRepoStatus(t *testing.T) {
 	}
 	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
 
-	if runStatus := MixLivePRandRepoStatus(ctx, cs, repo1); len(runStatus) != 2 {
+	if runStatus := GetRunStatus(ctx, cs, repo1); len(runStatus) != 2 {
 		t.Errorf("got %d, want 2", len(runStatus))
 	}
 }
