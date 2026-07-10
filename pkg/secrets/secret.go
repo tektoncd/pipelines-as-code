@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,11 @@ const (
 	defaultPipelinesAscodeSecretWebhookSecretKey = "webhook.secret"
 )
 
+// ErrSecretNotFound indicates that a Repository's secret is misconfigured.
+// For example if a required secret is not specified or the required secret
+// does not exist.
+var ErrSecretNotFound = errors.New("secret not found")
+
 type SecretFromRepository struct {
 	K8int                 kubeinteraction.Interface
 	Config                *info.ProviderConfig
@@ -34,7 +40,7 @@ type SecretFromRepository struct {
 func (s *SecretFromRepository) Get(ctx context.Context) error {
 	var err error
 	if s.Repo.Spec.GitProvider == nil {
-		return fmt.Errorf("failed to find git_provider details in repository spec: %v/%v", s.Repo.Namespace, s.Repo.Name)
+		return fmt.Errorf("%w: failed to find git_provider details in repository spec: %v/%v", ErrSecretNotFound, s.Repo.Namespace, s.Repo.Name)
 	}
 	if s.Repo.Spec.GitProvider.URL == "" {
 		s.Repo.Spec.GitProvider.URL = s.Config.APIURL
@@ -44,7 +50,7 @@ func (s *SecretFromRepository) Get(ctx context.Context) error {
 	s.Logger.Debugf("secretFromRepository: repo=%s/%s provider_url=%s namespace=%s", s.Repo.Namespace, s.Repo.Name, s.Repo.Spec.GitProvider.URL, s.Namespace)
 
 	if s.Repo.Spec.GitProvider.Secret == nil {
-		return fmt.Errorf("failed to find secret in git_provider section in repository spec: %v/%v", s.Repo.Namespace, s.Repo.Name)
+		return fmt.Errorf("%w: failed to find secret in git_provider section in repository spec: %v/%v", ErrSecretNotFound, s.Repo.Namespace, s.Repo.Name)
 	}
 	gitProviderSecretKey := s.Repo.Spec.GitProvider.Secret.Key
 	if gitProviderSecretKey == "" {
@@ -57,7 +63,7 @@ func (s *SecretFromRepository) Get(ctx context.Context) error {
 		Name:      s.Repo.Spec.GitProvider.Secret.Name,
 		Key:       gitProviderSecretKey,
 	}); err != nil {
-		return err
+		return fmt.Errorf("%w: error getting provider secret: %w", ErrSecretNotFound, err)
 	}
 	s.Event.Provider.GitProviderSecretNamespace = s.Namespace
 	s.Event.Provider.GitProviderSecretFromGlobalRepo = s.InheritedGlobalSecret
@@ -91,7 +97,7 @@ func (s *SecretFromRepository) Get(ctx context.Context) error {
 		Name:      s.Repo.Spec.GitProvider.WebhookSecret.Name,
 		Key:       gitProviderWebhookSecretKey,
 	}); err != nil {
-		return err
+		return fmt.Errorf("%w: error getting webhook secret: %w", ErrSecretNotFound, err)
 	}
 	if s.Event.Provider.WebhookSecret != "" {
 		s.Event.Provider.WebhookSecretFromRepo = true

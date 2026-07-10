@@ -647,7 +647,7 @@ func TestVerifyRepoAndUser(t *testing.T) {
 			}},
 			wantRepoNil: false,
 			wantErr:     true,
-			wantErrMsg:  "cannot get secret from repository: failed to find git_provider details in repository spec: ns/repo",
+			wantErrMsg:  "cannot get secret from repository: secret not found: failed to find git_provider details in repository spec: ns/repo",
 		},
 		{
 			name: "webhook validation failure",

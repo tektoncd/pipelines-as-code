@@ -253,10 +253,9 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 
 		go func() {
 			defer span.End()
-			err := s.processEvent(tracedCtx, localRequest)
+			err := s.handleEvent(tracedCtx, localRequest)
 			if err != nil {
 				span.RecordError(err)
-				logger.Errorf("an error occurred: %v", err)
 			}
 		}()
 
