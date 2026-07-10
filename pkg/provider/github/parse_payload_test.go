@@ -1300,6 +1300,40 @@ func TestParsePayLoad(t *testing.T) {
 			targetCancelPipelinerun: "dummy",
 		},
 		{
+			name:          "good/pull request review submitted",
+			eventType:     "pull_request_review",
+			triggerTarget: triggertype.PullRequestReview.String(),
+			githubClient:  true,
+			payloadEventStruct: github.PullRequestReviewEvent{
+				Action: github.Ptr("submitted"),
+				Review: &github.PullRequestReview{
+					State: github.Ptr("approved"),
+					Body:  github.Ptr("looks good"),
+				},
+				PullRequest: &samplePR,
+				Repo:        sampleRepo,
+				Sender: &github.User{
+					Login: github.Ptr("reviewer"),
+					Type:  github.Ptr("User"),
+				},
+			},
+			shaRet:                  "samplePRsha",
+			wantedPullRequestNumber: 54321,
+		},
+		{
+			name:          "bad/pull request review no repo",
+			eventType:     "pull_request_review",
+			triggerTarget: triggertype.PullRequestReview.String(),
+			githubClient:  true,
+			payloadEventStruct: github.PullRequestReviewEvent{
+				Action: github.Ptr("submitted"),
+				Review: &github.PullRequestReview{
+					State: github.Ptr("approved"),
+				},
+			},
+			wantErrString: "error parsing payload the repository should not be nil",
+		},
+		{
 			name:               "bad/commit comment retest only with github apps",
 			wantErrString:      "no github client has been initialized",
 			eventType:          "commit_comment",

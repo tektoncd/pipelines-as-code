@@ -275,6 +275,7 @@ annotations:
 Supported events:
 
 - `pull_request` - PR opened, synchronized, or reopened
+- `pull_request_review` - PR review submitted (GitHub only)
 - `push` - Code pushed to a branch
 - `incoming` - Manual trigger via incoming webhook
 

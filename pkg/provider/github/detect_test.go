@@ -319,6 +319,37 @@ func TestProviderDetect(t *testing.T) {
 			isGH:       true,
 			processReq: true,
 		},
+		{
+			name: "pull request review event submitted",
+			event: github.PullRequestReviewEvent{
+				Action: github.Ptr("submitted"),
+				Review: &github.PullRequestReview{
+					State: github.Ptr("approved"),
+				},
+			},
+			eventType:  "pull_request_review",
+			isGH:       true,
+			processReq: true,
+		},
+		{
+			name: "pull request review event unsupported action",
+			event: github.PullRequestReviewEvent{
+				Action: github.Ptr("edited"),
+			},
+			wantReason: "pull_request_review: unsupported action \"edited\"",
+			eventType:  "pull_request_review",
+			isGH:       true,
+			processReq: false,
+		},
+		{
+			name: "pull request review event dismissed action",
+			event: github.PullRequestReviewEvent{
+				Action: github.Ptr("dismissed"),
+			},
+			eventType:  "pull_request_review",
+			isGH:       true,
+			processReq: true,
+		},
 	}
 
 	for _, tt := range tests {

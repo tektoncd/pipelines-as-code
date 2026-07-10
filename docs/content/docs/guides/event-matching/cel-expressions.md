@@ -24,7 +24,7 @@ The following fields are available inside CEL expressions:
 
 | **Field** | **Description** |
 | --- | --- |
-| `event` | `push`, `pull_request`, or `incoming`. |
+| `event` | `push`, `pull_request`, `pull_request_review` (GitHub only), or `incoming`. |
 | `event_type` | The event type from the webhook payload header. This value is provider-specific (for example, GitHub sends `pull_request`, GitLab sends `Merge Request`). |
 | `target_branch` | The branch the event targets (for example, `main` in a pull request that merges into `main`). |
 | `source_branch` | The branch the pull request originates from. On `push` events, this equals `target_branch`. |
@@ -214,6 +214,23 @@ git commit --amend --no-edit && \
 Alternatively, close and reopen the pull request.
 
 {{< /callout >}}
+
+## Matching by pull request review (GitHub only)
+
+You can use CEL expressions to filter on pull request review events. The review state and reviewer are available through the `body` variable:
+
+```yaml
+pipelinesascode.tekton.dev/on-cel-expression: |
+  event == "pull_request_review" && body.review.state == "approved"
+```
+
+To trigger on changes requested from a specific user:
+
+```yaml
+pipelinesascode.tekton.dev/on-cel-expression: |
+  event == "pull_request_review" && body.review.state == "changes_requested"
+    && body.review.user.login == "team-lead"
+```
 
 ## Matching by request header
 

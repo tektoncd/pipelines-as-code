@@ -103,6 +103,11 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 			return triggertype.CheckRunRerequested, ""
 		}
 		return "", fmt.Sprintf("check_run: unsupported action \"%s\"", event.GetAction())
+	case *github.PullRequestReviewEvent:
+		if event.GetAction() == "submitted" || event.GetAction() == "dismissed" {
+			return triggertype.PullRequestReview, ""
+		}
+		return "", fmt.Sprintf("pull_request_review: unsupported action \"%s\"", event.GetAction())
 	case *github.CommitCommentEvent:
 		if event.GetAction() != "created" {
 			return "", fmt.Sprintf("commit_comment: unsupported action \"%s\"", event.GetAction())

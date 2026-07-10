@@ -25,6 +25,7 @@ func generateManifest(opts *bootstrapOpts) ([]byte, error) {
 			"issue_comment",
 			"commit_comment",
 			triggertype.PullRequest.String(),
+			triggertype.PullRequestReview.String(),
 			"push",
 		},
 		DefaultPermissions: &githubv84.InstallationPermissions{

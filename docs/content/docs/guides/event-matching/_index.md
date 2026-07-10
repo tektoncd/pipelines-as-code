@@ -71,6 +71,36 @@ Pipelines-as-Code runs the PipelineRun `pipeline-push-on-1.0-tags` when you push
 GitHub does not send webhook events when more than three tags are pushed simultaneously (e.g., with `git push origin --tags`). To ensure PipelineRuns are triggered for all tags, push them in batches of three or fewer. [See GitHub's docs here](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#create).
 {{< /callout >}}
 
+## Matching pull request review events
+
+{{< tech_preview "Matching PipelineRun on pull request review" >}}
+
+On GitHub, you can match PipelineRuns when a pull request review is submitted. Use `pull_request_review` as the event type:
+
+```yaml
+metadata:
+  name: pipeline-on-review-approval
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[pull_request_review]"
+```
+
+This PipelineRun triggers whenever a review is submitted on a pull request targeting the `main` branch, regardless of the review state (approved, changes requested, or commented).
+
+To filter on the review state, use a CEL expression:
+
+```yaml
+metadata:
+  name: pipeline-on-approval
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request_review" && body.review.state == "approved"
+```
+
+{{< callout type="info" >}}
+Existing GitHub App installations must manually add the `pull_request_review` event in the GitHub App settings. New installations via `tkn pac bootstrap` include it automatically.
+{{< /callout >}}
+
 ## Required annotations and parallel execution
 
 Matching annotations are required; without them, Pipelines-as-Code does not match your PipelineRun. When multiple PipelineRuns match the same event, Pipelines-as-Code runs them in parallel and posts each result to the Git provider as soon as the PipelineRun finishes.

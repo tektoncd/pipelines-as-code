@@ -150,6 +150,11 @@ func (v *Provider) aclAllowedOkToTestFromAnOwner(ctx context.Context, event *inf
 			return false, nil
 		}
 		revent.PullRequestNumber = event.GetPullRequest().GetNumber()
+	case *github.PullRequestReviewEvent:
+		if !v.pacInfo.RememberOKToTest {
+			return false, nil
+		}
+		revent.PullRequestNumber = event.GetPullRequest().GetNumber()
 	default:
 		return false, nil
 	}

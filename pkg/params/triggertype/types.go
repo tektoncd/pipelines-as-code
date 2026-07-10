@@ -8,7 +8,7 @@ type (
 func IsPullRequestType(s string) Trigger {
 	eventType := s
 	switch s {
-	case PullRequest.String(), OkToTest.String(), Retest.String(), Cancel.String(), PullRequestLabeled.String():
+	case PullRequest.String(), OkToTest.String(), Retest.String(), Cancel.String(), PullRequestLabeled.String(), PullRequestReview.String():
 		eventType = PullRequest.String()
 	}
 	return Trigger(eventType)
@@ -16,6 +16,10 @@ func IsPullRequestType(s string) Trigger {
 
 func (t Trigger) String() string {
 	return string(t)
+}
+
+func (t Trigger) IsPullRequest() bool {
+	return IsPullRequestType(t.String()) == PullRequest
 }
 
 func StringToType(s string) Trigger {
@@ -40,6 +44,8 @@ func StringToType(s string) Trigger {
 		return Comment
 	case PullRequestLabeled.String():
 		return PullRequestLabeled
+	case PullRequestReview.String():
+		return PullRequestReview
 	}
 	return ""
 }
@@ -54,6 +60,7 @@ const (
 	OkToTest              Trigger = "ok-to-test"
 	PullRequestClosed     Trigger = "pull_request_closed"
 	PullRequest           Trigger = "pull_request" // it's should be "pull_request_opened_updated" but let's keep it simple.
+	PullRequestReview     Trigger = "pull_request_review"
 	Push                  Trigger = "push"
 	Retest                Trigger = "retest"
 )

@@ -662,6 +662,11 @@ func (v *Provider) processEvent(ctx context.Context, event *info.Event, eventInt
 		for _, label := range gitEvent.GetPullRequest().Labels {
 			processedEvent.PullRequestLabel = append(processedEvent.PullRequestLabel, label.GetName())
 		}
+	case *github.PullRequestReviewEvent:
+		processedEvent, err = v.handlePullRequestReviewEvent(ctx, gitEvent, processedEvent)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("this event is not supported")
 	}
@@ -875,6 +880,40 @@ func (v *Provider) handleIssueCommentEvent(ctx context.Context, event *github.Is
 	}
 
 	return processedEvent, nil
+}
+
+func (v *Provider) handlePullRequestReviewEvent(ctx context.Context, event *github.PullRequestReviewEvent, runevent *info.Event) (*info.Event, error) {
+	if event.GetRepo() == nil {
+		return nil, errors.New("error parsing payload the repository should not be nil")
+	}
+
+	runevent.Organization = event.GetRepo().GetOwner().GetLogin()
+	runevent.Repository = event.GetRepo().GetName()
+	runevent.Sender = event.GetSender().GetLogin()
+	runevent.URL = event.GetRepo().GetHTMLURL()
+	runevent.TriggerTarget = triggertype.PullRequestReview
+	runevent.EventType = "pull_request_review"
+	runevent.PullRequestNumber = event.GetPullRequest().GetNumber()
+	v.userType = event.GetSender().GetType()
+
+	repo, err := MatchEventURLRepo(ctx, v.Run, runevent, "")
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("no repository found matching URL: %s", runevent.URL)
+	}
+
+	if v.ghClient == nil {
+		if err := v.initGitHubWebhookClient(ctx, runevent, repo); err != nil {
+			return nil, fmt.Errorf("cannot initialize GitHub webhook client: %w", err)
+		}
+	}
+
+	v.Logger.Infof("pull_request_review: on %s/%s#%d has been submitted", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
+	v.populateRunEventFromPullRequest(runevent, event.GetPullRequest())
+
+	return runevent, nil
 }
 
 func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.CommitCommentEvent) (*info.Event, error) {

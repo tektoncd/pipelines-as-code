@@ -412,7 +412,7 @@ func (v *Provider) GetTektonDir(ctx context.Context, runevent *info.Event, path,
 		}
 	} else {
 		prInfo := ""
-		if runevent.TriggerTarget == triggertype.PullRequest {
+		if runevent.TriggerTarget.IsPullRequest() {
 			prInfo = fmt.Sprintf("%s/%s#%d", runevent.Organization, runevent.Repository, runevent.PullRequestNumber)
 		}
 		v.Logger.Infof("Using PipelineRun definition from source %s %s on commit SHA %s", runevent.TriggerTarget.String(), prInfo, runevent.SHA)
@@ -670,8 +670,8 @@ func (v *Provider) GetFiles(ctx context.Context, runevent *info.Event) (changedf
 func (v *Provider) fetchChangedFiles(ctx context.Context, runevent *info.Event) (changedfiles.ChangedFiles, error) {
 	changedFiles := changedfiles.ChangedFiles{}
 
-	switch runevent.TriggerTarget {
-	case triggertype.PullRequest:
+	switch {
+	case runevent.TriggerTarget.IsPullRequest():
 		opt := &github.ListOptions{PerPage: v.PaginedNumber}
 		for {
 			repoCommit, resp, err := wrapAPI(v, "list_pull_request_files", func() ([]*github.CommitFile, *github.Response, error) {
@@ -700,7 +700,7 @@ func (v *Provider) fetchChangedFiles(ctx context.Context, runevent *info.Event) 
 			}
 			opt.Page = resp.NextPage
 		}
-	case triggertype.Push:
+	case runevent.TriggerTarget == triggertype.Push:
 		rC, _, err := wrapAPI(v, "get_commit_files", func() (*github.RepositoryCommit, *github.Response, error) {
 			return v.Client().Repositories.GetCommit(ctx, runevent.Organization, runevent.Repository, runevent.SHA, &github.ListOptions{})
 		})
