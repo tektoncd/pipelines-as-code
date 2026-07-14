@@ -21,6 +21,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -189,8 +190,40 @@ func TestGiteaACLOrgAllowed(t *testing.T) {
 	secondcnx, _, err := tgitea.CreateGiteaUserSecondCnx(topts, topts.TargetRefName, topts.GiteaPassword)
 	assert.NilError(t, err)
 
-	tgitea.CreateForkPullRequest(t, topts, secondcnx, "read")
+	tgitea.CreateForkPullRequest(t, topts, secondcnx, "write")
 	topts.CheckForStatus = "success"
+	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
+	topts.GiteaCNX = adminCnx
+}
+
+func TestGiteaACLOrgWriteAndAdminAccess(t *testing.T) {
+	topts := &tgitea.TestOpts{
+		TargetEvent: triggertype.PullRequest.String(),
+		YAMLFiles: map[string]string{
+			".tekton/pr.yaml": "testdata/pipelinerun.yaml",
+		},
+		ExpectEvents:         false,
+		CheckForNumberStatus: 2,
+	}
+	_, f := tgitea.TestPR(t, topts)
+	defer f()
+	adminCnx := topts.GiteaCNX
+
+	topts.SecondUserName = topts.TargetRefName
+	secondcnx, _, err := tgitea.CreateGiteaUserSecondCnx(topts, topts.SecondUserName, topts.GiteaPassword)
+	assert.NilError(t, err)
+	tgitea.CreateForkPullRequest(t, topts, secondcnx, "write")
+	topts.CheckForStatus = "success"
+	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
+
+	// third user setup to give it admin access to the repo and check the pipeline run are created.
+	thirdUserName := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-test")
+	topts.SecondUserName = thirdUserName
+	thirdcnx, _, err := tgitea.CreateGiteaUserSecondCnx(topts, topts.SecondUserName, topts.GiteaPassword)
+	assert.NilError(t, err)
+	tgitea.CreateForkPullRequest(t, topts, thirdcnx, "admin")
+	topts.CheckForStatus = "success"
+	topts.CheckForNumberStatus = 3
 	tgitea.WaitForStatus(t, topts, "heads/"+topts.TargetRefName, "", false)
 	topts.GiteaCNX = adminCnx
 }

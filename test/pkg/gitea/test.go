@@ -67,6 +67,7 @@ type TestOpts struct {
 	FileChanges           []scm.FileChange
 	CreateSecret          []corev1.Secret
 	ProviderType          string // defaults to "forgejo" if empty
+	SecondUserName        string
 }
 
 func PostCommentOnPullRequest(t *testing.T, topt *TestOpts, body string) {

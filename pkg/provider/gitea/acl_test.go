@@ -228,7 +228,7 @@ func TestOkToTestComment(t *testing.T) {
 			runevent: info.Event{
 				Organization: "owner",
 				Repository:   "repo",
-				Sender:       "nonowner",
+				Sender:       "notowner",
 				EventType:    "issue_comment",
 				Event:        issueCommentPayload,
 			},
@@ -298,7 +298,7 @@ func TestOkToTestComment(t *testing.T) {
 			runevent: info.Event{
 				Organization: "owner",
 				Repository:   "repo",
-				Sender:       "nonowner",
+				Sender:       "notowner",
 				EventType:    "issue_comment",
 				Event:        issueCommentPayload,
 			},
@@ -326,8 +326,9 @@ func TestOkToTestComment(t *testing.T) {
 				func(rw http.ResponseWriter, _ *http.Request) {
 					fmt.Fprint(rw, tt.commentsReply)
 				})
-			mux.HandleFunc("/repos/owner/collaborators", func(rw http.ResponseWriter, _ *http.Request) {
-				fmt.Fprint(rw, "[]")
+			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/collaborators/%s/permission", tt.runevent.Organization,
+				tt.runevent.Repository, tt.runevent.Sender), func(rw http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(rw, `{"permission": "none"}`)
 			})
 			ctx, _ := rtesting.SetupFakeContext(t)
 			gprovider := Provider{
@@ -354,7 +355,9 @@ func TestOkToTestComment(t *testing.T) {
 func TestAclCheckAll(t *testing.T) {
 	type allowedRules struct {
 		ownerFile bool
+		read      bool
 		collabo   bool
+		admin     bool
 	}
 	tests := []struct {
 		name         string
@@ -364,7 +367,7 @@ func TestAclCheckAll(t *testing.T) {
 		allowed      bool
 	}{
 		{
-			name: "allowed_from_org/sender allowed_from_org in collabo",
+			name: "allowed when sender has repository write collaborator permission",
 			runevent: info.Event{
 				Organization: "collabo",
 				Repository:   "repo",
@@ -375,7 +378,18 @@ func TestAclCheckAll(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name: "allowed_from_org/sender allowed_from_org from owner file",
+			name: "allowed when sender has repository admin permission",
+			runevent: info.Event{
+				Organization: "collabo",
+				Repository:   "repo",
+				Sender:       "login_allowed",
+			},
+			allowedRules: allowedRules{admin: true},
+			allowed:      true,
+			wantErr:      false,
+		},
+		{
+			name: "allowed when sender is approver in OWNERS file",
 			runevent: info.Event{
 				Organization:  "collabo",
 				Repository:    "repo",
@@ -388,7 +402,7 @@ func TestAclCheckAll(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name: "disallowed/sender not allowed_from_org in collabo",
+			name: "disallowed when sender has no collaborator or OWNERS approval",
 			runevent: info.Event{
 				Organization: "denied",
 				Repository:   "denied",
@@ -396,6 +410,17 @@ func TestAclCheckAll(t *testing.T) {
 			},
 			allowed: false,
 			wantErr: false,
+		},
+		{
+			name: "allowed when sender has repository read permission",
+			runevent: info.Event{
+				Organization: "denied",
+				Repository:   "denied",
+				Sender:       "notallowed",
+			},
+			allowedRules: allowedRules{read: true},
+			allowed:      false,
+			wantErr:      false,
 		},
 	}
 	for _, tt := range tests {
@@ -411,12 +436,20 @@ func TestAclCheckAll(t *testing.T) {
 				Logger:      logger,
 			}
 
-			if tt.allowedRules.collabo {
-				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/collaborators/%s", tt.runevent.Organization,
-					tt.runevent.Repository, tt.runevent.Sender), func(rw http.ResponseWriter, _ *http.Request) {
-					rw.WriteHeader(http.StatusNoContent)
-				})
-			}
+			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/collaborators/%s/permission", tt.runevent.Organization,
+				tt.runevent.Repository, tt.runevent.Sender), func(rw http.ResponseWriter, _ *http.Request) {
+				rw.WriteHeader(http.StatusOK)
+				permission := "none"
+				switch {
+				case tt.allowedRules.admin:
+					permission = "admin"
+				case tt.allowedRules.collabo:
+					permission = "write"
+				case tt.allowedRules.read:
+					permission = "read"
+				}
+				fmt.Fprintf(rw, `{"permission": "%s"}`, permission)
+			})
 			if tt.allowedRules.ownerFile {
 				url := fmt.Sprintf("/repos/%s/%s/contents/OWNERS", tt.runevent.Organization, tt.runevent.Repository)
 				mux.HandleFunc(url, func(rw http.ResponseWriter, r *http.Request) {

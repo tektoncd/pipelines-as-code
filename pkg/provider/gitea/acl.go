@@ -226,8 +226,17 @@ func (v *Provider) listOrgTeams(org, sender string) ([]*forgejo.Team, error) {
 }
 
 func (v *Provider) checkSenderRepoMembership(_ context.Context, runevent *info.Event) (bool, error) {
-	ret, _, err := v.Client().IsCollaborator(runevent.Organization, runevent.Repository, runevent.Sender)
-	return ret, err
+	permissionResult, _, err := v.Client().CollaboratorPermission(runevent.Organization, runevent.Repository, runevent.Sender)
+	if err != nil {
+		return false, err
+	}
+	if permissionResult != nil &&
+		(permissionResult.Permission == forgejo.AccessModeOwner ||
+			permissionResult.Permission == forgejo.AccessModeAdmin ||
+			permissionResult.Permission == forgejo.AccessModeWrite) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // getFileFromDefaultBranch will get a file directly from the Default BaseBranch as

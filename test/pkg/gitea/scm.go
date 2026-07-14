@@ -253,7 +253,11 @@ func CreateForkPullRequest(t *testing.T, topts *TestOpts, secondcnx pgitea.Provi
 	topts.ParamsRun.Clients.Log.Infof("Forked repository %s has been created", forkrepo.CloneURL)
 
 	if accessMode != "" {
-		assert.NilError(t, CreateAccess(topts, topts.TargetRefName, accessMode))
+		userName := topts.SecondUserName
+		if userName == "" {
+			userName = topts.TargetRefName
+		}
+		assert.NilError(t, CreateAccess(topts, userName, accessMode))
 	}
 
 	pr, _, err := secondcnx.Client().CreatePullRequest(topts.Opts.Organization, topts.TargetRefName,
