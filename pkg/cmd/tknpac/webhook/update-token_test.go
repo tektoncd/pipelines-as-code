@@ -97,12 +97,34 @@ func TestWebhookUpdateToken(t *testing.T) {
 		Spec: v1alpha1.RepositorySpec{
 			GitProvider: &v1alpha1.GitProvider{
 				Type: "bitbucket-cloud",
+				User: "user@example.com",
 				Secret: &v1alpha1.Secret{
 					Name: "secret2",
 					Key:  "hub.token",
 				},
 				WebhookSecret: &v1alpha1.Secret{
 					Name: "repo4",
+					Key:  "webhook.secret",
+				},
+			},
+			URL: "https://bitbucket.org/workspace/repo",
+		},
+	}
+	repo5 := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo5",
+			Namespace: namespace2.GetName(),
+		},
+		Spec: v1alpha1.RepositorySpec{
+			GitProvider: &v1alpha1.GitProvider{
+				Type: "bitbucket-cloud",
+				User: "old-username",
+				Secret: &v1alpha1.Secret{
+					Name: "secret2",
+					Key:  "hub.token",
+				},
+				WebhookSecret: &v1alpha1.Secret{
+					Name: "repo5",
 					Key:  "webhook.secret",
 				},
 			},
@@ -122,6 +144,7 @@ func TestWebhookUpdateToken(t *testing.T) {
 		wantErr      bool
 		wantMsg      string
 		wantToken    string
+		wantUser     string
 	}{{
 		name:         "Don't use webhook update-token command when GithubApp is configured",
 		namespaces:   []*corev1.Namespace{namespace1},
@@ -190,6 +213,7 @@ func TestWebhookUpdateToken(t *testing.T) {
 		name: "Update provider token for existing bitbucket cloud webhook",
 		askStubs: func(as *prompt.AskStubber) {
 			as.StubOne("bitbucket-api-token")
+			as.StubOne("user@example.com")
 		},
 		namespaces:   []*corev1.Namespace{namespace2},
 		repositories: []*v1alpha1.Repository{repo4},
@@ -199,9 +223,28 @@ func TestWebhookUpdateToken(t *testing.T) {
 		opts: &cli.PacCliOpts{
 			Namespace: namespace2.GetName(),
 		},
-		wantMsg:   "🔑 Secret secret2 has been updated with new Bitbucket Cloud API token in the namespace2 namespace.\n",
+		wantMsg:   "🔑 Secret secret2 has been updated with new Bitbucket Cloud API token and account email in the namespace2 namespace.\n",
 		wantErr:   false,
 		wantToken: "bitbucket-api-token",
+		wantUser:  "user@example.com",
+	}, {
+		name: "Update token for bitbucket cloud with stale username",
+		askStubs: func(as *prompt.AskStubber) {
+			as.StubOne("bitbucket-new-token")
+			as.StubOne("newuser@example.com")
+		},
+		namespaces:   []*corev1.Namespace{namespace2},
+		repositories: []*v1alpha1.Repository{repo5},
+		secrets:      []*corev1.Secret{secret2},
+		repoName:     "repo5",
+		secretName:   "secret2",
+		opts: &cli.PacCliOpts{
+			Namespace: namespace2.GetName(),
+		},
+		wantMsg:   "🔑 Secret secret2 has been updated with new Bitbucket Cloud API token and account email in the namespace2 namespace.\n",
+		wantErr:   false,
+		wantToken: "bitbucket-new-token",
+		wantUser:  "newuser@example.com",
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -241,6 +284,11 @@ func TestWebhookUpdateToken(t *testing.T) {
 				if tt.wantToken != "" {
 					assert.Equal(t, string(tokenData), tt.wantToken)
 				}
+			}
+			if tt.wantUser != "" {
+				updatedRepo, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(tt.opts.Namespace).Get(ctx, tt.repoName, metav1.GetOptions{})
+				assert.NilError(t, err)
+				assert.Equal(t, tt.wantUser, updatedRepo.Spec.GitProvider.User)
 			}
 		})
 	}

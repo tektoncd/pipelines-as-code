@@ -201,7 +201,9 @@ There are two ways to update the provider token for an existing Repository CR.
 ### Update using the CLI
 
 Use the [`tkn pac webhook update-token`]({{< relref "/docs/cli" >}}) command to
-update the provider token for an existing Repository CR.
+update the provider token for an existing Repository CR. For Bitbucket Cloud,
+the command also prompts for your Atlassian account email and updates the
+`git_provider.user` field in the Repository CR.
 
 Below is the sample format for `tkn pac webhook update-token`
 
@@ -209,7 +211,8 @@ Below is the sample format for `tkn pac webhook update-token`
 $ tkn pac webhook update-token -n repo-pipelines
 
 ? Please enter your Bitbucket Cloud API token:  ************************************
-🔑 Secret workspace-repo has been updated with new Bitbucket Cloud API token in the repo-pipelines namespace.
+? Please enter your Bitbucket Cloud Atlassian account email: (user@example.com) user@example.com
+🔑 Secret workspace-repo has been updated with new Bitbucket Cloud API token and account email in the repo-pipelines namespace.
 
 ```
 
@@ -234,4 +237,12 @@ Replace `$api_token` and `$target_namespace` with your values:
 
 ```shell
 kubectl -n $target_namespace patch secret bitbucket-cloud-token -p "{\"data\": {\"provider.token\": \"$(echo -n $api_token|base64 -w0)\"}}"
+```
+
+If your `git_provider.user` field needs to be updated, patch the Repository CR
+as well:
+
+```shell
+kubectl -n $target_namespace patch repository my-repo --type merge \
+  -p '{"spec":{"git_provider":{"user":"your_atlassian_account_email"}}}'
 ```
