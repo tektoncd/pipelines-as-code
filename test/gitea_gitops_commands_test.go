@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -37,17 +36,22 @@ func TestGiteaCancelRun(t *testing.T) {
 	}
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
-	// let pipelineRun start and then cancel it
-	time.Sleep(time.Second * 2)
-	tgitea.PostCommentOnPullRequest(t, topts, "/cancel")
 
+	// wait for the pipelinerun to be created before cancelling it: the
+	// webhook relay can deliver the pull_request event several seconds after
+	// the PR creation, so a fixed sleep would race with the /cancel comment.
 	waitOpts := twait.Opts{
 		Namespace:       topts.TargetNS,
 		MinNumberStatus: 1,
 		PollTimeout:     twait.DefaultTimeout,
 		TargetSHA:       []string{topts.PullRequest.Head.Sha},
 	}
-	_, err := twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
+	_, err := twait.UntilPipelineRunCreated(context.Background(), topts.ParamsRun.Clients, waitOpts)
+	assert.NilError(t, err)
+
+	tgitea.PostCommentOnPullRequest(t, topts, "/cancel")
+
+	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 
 	tgitea.CheckIfPipelineRunsCancelled(t, topts)
