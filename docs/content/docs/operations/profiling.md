@@ -47,11 +47,6 @@ kubectl patch configmap pipelines-as-code-config-observability \
   -p '{"data":{"runtime-profiling":"disabled"}}'
 ```
 
-{{< callout type="warning" >}}
-The old `profiling.enable: "true"` key no longer works. Use
-`runtime-profiling: "enabled"` instead.
-{{< /callout >}}
-
 ### Component-specific prerequisites
 
 The **controller** reads profiling configuration from the `config-observability` ConfigMap
