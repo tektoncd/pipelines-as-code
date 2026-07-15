@@ -57,20 +57,11 @@ secret-github-app-scope-extra-repos: "owner/private-repo1, org/repo2"
 
 ### Hub Configuration
 
-{{< param name="hub-url" type="string" default="<https://artifacthub.io/api/v1>" id="param-hub-url" >}}
+{{< param name="hub-url" type="string" default="<https://artifacthub.io>" id="param-hub-url" >}}
 Specifies the default hub API URL that Pipelines-as-Code uses to fetch remote tasks.
 
 ```yaml
-hub-url: "https://artifacthub.io/api/v1"
-```
-
-{{< /param >}}
-
-{{< param name="hub-catalog-type" type="string" default="artifacthub" id="param-hub-catalog-type" >}}
-Sets the default hub catalog type. Supported values: `artifacthub`, `tektonhub`. **Note:** The `tektonhub` type is deprecated and will be removed in a future release. Please migrate to `artifacthub`.
-
-```yaml
-hub-catalog-type: "artifacthub"
+hub-url: "https://artifacthub.io"
 ```
 
 {{< /param >}}
@@ -92,17 +83,12 @@ Name of the catalog.
 URL of the catalog API endpoint.
 {{< /param >}}
 
-{{< param name="catalog-{N}-type" type="string" id="param-catalog-n-type" >}}
-Type of catalog (`tektonhub` or `artifacthub`). **Note:** The `tektonhub` type is deprecated and will be removed in a future release.
-{{< /param >}}
-
 {{< /param-group >}}
 
 ```yaml
 catalog-1-id: "custom"
 catalog-1-name: "tekton"
-catalog-1-url: "https://api.custom.hub/v1"
-catalog-1-type: "tektonhub"
+catalog-1-url: "https://api.custom.hub"
 ```
 
 {{< /param >}}
@@ -369,8 +355,7 @@ data:
   secret-github-app-token-scoped: "true"
   secret-github-app-scope-extra-repos: "org/shared-repo"
 
-  hub-url: "https://artifacthub.io/api/v1"
-  hub-catalog-type: "artifacthub"
+  hub-url: "https://artifacthub.io"
   remote-tasks: "true"
 
   tekton-dashboard-url: "https://tekton.example.com"

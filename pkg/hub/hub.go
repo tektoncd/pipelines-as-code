@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	hubtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/hub/vars"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 )
@@ -39,11 +38,5 @@ func NewClient(_ context.Context, cs *params.Run, catalogName string) (Client, e
 		return nil, fmt.Errorf("could not get details for catalog name: %s", catalogName)
 	}
 
-	switch catalogValue.Type {
-	case hubtypes.TektonHubType:
-		return newTektonHubClient(cs, catalogValue.URL, catalogValue.Name), nil
-	default:
-		// defaulting to Artifact Hub
-		return newArtifactHubClient(cs, catalogValue.URL, catalogValue.Name), nil
-	}
+	return newArtifactHubClient(cs, catalogValue.URL, catalogValue.Name), nil
 }

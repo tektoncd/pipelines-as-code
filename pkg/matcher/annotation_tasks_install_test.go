@@ -10,7 +10,6 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	hubtype "github.com/openshift-pipelines/pipelines-as-code/pkg/hub/vars"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -203,40 +202,17 @@ func TestGrabPipelineFromAnnotation(t *testing.T) {
 	}
 }
 
+func makeTestHubCatalogs() *sync.Map {
+	catalogs := &sync.Map{}
+	catalogs.Store("default", settings.HubCatalog{Index: "default", URL: testHubURL, Name: testCatalogHubName})
+	catalogs.Store("anotherHub", settings.HubCatalog{Index: "1", URL: testHubURL, Name: testCatalogHubName})
+	catalogs.Store("artifactHub", settings.HubCatalog{Index: "2", URL: testHubURL, Name: testCatalogHubName})
+	catalogs.Store("artifactHubDefault", settings.HubCatalog{Index: "3", URL: testHubURL, Name: "default"})
+	return catalogs
+}
+
 func TestGetTaskFromAnnotationName(t *testing.T) {
-	var hubCatalogs sync.Map
-	hubCatalogs.Store(
-		"default", settings.HubCatalog{
-			Index: "default",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.TektonHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"anotherHub", settings.HubCatalog{
-			Index: "1",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.TektonHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"artifactHub", settings.HubCatalog{
-			Index: "2",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.ArtifactHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"artifactHubDefault", settings.HubCatalog{
-			Index: "3",
-			URL:   testHubURL,
-			Name:  "default",
-			Type:  hubtype.ArtifactHubType,
-		},
-	)
+	hubCatalogs := makeTestHubCatalogs()
 	tests := []struct {
 		task                   string
 		filesInsideRepo        map[string]string
@@ -247,7 +223,6 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 		wantErr                string
 		wantLog                string
 		wantProviderRemoteTask bool
-		wantDeprecated         bool
 	}{
 		{
 			name: "test-annotations-error-remote-http-not-k8",
@@ -351,50 +326,35 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 			wantErr: "remote task \"foo://bar\" not found",
 		},
 		{
-			name:           "test-get-from-custom-hub",
-			gotTaskName:    "task",
-			task:           "anotherHub://chmouzie",
-			wantLog:        "successfully fetched task chmouzie from custom catalog Hub anotherHub on URL https://mybelovedhub",
-			wantDeprecated: true,
+			name:        "test-get-from-custom-hub",
+			gotTaskName: "task",
+			task:        "anotherHub://chmouzie",
+			wantLog:     "successfully fetched task chmouzie from custom catalog Hub anotherHub on URL https://mybelovedhub",
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/task/chmouzie": {
-					"body": `{"data": {"LatestVersion": {"version": "0.1"}}}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/task/chmouzie/0.1/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "task-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-task/%s/chmouzie", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "task-good")),
 					"code": "200",
 				},
 			},
 		},
 		{
-			name:           "test-get-from-hub-latest",
-			gotTaskName:    "task",
-			task:           "chmouzie",
-			wantDeprecated: true,
+			name:        "test-get-from-hub-latest",
+			gotTaskName: "task",
+			task:        "chmouzie",
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/task/chmouzie": {
-					"body": `{"data": {"LatestVersion": {"version": "0.1"}}}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/task/chmouzie/0.1/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "task-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-task/%s/chmouzie", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "task-good")),
 					"code": "200",
 				},
 			},
 		},
 		{
-			name:           "test-get-from-hub-specific-version",
-			gotTaskName:    "task",
-			task:           "chmouzie:0.2",
-			wantDeprecated: true,
+			name:        "test-get-from-hub-specific-version",
+			gotTaskName: "task",
+			task:        "chmouzie:0.2",
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/task/chmouzie/0.2": {
-					"body": `{}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/task/chmouzie/0.2/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "task-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-task/%s/chmouzie/0.2", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "task-good")),
 					"code": "200",
 				},
 			},
@@ -446,7 +406,7 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 				Info: info.Info{
 					Pac: &info.PacOpts{
 						Settings: settings.Settings{
-							HubCatalogs: &hubCatalogs,
+							HubCatalogs: hubCatalogs,
 						},
 					},
 				},
@@ -476,51 +436,12 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 			if tt.gotTaskName != "" {
 				assert.Equal(t, tt.gotTaskName, got.GetName())
 			}
-
-			if tt.wantDeprecated {
-				assert.Assert(t, len(rt.DeprecatedHubResources) > 0, "expected DeprecatedHubResources to be populated for tektonhub catalog")
-				assert.Assert(t, len(fakelog.FilterMessageSnippet("Tekton Hub integration is deprecated").TakeAll()) > 0, "expected deprecation warning in logs")
-			} else {
-				assert.Assert(t, len(rt.DeprecatedHubResources) == 0, "expected DeprecatedHubResources to be empty for non-tektonhub catalog")
-			}
 		})
 	}
 }
 
 func TestGetPipelineFromAnnotationName(t *testing.T) {
-	var hubCatalogs sync.Map
-	hubCatalogs.Store(
-		"default", settings.HubCatalog{
-			Index: "default",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.TektonHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"anotherHub", settings.HubCatalog{
-			Index: "1",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.TektonHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"artifactHub", settings.HubCatalog{
-			Index: "2",
-			URL:   testHubURL,
-			Name:  testCatalogHubName,
-			Type:  hubtype.ArtifactHubType,
-		},
-	)
-	hubCatalogs.Store(
-		"artifactHubDefault", settings.HubCatalog{
-			Index: "3",
-			URL:   testHubURL,
-			Name:  "default",
-			Type:  hubtype.ArtifactHubType,
-		},
-	)
+	hubCatalogs := makeTestHubCatalogs()
 	tests := []struct {
 		pipeline        string
 		filesInsideRepo map[string]string
@@ -530,7 +451,6 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 		runevent        info.Event
 		wantErr         string
 		wantLog         string
-		wantDeprecated  bool
 	}{
 		{
 			name:            "good/fetching from remote http",
@@ -629,14 +549,9 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 			gotPipelineName: "pipeline",
 			pipeline:        "anotherHub://chmouzie",
 			wantLog:         "successfully fetched pipeline chmouzie from custom catalog Hub anotherHub on URL https://mybelovedhub",
-			wantDeprecated:  true,
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/pipeline/chmouzie": {
-					"body": `{"data": {"LatestVersion": {"version": "0.1"}}}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/pipeline/chmouzie/0.1/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "pipeline-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-pipeline/%s/chmouzie", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "pipeline-good")),
 					"code": "200",
 				},
 			},
@@ -645,14 +560,9 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 			name:            "test-get-from-hub-latest",
 			gotPipelineName: "pipeline",
 			pipeline:        "chmouzie",
-			wantDeprecated:  true,
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/pipeline/chmouzie": {
-					"body": `{"data": {"LatestVersion": {"version": "0.1"}}}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/pipeline/chmouzie/0.1/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "pipeline-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-pipeline/%s/chmouzie", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "pipeline-good")),
 					"code": "200",
 				},
 			},
@@ -661,14 +571,9 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 			name:            "test-get-from-hub-specific-version",
 			gotPipelineName: "pipeline",
 			pipeline:        "chmouzie:0.2",
-			wantDeprecated:  true,
 			remoteURLS: map[string]map[string]string{
-				testHubURL + "/resource/" + testCatalogHubName + "/pipeline/chmouzie/0.2": {
-					"body": `{}`,
-					"code": "200",
-				},
-				fmt.Sprintf("%s/resource/%s/pipeline/chmouzie/0.2/raw", testHubURL, testCatalogHubName): {
-					"body": readTDfile(t, "pipeline-good"),
+				fmt.Sprintf("%s/api/v1/packages/tekton-pipeline/%s/chmouzie/0.2", testHubURL, testCatalogHubName): {
+					"body": createArtifactHubResponse(t, readTDfile(t, "pipeline-good")),
 					"code": "200",
 				},
 			},
@@ -721,7 +626,7 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 				Info: info.Info{
 					Pac: &info.PacOpts{
 						Settings: settings.Settings{
-							HubCatalogs: &hubCatalogs,
+							HubCatalogs: hubCatalogs,
 						},
 					},
 				},
@@ -750,13 +655,6 @@ func TestGetPipelineFromAnnotationName(t *testing.T) {
 
 			if tt.gotPipelineName != "" {
 				assert.Equal(t, tt.gotPipelineName, got.GetName())
-			}
-
-			if tt.wantDeprecated {
-				assert.Assert(t, len(rt.DeprecatedHubResources) > 0, "expected DeprecatedHubResources to be populated for tektonhub catalog")
-				assert.Assert(t, len(fakelog.FilterMessageSnippet("Tekton Hub integration is deprecated").TakeAll()) > 0, "expected deprecation warning in logs")
-			} else {
-				assert.Assert(t, len(rt.DeprecatedHubResources) == 0, "expected DeprecatedHubResources to be empty for non-tektonhub catalog")
 			}
 		})
 	}

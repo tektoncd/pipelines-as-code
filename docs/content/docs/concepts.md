@@ -32,7 +32,7 @@ The **controller** (`pipelines-as-code-controller`) is the central component. It
 - Receives webhook events from Git providers (push, pull request, etc.)
 - Matches events to Repository CRs in the cluster
 - Fetches pipeline definitions from the `.tekton/` directory in your repository
-- Resolves remote tasks from Artifact Hub (Tekton Hub support is deprecated)
+- Resolves remote tasks from Artifact Hub
 - Validates pipeline YAML before submission
 - Creates PipelineRuns in the appropriate namespace
 - Injects authentication tokens and secrets

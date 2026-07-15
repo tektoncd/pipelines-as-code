@@ -104,7 +104,7 @@ func Command(run *params.Run, streams *cli.IOStreams) *cobra.Command {
 				return fmt.Errorf("you need to at least specify a file with -f")
 			}
 
-			if err := settings.SyncConfig(run.Clients.Log, &run.Info.Pac.Settings, map[string]string{}, settings.DefaultValidators(), &run.Clients.HTTP); err != nil {
+			if err := settings.SyncConfig(run.Clients.Log, &run.Info.Pac.Settings, map[string]string{}, settings.DefaultValidators()); err != nil {
 				return err
 			}
 
@@ -212,7 +212,7 @@ func resolveFilenames(ctx context.Context, cs *params.Run, filenames []string, p
 	if err != nil {
 		return "", err
 	}
-	prun, _, err := resolve.Resolve(ctx, cs, cs.Clients.Log, providerintf, types, event, ropt)
+	prun, err := resolve.Resolve(ctx, cs, cs.Clients.Log, providerintf, types, event, ropt)
 	if err != nil {
 		return "", err
 	}

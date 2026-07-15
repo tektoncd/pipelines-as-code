@@ -119,7 +119,7 @@ The resolver:
 
 - Fetches `.tekton/` directory from the repository
 - Matches pipelines to the event using annotations
-- Resolves remote tasks from Tekton Hub or Artifact Hub
+- Resolves remote tasks from Artifact Hub
 - Substitutes template variables (`{{repo_url}}`, `{{revision}}`, etc.)
 
 7
@@ -397,7 +397,7 @@ pkg/
 ├── changedfiles/     # File change detection
 ├── cli/              # tkn-pac CLI implementation
 ├── formatting/       # Status and output formatting
-├── hub/              # Tekton Hub and Artifact Hub integration
+├── hub/              # Artifact Hub integration
 ├── kubeinteraction/  # Kubernetes API client
 ├── matcher/          # Event and pipeline matching
 ├── opscomments/      # GitOps command parsing (/test, /retest)
@@ -429,7 +429,7 @@ data:
   application-name: "Pipelines as Code"
 
   # Artifact Hub API URL
-  hub-url: "https://artifacthub.io/api/v1"
+  hub-url: "https://artifacthub.io"
 
   # Remote tasks support
   remote-tasks: "true"

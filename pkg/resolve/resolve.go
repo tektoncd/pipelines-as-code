@@ -215,14 +215,14 @@ func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (
 // Pipeline/PipelineRuns/Tasks and resolve them inline as a single PipelineRun
 // generateName can be set as True to set the name as a generateName + "-" for
 // unique pipelinerun.
-func Resolve(ctx context.Context, cs *params.Run, logger *zap.SugaredLogger, providerintf provider.Interface, types TektonTypes, event *info.Event, ropt *Opts) ([]*tektonv1.PipelineRun, []string, error) {
+func Resolve(ctx context.Context, cs *params.Run, logger *zap.SugaredLogger, providerintf provider.Interface, types TektonTypes, event *info.Event, ropt *Opts) ([]*tektonv1.PipelineRun, error) {
 	if len(types.PipelineRuns) == 0 {
-		return []*tektonv1.PipelineRun{}, nil, fmt.Errorf("could not find any PipelineRun in your .tekton/ directory")
+		return []*tektonv1.PipelineRun{}, fmt.Errorf("could not find any PipelineRun in your .tekton/ directory")
 	}
 	debugf(logger, "Resolve: pipelineruns=%d pipelines=%d tasks=%d remote_tasks=%t generate_name=%t", len(types.PipelineRuns), len(types.Pipelines), len(types.Tasks), ropt.RemoteTasks, ropt.GenerateName)
 
 	if _, err := MetadataResolve(types.PipelineRuns); err != nil {
-		return []*tektonv1.PipelineRun{}, nil, err
+		return []*tektonv1.PipelineRun{}, err
 	}
 
 	rt := &matcher.RemoteTasks{
@@ -234,10 +234,10 @@ func Resolve(ctx context.Context, cs *params.Run, logger *zap.SugaredLogger, pro
 
 	fetchedResources, err := resolveRemoteResources(ctx, rt, types, ropt)
 	if err != nil {
-		return []*tektonv1.PipelineRun{}, nil, err
+		return []*tektonv1.PipelineRun{}, err
 	}
 	debugf(logger, "Resolve: resolved pipelineruns=%d", len(fetchedResources))
-	return fetchedResources, rt.DeprecatedHubResources, nil
+	return fetchedResources, nil
 }
 
 func MetadataResolve(prs []*tektonv1.PipelineRun) ([]*tektonv1.PipelineRun, error) {

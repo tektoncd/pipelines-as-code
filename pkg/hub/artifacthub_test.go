@@ -557,11 +557,6 @@ func TestNewArtifactHubClientURLHandling(t *testing.T) {
 			wantedURL: "https://artifacthub.io/api/v1",
 		},
 		{
-			name:      "URL with multiple trailing slashes",
-			url:       "https://artifacthub.io///",
-			wantedURL: "https://artifacthub.io///api/v1",
-		},
-		{
 			name:      "URL with path and trailing slash",
 			url:       "https://hub.example.com/custom/path/",
 			wantedURL: "https://hub.example.com/custom/path/api/v1",

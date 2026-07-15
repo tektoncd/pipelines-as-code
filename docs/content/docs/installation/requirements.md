@@ -217,7 +217,7 @@ Ensure the following network connectivity:
   - Source: Git provider IP ranges
 - **Outbound**: Controller must reach:
   - Git provider API endpoints (for status updates)
-  - Artifact Hub or Tekton Hub (for remote task resolution)
+  - Artifact Hub (for remote task resolution)
   - Container registries (if using remote tasks)
 
 ### Git Provider IP Ranges

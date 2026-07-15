@@ -10,7 +10,6 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/hub"
-	hubtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/hub/vars"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
@@ -27,11 +26,10 @@ const (
 )
 
 type RemoteTasks struct {
-	Run                    *params.Run
-	ProviderInterface      provider.Interface
-	Event                  *info.Event
-	Logger                 *zap.SugaredLogger
-	DeprecatedHubResources []string // tracks resources resolved from deprecated tektonhub catalogs
+	Run               *params.Run
+	ProviderInterface provider.Interface
+	Event             *info.Event
+	Logger            *zap.SugaredLogger
 }
 
 // nolint: dupl
@@ -119,8 +117,8 @@ func (rt *RemoteTasks) getRemote(ctx context.Context, uri string, fromHub bool, 
 		split := strings.Split(uri, "://")
 		catalogID := split[0]
 		rt.Logger.Debugf("getRemote: fetching %s from custom hub catalog=%s", kind, catalogID)
-		value, _ := rt.Run.Info.Pac.HubCatalogs.Load(catalogID)
-		if _, ok := rt.Run.Info.Pac.HubCatalogs.Load(catalogID); !ok {
+		value, ok := rt.Run.Info.Pac.HubCatalogs.Load(catalogID)
+		if !ok {
 			rt.Logger.Infof("custom catalog %s is not found, skipping", catalogID)
 			return "", nil
 		}
@@ -134,10 +132,6 @@ func (rt *RemoteTasks) getRemote(ctx context.Context, uri string, fromHub bool, 
 			return "", fmt.Errorf("could not get details for catalog name: %s", catalogID)
 		}
 		rt.Logger.Infof("successfully fetched %s %s from custom catalog Hub %s on URL %s", kind, uri, catalogID, catalogValue.URL)
-		if catalogValue.Type == hubtypes.TektonHubType {
-			rt.Logger.Warnf("Tekton Hub integration is deprecated and will be removed in a future release. Resource %s %s was fetched from Tekton Hub catalog %s. Please migrate to Artifact Hub or fetch tasks from a git repository. See https://pipelinesascode.com/docs/guides/pipeline-resolution/", kind, uri, catalogID)
-			rt.DeprecatedHubResources = append(rt.DeprecatedHubResources, fmt.Sprintf("%s %s (catalog: %s)", kind, uri, catalogID))
-		}
 		return data, nil
 	case strings.Contains(uri, "/"): // if it contains a slash, it is a file inside a repository
 		rt.Logger.Debugf("getRemote: fetching %s from repository path", kind)
@@ -172,10 +166,6 @@ func (rt *RemoteTasks) getRemote(ctx context.Context, uri string, fromHub bool, 
 			return "", fmt.Errorf("could not get details for catalog name: %s", "default")
 		}
 		rt.Logger.Infof("successfully fetched %s %s from default configured catalog Hub on URL %s", uri, kind, catalogValue.URL)
-		if catalogValue.Type == hubtypes.TektonHubType {
-			rt.Logger.Warnf("Tekton Hub integration is deprecated and will be removed in a future release. Resource %s %s was fetched from the default Tekton Hub catalog. Please migrate to Artifact Hub or fetch tasks from a git repository. See https://pipelinesascode.com/docs/guides/pipeline-resolution/", kind, uri)
-			rt.DeprecatedHubResources = append(rt.DeprecatedHubResources, fmt.Sprintf("%s %s (default catalog)", kind, uri))
-		}
 		return data, nil
 	}
 	return "", fmt.Errorf(`cannot find "%s" anywhere`, uri)

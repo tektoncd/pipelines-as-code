@@ -61,7 +61,7 @@ func readTDfile(t *testing.T, testname string, generateName, remoteTasking bool)
 	if err != nil {
 		return &tektonv1.PipelineRun{}, nil, err
 	}
-	resolved, _, err := Resolve(ctx, cs, logger, tprovider, types, event, ropt)
+	resolved, err := Resolve(ctx, cs, logger, tprovider, types, event, ropt)
 	if err != nil {
 		return &tektonv1.PipelineRun{}, nil, err
 	}

@@ -25,10 +25,6 @@ See [Tasks and Pipelines inside the repository](#tasks-or-pipelines-inside-the-r
 
 ## Hub support for Pipelines
 
-{{< callout type="warning" >}}
-**Deprecated**: Tekton Hub integration (the `tektonhub` catalog type) is deprecated and will be removed in a future release. Please migrate to [Artifact Hub](https://artifacthub.io) or fetch pipelines from remote URLs. The default Artifact Hub integration is unaffected.
-{{< /callout >}}
-
 Just as with tasks, you can reference pipelines from [Artifact Hub](https://artifacthub.io) by name. Artifact Hub is a public registry for discovering and sharing Tekton resources.
 
 ```yaml
@@ -53,7 +49,7 @@ pipelinesascode.tekton.dev/pipeline: "buildpacks:0.1"
 
 ### Custom hub support for Pipelines
 
-If your cluster administrator has [configured]({{< relref "/docs/api/configmap#hub-configuration" >}}) custom Hub catalogs beyond the default Artifact Hub, you can reference them from your template. Note that `tektonhub`-type custom catalogs are deprecated and will be removed in a future release.
+If your cluster administrator has [configured]({{< relref "/docs/api/configmap#hub-configuration" >}}) custom Hub catalogs beyond the default Artifact Hub, you can reference them from your template.
 
 ```yaml
 pipelinesascode.tekton.dev/pipeline: "[customcatalog://buildpacks:0.1]" # this will install buildpacks from the custom catalog configured by the cluster administrator as customcatalog

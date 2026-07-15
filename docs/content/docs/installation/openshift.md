@@ -30,17 +30,6 @@ to the `pipelines-as-code` ConfigMap or `OpenShiftPipelinesAsCode` custom resour
 The default configuration for Pipelines-as-Code in `TektonConfig` is shown
 below.
 
-{{< callout type="warning" >}}
-Tekton Hub integration in Pipelines-as-Code is **deprecated** and will be
-**removed in a future release**. The public Tekton Hub (hub.tekton.dev) has been
-shut down, and support for self-hosted Tekton Hub instances (the `tektonhub`
-catalog type) is now deprecated as well. Please migrate to
-[Artifact Hub](https://artifacthub.io) or fetch tasks directly from a git
-repository or remote URL. See the
-[pipeline resolution guide]({{< relref "/docs/guides/pipeline-resolution" >}})
-for alternatives.
-{{< /callout >}}
-
 ```yaml
 apiVersion: operator.tekton.dev/v1alpha1
 kind: TektonConfig
@@ -61,8 +50,7 @@ spec:
           enable-cancel-in-progress-on-pull-requests: 'false'
           enable-cancel-in-progress-on-push: 'false'
           skip-push-event-for-pr-commits: 'true'
-          hub-url: 'https://artifacthub.io/api/v1'
-          hub-catalog-type: 'artifacthub'
+          hub-url: 'https://artifacthub.io'
           error-detection-max-number-of-lines: '50'
           error-detection-simple-regexp: >-
             ^(?P<filename>[^:]*):(?P<line>[0-9]+):(?P<column>[0-9]+):([

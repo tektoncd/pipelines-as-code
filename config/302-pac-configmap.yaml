@@ -44,22 +44,16 @@ data:
   secret-github-app-scope-extra-repos: ""
 
   # The default hub API url to use, by default it is Artifact Hub's API.
-  hub-url: "https://artifacthub.io/api/v1"
-
-  # The default hub catalog type, by default it is artifacthub.
-  # Other supported values: tektonhub (for custom self-hosted Tekton Hub instances)
-  hub-catalog-type: "artifacthub"
+  hub-url: "https://artifacthub.io"
 
   # Additional Hub Catalogs are supported, for example:
   #
   # catalog-1-id: custom
   # catalog-1-name: tekton
-  # catalog-1-url: https://api.custom.hub/v1
-  # catalog-1-type: tektonhub
+  # catalog-1-url: https://api.custom.hub
   #
-  # With this configuration, a catalog of type "tektonhub" (or alternatively,
-  # of type "artifacthub") named "custom" will be available at
-  # https://api.custom.hub/v1, using the catalog named "tekton" . Users can
+  # With this configuration, a catalog named "custom" will be available at
+  # https://api.custom.hub, using the catalog named "tekton". Users can
   # reference these catalogs in their templates like this:
   #
   # pipelinesascode.tekton.dev/task: "custom://task"

@@ -56,10 +56,6 @@ pipelinesascode.tekton.dev/task: "[git-clone, pylint]"
 
 ### Hub support for tasks
 
-{{< callout type="warning" >}}
-**Deprecated**: Tekton Hub integration (the `tektonhub` catalog type) is deprecated and will be removed in a future release. If you are using a self-hosted Tekton Hub instance, please migrate to [Artifact Hub](https://artifacthub.io) or fetch tasks directly from a [remote URL](#remote-http-url) or [git repository](#tasks-inside-the-repository). The default Artifact Hub integration is unaffected.
-{{< /callout >}}
-
 [Artifact Hub](https://artifacthub.io/packages/search?kind=7&kind=11) is a public registry where the Tekton community publishes reusable Tasks and Pipelines. When you reference a task by name alone, Pipelines-as-Code fetches it from Artifact Hub by default.
 
 ```yaml
@@ -135,7 +131,7 @@ Pipelines-as-Code does not inline a task reference that sets `taskRef.resolver`;
 
 #### Custom hub support for tasks
 
-If your cluster administrator has [configured]({{< relref "/docs/api/configmap#hub-configuration" >}}) custom Hub catalogs beyond the default Artifact Hub, you can reference them from your template. Note that `tektonhub`-type custom catalogs are deprecated and will be removed in a future release.
+If your cluster administrator has [configured]({{< relref "/docs/api/configmap#hub-configuration" >}}) custom Hub catalogs beyond the default Artifact Hub, you can reference them from your template.
 
 ```yaml
 pipelinesascode.tekton.dev/task: "[customcatalog://curl]" # this will install curl from the custom catalog configured by the cluster administrator as customcatalog

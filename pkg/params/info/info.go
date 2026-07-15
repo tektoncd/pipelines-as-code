@@ -1,7 +1,6 @@
 package info
 
 import (
-	"net/http"
 	"sync"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
@@ -37,14 +36,14 @@ func (i *Info) GetPacOpts() PacOpts {
 	return *i.Pac
 }
 
-func (i *Info) UpdatePacOpts(logger *zap.SugaredLogger, configData map[string]string, httpClient *http.Client) (*settings.Settings, error) {
+func (i *Info) UpdatePacOpts(logger *zap.SugaredLogger, configData map[string]string) (*settings.Settings, error) {
 	if i.pacMutex == nil {
 		i.pacMutex = &sync.Mutex{}
 	}
 	i.pacMutex.Lock()
 	defer i.pacMutex.Unlock()
 
-	if err := settings.SyncConfig(logger, &i.Pac.Settings, configData, settings.DefaultValidators(), httpClient); err != nil {
+	if err := settings.SyncConfig(logger, &i.Pac.Settings, configData, settings.DefaultValidators()); err != nil {
 		return nil, err
 	}
 	return &i.Pac.Settings, nil
