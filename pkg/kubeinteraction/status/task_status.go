@@ -20,6 +20,19 @@ var reasonMessageReplacementRegexp = regexp.MustCompile(`\(image: .*`)
 
 const maxErrorSnippetCharacterLimit = 65535 // This is the maximum size allowed by Github check run logs and may apply to all other providers
 
+func waitingMessage(steps []tektonv1.StepState) string {
+	for _, step := range steps {
+		if step.Waiting == nil || step.Waiting.Message == "" {
+			continue
+		}
+		if step.Waiting.Reason == "" {
+			return step.Waiting.Message
+		}
+		return fmt.Sprintf("%s: %s", step.Waiting.Reason, step.Waiting.Message)
+	}
+	return ""
+}
+
 // GetTaskRunStatusForPipelineTask takes a minimal embedded status child reference and returns the actual TaskRunStatus
 // for the PipelineTask. It returns an error if the child reference's kind isn't TaskRun.
 func GetTaskRunStatusForPipelineTask(ctx context.Context, client versioned.Interface, ns string, childRef tektonv1.ChildStatusReference) (*tektonv1.TaskRunStatus, error) {
@@ -96,8 +109,13 @@ func CollectFailedTasksLogSnippet(ctx context.Context, cs *params.Run, kinteract
 		if task.Status.TaskSpec != nil {
 			ti.DisplayName = task.Status.TaskSpec.DisplayName
 		}
+		if message := waitingMessage(task.Status.Steps); message != "" {
+			ti.LogSnippet = message
+		} else if ti.Message != "" {
+			ti.LogSnippet = ti.Message
+		}
 		// don't check for pod logs into those
-		if ti.Reason == "TaskRunValidationFailed" || ti.Reason == tektonv1.TaskRunReasonCancelled.String() || ti.Reason == tektonv1.TaskRunReasonTimedOut.String() || ti.Reason == tektonv1.TaskRunReasonImagePullFailed.String() {
+		if ti.Reason == "TaskRunValidationFailed" || ti.Reason == tektonv1.TaskRunReasonCancelled.String() || ti.Reason == tektonv1.TaskRunReasonTimedOut.String() || ti.Reason == tektonv1.TaskRunReasonImagePullFailed.String() || ti.Reason == tektonv1.TaskRunReasonCreateContainerConfigError.String() || ti.Reason == tektonv1.TaskRunReasonPodCreationFailed.String() {
 			failureReasons[task.PipelineTaskName] = ti
 			continue
 		} else if ti.Reason != tektonv1.PipelineRunReasonFailed.String() {

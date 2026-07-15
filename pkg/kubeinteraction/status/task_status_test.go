@@ -117,6 +117,154 @@ func TestCollectFailedTasksLogSnippet(t *testing.T) {
 	}
 }
 
+func TestCollectFailedTasksLogSnippetWaitingReasons(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+
+	tests := []struct {
+		name        string
+		reason      string
+		condMessage string
+		steps       []tektonv1.StepState
+		wantSnippet string
+	}{
+		{
+			name:        "CreateContainerConfigError surfaces step waiting message",
+			reason:      tektonv1.TaskRunReasonCreateContainerConfigError.String(),
+			condMessage: "Failed to create pod due to config error",
+			steps: []tektonv1.StepState{{
+				Name: "step",
+				ContainerState: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  tektonv1.TaskRunReasonCreateContainerConfigError.String(),
+						Message: `secret "pac-gitauth-test" not found`,
+					},
+				},
+			}},
+			wantSnippet: `CreateContainerConfigError: secret "pac-gitauth-test" not found`,
+		},
+		{
+			// TaskRunValidationFailed/PodCreationFailed happen before any
+			// step/pod is created, so waitingMessage() has nothing to
+			// inspect and we must fall back to the condition message.
+			name:        "no steps falls back to condition message",
+			reason:      "TaskRunValidationFailed",
+			condMessage: "task validation failed: unknown field foo",
+			steps:       nil,
+			wantSnippet: "task validation failed: unknown field foo",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			pr := tektontest.MakePRCompletion(clock, "pipeline", "ns", tektonv1.PipelineRunReasonFailed.String(), nil, map[string]string{}, 10)
+			pr.Status.ChildReferences = []tektonv1.ChildStatusReference{{
+				TypeMeta:         runtime.TypeMeta{Kind: "TaskRun"},
+				Name:             "task",
+				PipelineTaskName: "task",
+			}}
+			taskStatus := tektonv1.TaskRunStatusFields{
+				PodName: "task-pod",
+				Steps:   tt.steps,
+			}
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				TaskRuns: []*tektonv1.TaskRun{
+					tektontest.MakeTaskRunCompletion(clock, "task", "ns", "pipeline", map[string]string{}, taskStatus, knativeduckv1.Conditions{{
+						Type:    knativeapi.ConditionSucceeded,
+						Status:  corev1.ConditionFalse,
+						Reason:  tt.reason,
+						Message: tt.condMessage,
+					}}, 10),
+				},
+			})
+			cs := &params.Run{Clients: paramclients.Clients{Tekton: stdata.Pipeline}}
+
+			got := CollectFailedTasksLogSnippet(ctx, cs, nil, pr, 1)
+
+			assertv3.Equal(t, len(got), 1)
+			assertv3.Equal(t, got["task"].LogSnippet, tt.wantSnippet)
+		})
+	}
+}
+
+func TestWaitingMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		steps []tektonv1.StepState
+		want  string
+	}{
+		{
+			name:  "no steps",
+			steps: nil,
+			want:  "",
+		},
+		{
+			name: "step not waiting",
+			steps: []tektonv1.StepState{{
+				Name: "step",
+			}},
+			want: "",
+		},
+		{
+			name: "waiting with empty message",
+			steps: []tektonv1.StepState{{
+				Name: "step",
+				ContainerState: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason: "ImagePullBackOff",
+					},
+				},
+			}},
+			want: "",
+		},
+		{
+			name: "waiting with message and no reason",
+			steps: []tektonv1.StepState{{
+				Name: "step",
+				ContainerState: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Message: "something went wrong",
+					},
+				},
+			}},
+			want: "something went wrong",
+		},
+		{
+			name: "waiting with reason and message",
+			steps: []tektonv1.StepState{{
+				Name: "step",
+				ContainerState: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "CreateContainerConfigError",
+						Message: `secret "pac-gitauth-test" not found`,
+					},
+				},
+			}},
+			want: `CreateContainerConfigError: secret "pac-gitauth-test" not found`,
+		},
+		{
+			name: "skips non waiting steps until waiting one",
+			steps: []tektonv1.StepState{
+				{Name: "first"},
+				{
+					Name: "second",
+					ContainerState: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ErrImagePull",
+							Message: "image not found",
+						},
+					},
+				},
+			},
+			want: "ErrImagePull: image not found",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertv3.Equal(t, waitingMessage(tt.steps), tt.want)
+		})
+	}
+}
+
 func TestCollectFailedTasksLogSnippetUTF8SafeTruncation(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 
