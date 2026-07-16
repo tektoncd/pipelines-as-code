@@ -1,8 +1,6 @@
 module github.com/openshift-pipelines/pipelines-as-code
 
-go 1.25.0
-
-toolchain go1.25.10
+go 1.26.4
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v2 v2.2.0
