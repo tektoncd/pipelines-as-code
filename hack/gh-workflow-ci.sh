@@ -240,6 +240,7 @@ collect_logs() {
   # Read from environment variables (use default empty value for optional vars)
   local test_gitea_smee_url="${TEST_GITEA_SMEEURL:-}"
   local github_ghe_smee_url="${TEST_GITHUB_SECOND_SMEE_URL:-}"
+  local github_ghe_webhook_smee_url="${TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL:-}"
   local test_gitlab_smee_url="${TEST_GITLAB_SMEEURL:-}"
 
   mkdir -p /tmp/logs
@@ -251,11 +252,30 @@ collect_logs() {
   # Collect all gosmee data in organized directory
   mkdir -p /tmp/logs/gosmee
   [[ -d /tmp/gosmee-replay ]] && cp -a /tmp/gosmee-replay /tmp/logs/gosmee/replay
+  [[ -d /tmp/gosmee-replay-gitea ]] && cp -a /tmp/gosmee-replay-gitea /tmp/logs/gosmee/replay-gitea
   [[ -d /tmp/gosmee-replay-ghe ]] && cp -a /tmp/gosmee-replay-ghe /tmp/logs/gosmee/replay-ghe
+  [[ -d /tmp/gosmee-replay-ghe-webhook ]] && cp -a /tmp/gosmee-replay-ghe-webhook /tmp/logs/gosmee/replay-ghe-webhook
   [[ -f /tmp/gosmee-main.log ]] && cp /tmp/gosmee-main.log /tmp/logs/gosmee/main.log
+  [[ -f /tmp/gosmee-gitea.log ]] && cp /tmp/gosmee-gitea.log /tmp/logs/gosmee/gitea.log
   [[ -f /tmp/gosmee-ghe.log ]] && cp /tmp/gosmee-ghe.log /tmp/logs/gosmee/ghe.log
+  [[ -f /tmp/gosmee-ghe-webhook.log ]] && cp /tmp/gosmee-ghe-webhook.log /tmp/logs/gosmee/ghe-webhook.log
   [[ -d /tmp/gosmee-replay-gitlab ]] && cp -a /tmp/gosmee-replay-gitlab /tmp/logs/gosmee/replay-gitlab
   [[ -f /tmp/gosmee-gitlab.log ]] && cp /tmp/gosmee-gitlab.log /tmp/logs/gosmee/gitlab.log
+  printf '%s\n' \
+    'log-level=debug' \
+    'target-connection-timeout=5' \
+    'target-retries=5' \
+    'output=json' \
+    > /tmp/logs/gosmee/debug-settings.txt
+
+  # startpaac may run Gosmee inside the cluster; retain its pod logs and
+  # rendered deployment arguments alongside the external client logs.
+  if kubectl get namespace gosmee >/dev/null 2>&1; then
+    kubectl logs -n gosmee -l app=gosmee --all-containers=true --tail=1000 \
+      >/tmp/logs/gosmee/startpaac-pod.log 2>&1 || true
+    kubectl get deployment -n gosmee -l app=gosmee -o yaml \
+      >/tmp/logs/gosmee/startpaac-deployment.yaml 2>&1 || true
+  fi
 
   for type in pipelineruns repositories.pipelinesascode.tekton.dev; do
     kubectl get "${type}" -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' | while read -r ns name; do
@@ -287,7 +307,7 @@ collect_logs() {
     cp -a ${PAC_API_INSTRUMENTATION_DIR} /tmp/logs/$(basename ${PAC_API_INSTRUMENTATION_DIR})
   fi
 
-  for url in "${test_gitea_smee_url}" "${github_ghe_smee_url}" "${test_gitlab_smee_url}"; do
+  for url in "${test_gitea_smee_url}" "${github_ghe_smee_url}" "${github_ghe_webhook_smee_url}" "${test_gitlab_smee_url}"; do
     [[ -z "${url}" ]] && continue
     find /tmp/logs -type f -exec grep -l "${url}" {} \; | xargs -r sed -i "s|${url}|SMEE_URL|g"
   done

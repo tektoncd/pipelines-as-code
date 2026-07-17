@@ -181,7 +181,7 @@ jobs:
         env:
           PYSMEE_URL: ${{ secrets.PYSMEE_URL }}
         run: |
-          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay "${PYSMEE_URL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay "${PYSMEE_URL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
 
       - name: Generate unique gosmee URL for Gitea tests
         if: startsWith(matrix.provider, 'gitea') || matrix.provider == 'concurrency'
@@ -196,7 +196,7 @@ jobs:
         env:
           TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
         run: |
-          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay "${TEST_GITEA_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" >> /tmp/gosmee-main.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-gitea "${TEST_GITEA_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-gitea.log 2>&1 &
 
       - name: Generate unique gosmee URL for GitLab tests
         if: matrix.provider == 'gitlab_bitbucket'
@@ -211,12 +211,12 @@ jobs:
         env:
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
         run: |
-          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay-gitlab "${TEST_GITLAB_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" >> /tmp/gosmee-gitlab.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-gitlab "${TEST_GITLAB_SMEEURL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-gitlab.log 2>&1 &
 
       - name: Run gosmee for second controller GHE App
         if: startsWith(matrix.provider, 'github_ghe') || matrix.provider == 'concurrency'
         run: |
-          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay-ghe "${TEST_GITHUB_SECOND_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" >> /tmp/gosmee-ghe.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-ghe "${TEST_GITHUB_SECOND_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" > /tmp/gosmee-ghe.log 2>&1 &
 
       - name: Generate unique gosmee URL for GHE webhook tests
         if: startsWith(matrix.provider, 'github_ghe') || matrix.provider == 'concurrency'
@@ -231,7 +231,7 @@ jobs:
         env:
           TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
         run: |
-          nohup gosmee client --insecure-skip-tls-verify --saveDir /tmp/gosmee-replay-ghe-webhook "${TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" >> /tmp/gosmee-ghe-webhook.log 2>&1 &
+          nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-ghe-webhook "${TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" > /tmp/gosmee-ghe-webhook.log 2>&1 &
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3

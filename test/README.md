@@ -124,7 +124,7 @@ instance to your local controller (the same pattern as Gitea tests).
    SMEE_URL=$(curl -s https://hook.pipelinesascode.com -o /dev/null -w '%{redirect_url}')
 
    # Start forwarding webhooks to your controller
-   gosmee client "${SMEE_URL}" "https://your-controller-url"
+   gosmee client --output json --log-level debug --target-connection-timeout 5 --target-retries 5 "${SMEE_URL}" "https://your-controller-url"
    ```
 
 3. Set the required environment variables (or use a

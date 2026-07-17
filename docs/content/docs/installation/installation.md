@@ -175,6 +175,14 @@ spec:
         - name: gosmee-client
           image: 'ghcr.io/chmouel/gosmee:main'
           args:
+            - --output
+            - json
+            - --log-level
+            - debug
+            - --target-connection-timeout
+            - "5"
+            - --target-retries
+            - "5"
             - '<replace Webhook Proxy URL>'
             - $(SVC)
           env:

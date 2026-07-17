@@ -19,6 +19,14 @@ spec:
           args:
             [
               "client",
+              "--output",
+              "json",
+              "--log-level",
+              "debug",
+              "--target-connection-timeout",
+              "5",
+              "--target-retries",
+              "5",
               "--saveDir",
               "/tmp/save",
               "FORWARD_URL",
