@@ -432,6 +432,11 @@ spec:
 
                 {
                   "summary": "2-5 sentence high level summary of what changed and why",
+                  "review_score": {
+                    "rating": 3,
+                    "reason": "one sentence justifying the difficulty rating"
+                  },
+                  "security_sensitive": false,
                   "comments": [
                     {
                       "path": "relative/file/path.go",
@@ -441,6 +446,19 @@ spec:
                     }
                   ]
                 }
+
+                "review_score.rating" is an integer from 1 to 5 estimating how
+                hard this PR is to review: 1 = trivial (tiny, self-contained,
+                low risk), 3 = moderate, 5 = very hard (large, complex, high
+                blast radius, or subtle logic). Judge it from the size, the
+                complexity, the risk, and how much of the system the change can
+                affect. "review_score.reason" is a single short sentence
+                justifying the rating.
+
+                "security_sensitive" is true when the diff touches anything
+                security-relevant: authentication, authorization, permissions,
+                tokens or secrets handling, cryptography, input validation, or
+                similar. Otherwise it is false.
 
                 Do not use, request, propose, or announce any tools or commands.
                 Reason only over the data included in this prompt. Your entire
@@ -462,9 +480,17 @@ spec:
                   cat >> "${prompt_file}" <<'PROMPT_MODE_REVIEW'
 
                 Only include a comment when you have a concrete, actionable
-                finding (bug, security issue, style violation, missed edge
-                case). "line" must be an integer referring to the new
-                (right-hand side) version of the file as shown in the diff.
+                finding (bug, security issue, missed edge case, or a real
+                maintainability/correctness problem). "line" must be an
+                integer referring to the new (right-hand side) version of
+                the file as shown in the diff.
+
+                Do not report nits: subjective style preferences,
+                formatting, naming bikeshedding, or minor phrasing
+                suggestions that do not affect correctness, security, or
+                maintainability. If you are unsure whether a finding is a
+                nit, leave it out.
+
                 Whenever you can express the fix as an exact replacement for
                 the flagged line, favor embedding a GitHub suggestion block
                 inside "body" so it can be applied in one click:
@@ -697,21 +723,39 @@ spec:
                 fi
 
                 # Normalize: coerce line to a number, drop malformed entries,
-                # clamp severity to known values, cap at 30 comments.
-                jq '{
-                  summary: .summary,
-                  comments: (
-                    .comments
-                    | map(
-                        (.line = (.line | if type == "string" then (tonumber? // null) else . end))
-                        | select((.path | type == "string") and (.line | type == "number") and (.body | type == "string"))
-                        | .severity = (if (.severity | type == "string") and
-                            ((.severity | ascii_downcase) as $s | ["critical","high","medium","low"] | index($s))
-                          then (.severity | ascii_downcase) else "medium" end)
+                # clamp severity to known values, cap at 30 comments. Carry
+                # review_score (rating clamped 1-5, default 3) and
+                # security_sensitive (boolean, default false).
+                jq '
+                  (.review_score | if type == "object" then . else {} end) as $score
+                  | ($score.rating
+                      | if type == "string" then (tonumber? // 3) else . end) as $rating
+                  | {
+                      summary: .summary,
+                      review_score: {
+                        rating: (
+                          if ($rating | type) == "number" and
+                              (($rating | (isnan or isinfinite)) | not)
+                          then ($rating | floor | if . < 1 then 1 elif . > 5 then 5 else . end)
+                          else 3
+                          end
+                        ),
+                        reason: (if ($score.reason | type) == "string" then $score.reason else "" end)
+                      },
+                      security_sensitive: (.security_sensitive == true),
+                      comments: (
+                        .comments
+                        | map(
+                            (.line = (.line | if type == "string" then (tonumber? // null) else . end))
+                            | select((.path | type == "string") and (.line | type == "number") and (.body | type == "string"))
+                            | .severity = (if (.severity | type == "string") and
+                                ((.severity | ascii_downcase) as $s | ["critical","high","medium","low"] | index($s))
+                              then (.severity | ascii_downcase) else "medium" end)
+                          )
+                        | .[:30]
                       )
-                    | .[:30]
-                  )
-                }' "${extracted}" > "${out}"
+                    }
+                ' "${extracted}" > "${out}"
                 comment_count="$(jq '.comments | length' "${out}")"
                 echo "Paco generated ${comment_count} normalized finding(s) in ${mode} mode"
 
@@ -730,6 +774,7 @@ spec:
 
                 owner="$(params.repo_owner)"
                 repo="$(params.repo_name)"
+                repo_slug="${owner}/${repo}"
                 pr_number="$(params.pull_request_number)"
                 head_sha="$(cat "$(workspaces.source.path)/.head_sha" 2> /dev/null || true)"
                 review_json="$(workspaces.source.path)/.paco-review.json"
@@ -740,8 +785,13 @@ spec:
                 mode_file="$(workspaces.source.path)/.paco-mode"
                 marker="<!-- paco-review -->"
 
-                if ! jq -e . "${review_json}" > /dev/null 2>&1; then
+                if ! jq -e '
+                    type == "object" and
+                    (.summary | type == "string") and
+                    (.comments | type == "array")
+                  ' "${review_json}" > /dev/null 2>&1; then
                   echo '{"summary":"Could not parse Paco model output.","comments":[]}' > "${review_json}"
+                  : > "${failed_marker}"
                 fi
                 if ! jq -e . "${valid_lines_json}" > /dev/null 2>&1; then
                   echo '{}' > "${valid_lines_json}"
@@ -843,6 +893,7 @@ spec:
                 #   ✅ nothing left to flag, 🔍 new findings found.
                 mode="$(cat "${mode_file}" 2> /dev/null || echo review)"
                 findings_line=""
+                score_line=""
                 if [ -e "${failed_marker}" ]; then
                   status_emoji="⚠️"
                 elif [ "${mode}" = "summary" ]; then
@@ -854,16 +905,116 @@ spec:
                 "
                 else
                   status_emoji="✅"
+                  findings_line="
+                No new review comments found at this time. Nice work!
+                "
+                fi
+
+                # Review-difficulty score. The numeric rating comes from the
+                # model (already clamped to 1-5); the word label is derived
+                # here in shell so the sticky text and the GitHub label always
+                # agree. Skipped on the error/withheld path.
+                score_word=""
+                security_sensitive="false"
+                if [ ! -e "${failed_marker}" ]; then
+                  rating="$(jq -r '(.review_score.rating // 3) | floor' "${review_json}" 2> /dev/null || echo 3)"
+                  case "${rating}" in
+                    1|2|3|4|5) : ;;
+                    *) rating=3 ;;
+                  esac
+                  score_reason="$(jq -r '.review_score.reason // ""' "${review_json}" 2> /dev/null || echo "")"
+                  security_sensitive="$(jq -r 'if .security_sensitive == true then "true" else "false" end' "${review_json}" 2> /dev/null || echo false)"
+                  case "${rating}" in
+                    1) score_word="Trivial" ;;
+                    2) score_word="Easy" ;;
+                    3) score_word="Moderate" ;;
+                    4) score_word="Hard" ;;
+                    5) score_word="Very Hard" ;;
+                  esac
+                  score_line="
+                **Review difficulty:** ${rating}/5 (${score_word})"
+                  if [ -n "${score_reason}" ]; then
+                    score_line="${score_line} — ${score_reason}"
+                  fi
+                  score_line="${score_line}
+                "
                 fi
 
                 sticky_body="${marker}
                 ## Paco Review ${status_emoji}
 
                 ${summary}
+                ${score_line}
                 ${findings_line}
                 <sub>Reviewed commit: ${head_sha:-unknown}</sub>"
 
                 post_sticky "${sticky_body}"
+
+                # Apply the review-difficulty label (and a security-review
+                # label when the change is security-sensitive). Label failures
+                # are non-fatal: a permissions problem must not sink the review.
+                if [ -n "${score_word}" ]; then
+                  apply_labels() {
+                    local score_names=(
+                      "paco/review-trivial"
+                      "paco/review-easy"
+                      "paco/review-moderate"
+                      "paco/review-hard"
+                      "paco/review-very-hard"
+                    )
+                    local score_colors=(
+                      "paco/review-trivial:0e8a16"
+                      "paco/review-easy:5be3a0"
+                      "paco/review-moderate:fbca04"
+                      "paco/review-hard:d93f0b"
+                      "paco/review-very-hard:b60205"
+                    )
+                    local target=""
+                    case "${rating}" in
+                      1) target="paco/review-trivial" ;;
+                      2) target="paco/review-easy" ;;
+                      3) target="paco/review-moderate" ;;
+                      4) target="paco/review-hard" ;;
+                      5) target="paco/review-very-hard" ;;
+                    esac
+                    local color=""
+                    local entry
+                    for entry in "${score_colors[@]}"; do
+                      if [ "${entry%%:*}" = "${target}" ]; then
+                        color="${entry#*:}"
+                        break
+                      fi
+                    done
+
+                    # Ensure the target label exists (create or update colour).
+                    gh label create "${target}" --color "${color}" \
+                      --description "Paco review difficulty" --force \
+                      -R "${repo_slug}" > /dev/null 2>&1 || true
+
+                    # Drop any other Paco score label so only the current one
+                    # remains, then add the target.
+                    local name
+                    for name in "${score_names[@]}"; do
+                      [ "${name}" = "${target}" ] && continue
+                      gh pr edit "${pr_number}" -R "${repo_slug}" \
+                        --remove-label "${name}" > /dev/null 2>&1 || true
+                    done
+                    gh pr edit "${pr_number}" -R "${repo_slug}" \
+                      --add-label "${target}" > /dev/null 2>&1 || true
+
+                    # Security-review is shared with maintainers and other
+                    # automation, so Paco may add it but never remove or
+                    # overwrite it.
+                    gh label create "security-review" --color "b60205" \
+                      --description "Flagged as security-sensitive by Paco" \
+                      -R "${repo_slug}" > /dev/null 2>&1 || true
+                    if [ "${security_sensitive}" = "true" ]; then
+                      gh pr edit "${pr_number}" -R "${repo_slug}" \
+                        --add-label "security-review" > /dev/null 2>&1 || true
+                    fi
+                  }
+                  apply_labels || echo "warning: could not fully apply Paco labels"
+                fi
 
                 if [ "${n_comments}" -gt 0 ]; then
                   if ! gh api --method POST \
