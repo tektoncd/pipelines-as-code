@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/stretchr/testify/assert"
+	"gotest.tools/v3/assert"
 )
 
 func TestNewInfo(t *testing.T) {
@@ -12,10 +12,10 @@ func TestNewInfo(t *testing.T) {
 	assert.Equal(t, info.Pac.ApplicationName, "Pipelines as Code CI")
 
 	value, ok := info.Pac.HubCatalogs.Load("default")
-	assert.True(t, ok)
+	assert.Assert(t, ok)
 
 	catalog, ok := value.(settings.HubCatalog)
-	assert.True(t, ok)
-	assert.Equal(t, "default", catalog.Index)
-	assert.Equal(t, settings.ArtifactHubURLDefaultValue, catalog.URL)
+	assert.Assert(t, ok)
+	assert.Equal(t, catalog.Index, "default")
+	assert.Equal(t, catalog.URL, settings.ArtifactHubURLDefaultValue)
 }

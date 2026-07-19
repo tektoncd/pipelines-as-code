@@ -1,6 +1,7 @@
 package status
 
 import (
+	"sort"
 	"testing"
 	"unicode/utf8"
 
@@ -10,11 +11,10 @@ import (
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
-	"github.com/stretchr/testify/assert"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
-	assertv3 "gotest.tools/v3/assert"
+	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -180,8 +180,8 @@ func TestCollectFailedTasksLogSnippetWaitingReasons(t *testing.T) {
 
 			got := CollectFailedTasksLogSnippet(ctx, cs, nil, pr, 1)
 
-			assertv3.Equal(t, len(got), 1)
-			assertv3.Equal(t, got["task"].LogSnippet, tt.wantSnippet)
+			assert.Equal(t, 1, len(got))
+			assert.Equal(t, tt.wantSnippet, got["task"].LogSnippet)
 		})
 	}
 }
@@ -260,7 +260,7 @@ func TestWaitingMessage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertv3.Equal(t, waitingMessage(tt.steps), tt.want)
+			assert.Equal(t, tt.want, waitingMessage(tt.steps))
 		})
 	}
 }
@@ -371,30 +371,19 @@ func TestCollectFailedTasksLogSnippetUTF8SafeTruncation(t *testing.T) {
 			runeCount := len([]rune(snippet))
 
 			if tt.expectedTruncation {
-				// Should be truncated to at most maxErrorSnippetCharacterLimit bytes
-				if byteCount > maxErrorSnippetCharacterLimit {
-					t.Errorf("Expected truncated string to be at most %d bytes, got %d",
-						maxErrorSnippetCharacterLimit, byteCount)
-				}
-
-				// Verify the string is valid UTF-8 after truncation
-				assert.True(t, utf8.ValidString(snippet), "Truncated string should be valid UTF-8")
-
-				// Should be shorter than original (in bytes)
-				assert.Less(t, byteCount, len(tt.podOutput),
-					"Truncated string should be shorter than original")
+				assert.Assert(t, byteCount <= maxErrorSnippetCharacterLimit,
+					"expected truncated string to be at most %d bytes, got %d",
+					maxErrorSnippetCharacterLimit, byteCount)
+				assert.Assert(t, utf8.ValidString(snippet), "truncated string should be valid UTF-8")
+				assert.Assert(t, byteCount < len(tt.podOutput),
+					"truncated string should be shorter than original")
 			} else {
-				// Should match expected length exactly (in runes for non-truncated)
-				assert.Equal(t, tt.expectedLengthRunes, runeCount,
-					"Expected string length %d runes, got %d", tt.expectedLengthRunes, runeCount)
-
-				// Should match original (no truncation)
-				assert.Equal(t, tt.podOutput, snippet, "String should not be truncated")
+				assert.Equal(t, tt.expectedLengthRunes, runeCount)
+				assert.Equal(t, tt.podOutput, snippet)
 			}
 
-			// Always verify valid UTF-8
 			if tt.expectValidUTF8 {
-				assert.True(t, utf8.ValidString(snippet), "String should be valid UTF-8")
+				assert.Assert(t, utf8.ValidString(snippet), "string should be valid UTF-8")
 			}
 		})
 	}
@@ -572,17 +561,21 @@ func TestGetStatusFromTaskStatusOrFromAsking(t *testing.T) {
 				Log:    logger,
 			}
 			statuses := GetStatusFromTaskStatusOrFromAsking(ctx, tt.pr, run)
-			assert.Equal(t, len(statuses), tt.numStatus)
-			displayNames := []string{}
+			assert.Equal(t, tt.numStatus, len(statuses))
 			if tt.displayNames != nil {
+				displayNames := []string{}
 				for _, prtrs := range statuses {
 					displayNames = append(displayNames, prtrs.Status.TaskSpec.DisplayName)
 				}
-				assert.ElementsMatch(t, tt.displayNames, displayNames)
+				sort.Strings(displayNames)
+				expected := make([]string, len(tt.displayNames))
+				copy(expected, tt.displayNames)
+				sort.Strings(expected)
+				assert.DeepEqual(t, displayNames, expected)
 			}
 			if tt.expectedLogSnippet != "" {
 				logmsg := obslog.FilterMessageSnippet(tt.expectedLogSnippet).TakeAll()
-				assertv3.Assert(t, len(logmsg) > 0, "log messages", logmsg, tt.expectedLogSnippet)
+				assert.Assert(t, len(logmsg) > 0, "log messages", logmsg, tt.expectedLogSnippet)
 			}
 		})
 	}
