@@ -109,12 +109,13 @@ Create a Kubernetes secret containing your API token in the `target-namespace`
 
 ```shell
 kubectl -n target-namespace create secret generic bitbucket-cloud-token \
-        --from-literal provider.token="BITBUCKET_CLOUD_API_TOKEN"
+        --from-literal provider.token="BITBUCKET_CLOUD_API_TOKEN" \
+        --from-literal webhook.secret="YOUR_WEBHOOK_SECRET"
 ```
 
 ### Create the Repository CR
 
-Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with the secret field referencing it:
+Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with the secret and webhook secret fields referencing it:
 
 ```yaml
   ---
@@ -131,6 +132,10 @@ Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with th
         name: "bitbucket-cloud-token"
         # Set this if you have a different key in your secret
         # key: "provider.token"
+      webhook_secret:
+        name: "bitbucket-cloud-token"
+        # Set this if you have a different key in your secret
+        # key: "webhook.secret"
 ```
 
 You must use your Bitbucket/Atlassian account email address in the `user` field
@@ -155,20 +160,34 @@ You can only reference a user by the `ACCOUNT_ID` in a owner file. For reason se
 <https://developer.atlassian.com/cloud/bitbucket/bitbucket-api-changes-gdpr/#introducing-atlassian-account-id-and-nicknames>
 {{< /callout >}}
 
-{{< callout type="error" >}}
+### Webhook Secret Validation
 
-- There is no webhook secret support in Bitbucket Cloud. To secure
-  the payload and prevent hijacking of the CI, Pipelines-as-Code will fetch the
-  IP addresses list from <https://ip-ranges.atlassian.com/> and ensure that the
-  webhook receptions come only from the Bitbucket Cloud IPs.
-- If you want to add some IP addresses or networks, you can add them to the
-  `bitbucket-cloud-additional-source-ip` key in the pipelines-as-code
-  `ConfigMap` in the `pipelines-as-code` namespace. You can add multiple
-  network or IPs separated by a comma.
+Bitbucket Cloud supports HMAC webhook secrets. When you configure a
+webhook secret on the Repository CR, Pipelines-as-Code validates the
+signature header on every incoming webhook to verify the payload was
+sent by Bitbucket Cloud and has not been tampered with.
 
-- If you want to disable this behavior you can set the
-  `bitbucket-cloud-check-source-ip` key to `false` in the pipelines-as-code
-  `ConfigMap` in the `pipelines-as-code` namespace.
+Pipelines-as-Code checks the `X-Hub-Signature-256` header (HMAC-SHA256)
+first and falls back to `X-Hub-Signature` (HMAC-SHA1) if the SHA256 header
+is not present.
+
+Make sure the same secret value is configured in your Bitbucket Cloud webhook
+settings under **Repository settings → Workflow → Webhooks → Edit → Secret**.
+
+{{< callout type="info" >}}
+
+### IP-based validation (defense-in-depth)
+
+In addition to webhook secret validation, Pipelines-as-Code can also verify
+that webhooks originate from Bitbucket Cloud IP addresses by fetching the
+IP list from <https://ip-ranges.atlassian.com/>.
+
+- To add extra IP addresses or networks, set the
+  `bitbucket-cloud-additional-source-ip` key in the `pipelines-as-code`
+  ConfigMap. You can add multiple networks or IPs separated by a comma.
+
+- To disable IP checking, set `bitbucket-cloud-check-source-ip` to `false`
+  in the `pipelines-as-code` ConfigMap.
 {{< /callout >}}
 
 ## Add Webhook Secret
