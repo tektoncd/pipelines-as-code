@@ -133,7 +133,7 @@ func TestGetMergeCommitChanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, _ := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, _ := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
 
 			if tt.setup != nil {

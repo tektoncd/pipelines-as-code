@@ -42,6 +42,10 @@ func ExecuteAnalysis(
 		return nil
 	}
 
+	if pr == nil {
+		return fmt.Errorf("no pipelinerun provided for LLM analysis")
+	}
+
 	logger.Infof("Starting LLM analysis for pipeline %s/%s", pr.Namespace, pr.Name)
 
 	results, err := analyze(ctx, run, kinteract, logger, repo, pr, event, prov)
@@ -259,6 +263,15 @@ func analyze(
 			results = append(results, AnalysisResult{
 				Role:  role.Name,
 				Error: analysisErr,
+			})
+			continue
+		}
+
+		if response == nil {
+			roleLogger.Warn("LLM analysis returned no response and no error")
+			results = append(results, AnalysisResult{
+				Role:  role.Name,
+				Error: fmt.Errorf("LLM client returned no response"),
 			})
 			continue
 		}

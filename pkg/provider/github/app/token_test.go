@@ -364,6 +364,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 		wantInstallationID  int64
 		wantToken           string
 		wantEnterpriseHost  string
+		apiURL              string
 		skip                bool
 		expectedErrorString string
 	}{
@@ -439,6 +440,14 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			wantErr:             true,
 			expectedErrorString: "invalid repository URL path",
 		},
+		{
+			name:                "invalid enterprise API URL",
+			repoURL:             fmt.Sprintf("https://github.com/%s/%s", orgName, repoName),
+			apiURL:              "%",
+			setupMux:            func(_ *http.ServeMux, _ string) {},
+			wantErr:             true,
+			expectedErrorString: "failed to create github enterprise client",
+		},
 	}
 
 	for _, tt := range tests {
@@ -484,7 +493,11 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 				},
 			}
 
-			gprovider := &github.Provider{APIURL: &serverURL, Run: run}
+			apiURL := serverURL
+			if tt.apiURL != "" {
+				apiURL = tt.apiURL
+			}
+			gprovider := &github.Provider{APIURL: &apiURL, Run: run}
 			gprovider.SetGithubClient(fakeghclient)
 			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL)
 

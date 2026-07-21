@@ -10,6 +10,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	paramclients "github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	kitesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	tprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -17,6 +18,20 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"knative.dev/pkg/apis"
 )
+
+type nilResponseClient struct{}
+
+func (n *nilResponseClient) Analyze(_ context.Context, _ *AnalysisRequest) (*AnalysisResponse, error) {
+	return nil, nil
+}
+
+func (n *nilResponseClient) GetProviderName() string {
+	return string(ProviderOpenAI)
+}
+
+func (n *nilResponseClient) ValidateConfig() error {
+	return nil
+}
 
 func TestAnalyze(t *testing.T) {
 	testLogger, _ := logger.GetLogger()
@@ -89,6 +104,47 @@ func TestAnalyze(t *testing.T) {
 	}
 }
 
+func TestAnalyzeNilResponse(t *testing.T) {
+	originalFactory := registry[ProviderOpenAI]
+	registry[ProviderOpenAI] = func(_ *ProviderConfig) (Client, error) {
+		return &nilResponseClient{}, nil
+	}
+	t.Cleanup(func() {
+		registry[ProviderOpenAI] = originalFactory
+	})
+
+	testLogger, _ := logger.GetLogger()
+	kinteract := &kitesthelper.KinterfaceTest{
+		GetSecretResult: map[string]string{"llm-token": "token"},
+	}
+	repo := &v1alpha1.Repository{
+		Spec: v1alpha1.RepositorySpec{
+			Settings: &v1alpha1.Settings{
+				AIAnalysis: &v1alpha1.AIAnalysisConfig{
+					Enabled:  true,
+					Provider: string(ProviderOpenAI),
+					TokenSecretRef: &v1alpha1.Secret{
+						Name: "llm-token",
+					},
+					Roles: []v1alpha1.AnalysisRole{
+						{
+							Name:   "review",
+							Prompt: "review this run",
+							OnCEL:  "true",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	results, err := analyze(context.Background(), &params.Run{}, kinteract, testLogger,
+		repo, &tektonv1.PipelineRun{}, &info.Event{}, &tprovider.TestProviderImp{})
+	assert.NilError(t, err)
+	assert.Equal(t, len(results), 1)
+	assert.ErrorContains(t, results[0].Error, "LLM client returned no response")
+}
+
 func TestExecuteAnalysis(t *testing.T) {
 	testLogger, _ := logger.GetLogger()
 
@@ -102,8 +158,10 @@ func TestExecuteAnalysis(t *testing.T) {
 	pr := &tektonv1.PipelineRun{}
 
 	tests := []struct {
-		name string
-		repo *v1alpha1.Repository
+		name           string
+		repo           *v1alpha1.Repository
+		nilPipelineRun bool
+		wantErr        string
 	}{
 		{
 			name: "no settings",
@@ -139,18 +197,35 @@ func TestExecuteAnalysis(t *testing.T) {
 					},
 				},
 			},
+			wantErr: "LLM analysis failed",
+		},
+		{
+			name: "nil pipelinerun",
+			repo: &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{
+						AIAnalysis: &v1alpha1.AIAnalysisConfig{Enabled: true},
+					},
+				},
+			},
+			nilPipelineRun: true,
+			wantErr:        "no pipelinerun provided",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ExecuteAnalysis(context.Background(), run, kinteract, testLogger,
-				tt.repo, pr, &info.Event{}, &tprovider.TestProviderImp{})
-			if tt.name == "invalid config returns error wrapped" {
-				assert.Assert(t, err != nil)
-			} else {
-				assert.NilError(t, err)
+			pipelineRun := pr
+			if tt.nilPipelineRun {
+				pipelineRun = nil
 			}
+			err := ExecuteAnalysis(context.Background(), run, kinteract, testLogger,
+				tt.repo, pipelineRun, &info.Event{}, &tprovider.TestProviderImp{})
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			assert.NilError(t, err)
 		})
 	}
 }

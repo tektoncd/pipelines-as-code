@@ -51,6 +51,8 @@ var (
 )
 
 func TestCopyRepositoryForMergeCopiesMutableSpecPointers(t *testing.T) {
+	assert.Assert(t, copyRepositoryForMerge(nil) == nil)
+
 	repo := &v1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "repo",

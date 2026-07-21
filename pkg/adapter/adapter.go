@@ -284,6 +284,9 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 
 func (l listener) processRes(processEvent bool, provider provider.Interface, logger *zap.SugaredLogger, skipReason string, err error) (provider.Interface, *zap.SugaredLogger, error) {
 	if processEvent {
+		if provider == nil {
+			return nil, logger, fmt.Errorf("internal error: no provider detected while processEvent is true")
+		}
 		provider.SetLogger(logger)
 		return provider, logger, nil
 	}

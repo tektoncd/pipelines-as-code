@@ -91,7 +91,7 @@ func TestGetTektonDir(t *testing.T) {
 			observer, _ := zapobserver.New(zap.InfoLevel)
 			logger := zap.New(observer).Sugar()
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
 			v := &Provider{Logger: logger, baseURL: tURL, client: client, projectKey: tt.event.Organization}
 			bbtest.MuxDirContent(t, mux, tt.event, tt.testDirPath, tt.path, tt.wantDirAPIErr, tt.wantFilesAPIErr)
@@ -217,7 +217,7 @@ func TestCreateStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
 			if tt.nilClient {
 				client = nil
@@ -290,7 +290,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
 			v := &Provider{client: client, baseURL: tURL, defaultBranchLatestCommit: "1234", projectKey: tt.event.Organization}
 			bbtest.MuxFiles(t, mux, tt.event, tt.targetbranch, filepath.Dir(tt.path), tt.filescontents, tt.wantErr != "")
@@ -314,6 +314,7 @@ func TestSetClient(t *testing.T) {
 		wantErrSubstr string
 		muxToken      func(w http.ResponseWriter, r *http.Request)
 		muxUser       func(w http.ResponseWriter, r *http.Request)
+		closeServer   bool
 	}{
 		{
 			name:          "bad/no token",
@@ -438,6 +439,17 @@ func TestSetClient(t *testing.T) {
 			wantErrSubstr: "token validation failed: Internal Server Error",
 		},
 		{
+			name: "transport error at whoami",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			closeServer:   true,
+			wantErrSubstr: "token validation failed:",
+		},
+		{
 			name: "good/url append /rest",
 			opts: &info.Event{
 				Provider: &info.Provider{
@@ -464,8 +476,12 @@ func TestSetClient(t *testing.T) {
 				},
 			}
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
-			defer tearDown()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
+			if tt.closeServer {
+				tearDown()
+			} else {
+				defer tearDown()
+			}
 			if tt.muxToken != nil {
 				mux.HandleFunc("/whoami", tt.muxToken)
 			}
@@ -550,7 +566,7 @@ func TestGetCommitInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 
 			// Custom mock for commit info to properly populate all fields
 			// Bitbucket Stash/Data Center API format
@@ -759,6 +775,11 @@ func TestRemoveLastSegment(t *testing.T) {
 			inputURL:    "http://example.com/api//v1/users", // Double slashes in path
 			expectedURL: "http://example.com/api//v1",       // Double slashes are preserved by net/url and strings.Split
 		},
+		{
+			name:        "invalid URL",
+			inputURL:    "http://[::1",
+			expectedURL: "http://[::1",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -914,7 +935,7 @@ func TestGetFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
 
 			stats := &bbtypes.DiffStats{

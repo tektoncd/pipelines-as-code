@@ -1184,6 +1184,7 @@ func TestGithubSetClient(t *testing.T) {
 		expectedURL    string
 		isGHE          bool
 		installationID int64
+		wantErr        string
 	}{
 		{
 			name: "api url set",
@@ -1201,6 +1202,15 @@ func TestGithubSetClient(t *testing.T) {
 			expectedURL:    fmt.Sprintf("%s/", keys.PublicGithubAPIURL),
 			event:          info.NewEvent(),
 			installationID: 12345,
+		},
+		{
+			name: "invalid enterprise URL",
+			event: &info.Event{
+				Provider: &info.Provider{
+					URL: "%",
+				},
+			},
+			wantErr: "failed to create github enterprise client",
 		},
 	}
 	for _, tt := range tests {
@@ -1224,6 +1234,10 @@ func TestGithubSetClient(t *testing.T) {
 				},
 			}
 			err := v.SetClient(ctx, fakeRun, tt.event, repo, nil)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
 			assert.NilError(t, err)
 			assert.Equal(t, tt.expectedURL, *v.APIURL)
 			assert.Equal(t, "https", v.Client().BaseURL.Scheme)
@@ -1880,6 +1894,13 @@ func TestCreateToken(t *testing.T) {
 	if err != nil {
 		assert.ErrorContains(t, err, "could not refresh installation id 1234567's token")
 	}
+}
+
+func TestExpandGlobAndAddRepoIDsInvalidPattern(t *testing.T) {
+	provider := &Provider{}
+	cache := []*github.Repository{}
+	err := provider.expandGlobAndAddRepoIDs(context.Background(), "[", &cache)
+	assert.ErrorContains(t, err, "invalid repo glob pattern")
 }
 
 func TestGetPullRequest(t *testing.T) {
@@ -2623,6 +2644,7 @@ func TestFetchAppSlug(t *testing.T) {
 		name             string
 		privateKey       []byte
 		applicationID    int64
+		apiURL           string
 		setupMux         func(mux *http.ServeMux)
 		wantSlug         string
 		wantErrSubstring string
@@ -2679,6 +2701,13 @@ func TestFetchAppSlug(t *testing.T) {
 			},
 			wantErrSubstring: "failed to get app info",
 		},
+		{
+			name:             "invalid enterprise API URL",
+			privateKey:       []byte(fakePrivateKey),
+			applicationID:    testAppID,
+			apiURL:           "%",
+			wantErrSubstring: "failed to create github enterprise client",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2734,7 +2763,11 @@ func TestFetchAppSlug(t *testing.T) {
 				},
 			}
 
-			slug, err := provider.fetchAppSlug(ctx, serverURL)
+			apiURL := serverURL
+			if tt.apiURL != "" {
+				apiURL = tt.apiURL
+			}
+			slug, err := provider.fetchAppSlug(ctx, apiURL)
 
 			if tt.wantErrSubstring != "" {
 				assert.Assert(t, err != nil, "expected error but got none")

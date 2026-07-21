@@ -3,6 +3,7 @@ package resolve
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -108,7 +109,7 @@ func TestResolveFilenames(t *testing.T) {
 				assertfs.WithFile("file.yaml", strings.ReplaceAll(tt.tmpl, "\t", "    ")))
 			defer dir.Remove()
 			ctx, _ := rtesting.SetupFakeContext(t)
-			got, err := resolveFilenames(ctx, cs, []string{dir.Path()}, map[string]string{"foo": "bar"}, tt.asv1beta1)
+			got, err := resolveFilenames(ctx, cs, io.Discard, []string{dir.Path()}, map[string]string{"foo": "bar"}, tt.asv1beta1)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("resolveFilenames() error = %v, wantErr %v", err, tt.wantErr)
 				return

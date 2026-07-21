@@ -372,7 +372,7 @@ func (v *Provider) getPullRequestsWithCommit(ctx context.Context, sha, org, repo
 			pullRequests = append(pullRequests, prs...)
 
 			// Check if there are more pages
-			if resp.NextPage == 0 {
+			if resp == nil || resp.NextPage == 0 {
 				break
 			}
 			opts.Page = resp.NextPage

@@ -40,7 +40,7 @@ func (v *Provider) CheckPolicyAllowing(ctx context.Context, event *info.Event, a
 					return true, fmt.Sprintf("allowing user: %s as a member of the team: %s", event.Sender, team)
 				}
 			}
-			if resp.NextPage == 0 {
+			if resp == nil || resp.NextPage == 0 {
 				break
 			}
 			opt.Page = resp.NextPage
@@ -296,7 +296,7 @@ func (v *Provider) checkSenderOrgMembership(ctx context.Context, runevent *info.
 				return true, nil
 			}
 		}
-		if resp.NextPage == 0 {
+		if resp == nil || resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -350,7 +350,7 @@ func (v *Provider) GetStringPullRequestComment(ctx context.Context, runevent *in
 				ret = append(ret, v)
 			}
 		}
-		if resp.NextPage == 0 {
+		if resp == nil || resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage

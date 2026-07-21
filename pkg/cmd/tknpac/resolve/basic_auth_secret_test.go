@@ -1,7 +1,9 @@
 package resolve
 
 import (
+	"bytes"
 	"encoding/base64"
+	"errors"
 	"regexp"
 	"testing"
 
@@ -15,6 +17,8 @@ import (
 	"gotest.tools/v3/fs"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -58,12 +62,15 @@ func TestMakeGitAuthSecret(t *testing.T) {
 		token              string
 		params, fakeEnvs   map[string]string
 		matchedSecretValue string
+		listSecretsErr     error
+		kubeClientOnly     bool
 	}
 	tests := []struct {
 		name           string
 		args           args
 		wantOutputRe   string
 		wantErr        bool
+		wantErrOutput  string
 		wantSecretName string
 		askStubs       func(*prompt.AskStubber)
 	}{
@@ -137,6 +144,41 @@ func TestMakeGitAuthSecret(t *testing.T) {
 			wantSecretName: "existing-secret",
 			wantOutputRe:   "^$",
 		},
+		{
+			name: "falls back to environment token when listing secrets fails",
+			args: args{
+				filenames: []string{"testdata/pipelinerun.yaml"},
+				params: map[string]string{
+					"repo_url":   "https://forge/owner/repo",
+					"repo_owner": "owner",
+					"repo_name":  "name",
+					"revision":   "https://forge/owner/12345",
+				},
+				fakeEnvs: map[string]string{
+					"PAC_PROVIDER_TOKEN": "TOKENARETHEBEST",
+				},
+				listSecretsErr: errors.New("secrets is forbidden"),
+			},
+			wantOutputRe:  `.*git-credentials.*TOKENARETHEBEST`,
+			wantErrOutput: "warning: could not list existing git authentication secrets: secrets is forbidden\n",
+		},
+		{
+			name: "falls back to environment token when Kubernetes options are unavailable",
+			args: args{
+				filenames: []string{"testdata/pipelinerun.yaml"},
+				params: map[string]string{
+					"repo_url":   "https://forge/owner/repo",
+					"repo_owner": "owner",
+					"repo_name":  "name",
+					"revision":   "https://forge/owner/12345",
+				},
+				fakeEnvs: map[string]string{
+					"PAC_PROVIDER_TOKEN": "TOKENARETHEBEST",
+				},
+				kubeClientOnly: true,
+			},
+			wantOutputRe: `.*git-credentials.*TOKENARETHEBEST`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,9 +196,27 @@ func TestMakeGitAuthSecret(t *testing.T) {
 				Info: info.Info{},
 			}
 
-			if tt.args.matchedSecretValue != "" {
-				run.Info = info.Info{
-					Kube: &info.KubeOpts{Namespace: "ns"},
+			if tt.args.matchedSecretValue != "" || tt.args.listSecretsErr != nil || tt.args.kubeClientOnly {
+				if !tt.args.kubeClientOnly {
+					run.Info = info.Info{
+						Kube: &info.KubeOpts{Namespace: "ns"},
+					}
+				}
+				var testSecrets []*corev1.Secret
+				if tt.args.matchedSecretValue != "" {
+					testSecrets = append(testSecrets, &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      tt.wantSecretName,
+							Namespace: "ns",
+							Labels: map[string]string{
+								keys.URLRepository: tt.args.params["repo_name"],
+								keys.URLOrg:        tt.args.params["repo_owner"],
+							},
+						},
+						Data: map[string][]byte{
+							gitProviderTokenKey: []byte(base64.RawStdEncoding.EncodeToString([]byte(tt.args.matchedSecretValue))),
+						},
+					})
 				}
 				tdata := testclient.Data{
 					Namespaces: []*corev1.Namespace{
@@ -166,27 +226,19 @@ func TestMakeGitAuthSecret(t *testing.T) {
 							},
 						},
 					},
-					Secret: []*corev1.Secret{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      tt.wantSecretName,
-								Namespace: "ns",
-								Labels: map[string]string{
-									keys.URLRepository: tt.args.params["repo_name"],
-									keys.URLOrg:        tt.args.params["repo_owner"],
-								},
-							},
-							Data: map[string][]byte{
-								gitProviderTokenKey: []byte(base64.RawStdEncoding.EncodeToString([]byte(tt.args.matchedSecretValue))),
-							},
-						},
-					},
+					Secret: testSecrets,
 				}
 				stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+				if tt.args.listSecretsErr != nil {
+					stdata.Kube.PrependReactor("list", "secrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+						return true, nil, tt.args.listSecretsErr
+					})
+				}
 				run.Clients.Kube = stdata.Kube
 			}
 
-			got, secretName, err := makeGitAuthSecret(ctx, run, tt.args.filenames, tt.args.token, tt.args.params)
+			errOut := &bytes.Buffer{}
+			got, secretName, err := makeGitAuthSecret(ctx, run, errOut, tt.args.filenames, tt.args.token, tt.args.params)
 			if tt.wantErr {
 				assert.Assert(t, err != nil)
 				return
@@ -195,6 +247,7 @@ func TestMakeGitAuthSecret(t *testing.T) {
 				assert.Equal(t, tt.wantSecretName, secretName)
 			}
 			assert.NilError(t, err)
+			assert.Equal(t, tt.wantErrOutput, errOut.String())
 			reg := regexp.MustCompile(tt.wantOutputRe)
 			assert.Assert(t, reg.MatchString(got), "want: %s, got: %s", tt.wantOutputRe, got)
 		})

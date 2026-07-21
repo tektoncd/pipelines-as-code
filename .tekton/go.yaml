@@ -105,6 +105,7 @@ spec:
                 set -eux
                 make lint-go
                 make lint-fmt
+                make lint-nilaway
             - name: cache-upload
               displayName: "Upload Cache"
               ref:

@@ -235,7 +235,7 @@ func (v *Provider) GetConfig() *info.ProviderConfig {
 	}
 }
 
-func MakeClient(ctx context.Context, apiURL, token string) (*github.Client, string, *string) {
+func MakeClient(ctx context.Context, apiURL, token string) (*github.Client, string, *string, error) {
 	var client *github.Client
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
@@ -252,13 +252,17 @@ func MakeClient(ctx context.Context, apiURL, token string) (*github.Client, stri
 	if apiURL != "" && apiURL != apiPublicURL {
 		providerName = "github-enterprise"
 		uploadURL := apiURL + "/api/uploads"
-		client, _ = github.NewClient(tc).WithEnterpriseURLs(apiURL, uploadURL)
+		var err error
+		client, err = github.NewClient(tc).WithEnterpriseURLs(apiURL, uploadURL)
+		if err != nil {
+			return nil, providerName, nil, fmt.Errorf("failed to create github enterprise client for %s: %w", apiURL, err)
+		}
 	} else {
 		client = github.NewClient(tc)
 		apiURL = client.BaseURL.String()
 	}
 
-	return client, providerName, github.Ptr(apiURL)
+	return client, providerName, github.Ptr(apiURL), nil
 }
 
 func parseTS(headerTS string) (time.Time, error) {
@@ -322,7 +326,10 @@ func (v *Provider) checkWebhookSecretValidity(ctx context.Context, cw clockwork.
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
-	client, providerName, apiURL := MakeClient(ctx, event.Provider.URL, event.Provider.Token)
+	client, providerName, apiURL, err := MakeClient(ctx, event.Provider.URL, event.Provider.Token)
+	if err != nil {
+		return err
+	}
 	v.providerName = providerName
 	v.Run = run
 	v.repo = repo
@@ -688,7 +695,7 @@ func (v *Provider) fetchChangedFiles(ctx context.Context, runevent *info.Event) 
 					changedFiles.Renamed = append(changedFiles.Renamed, *repoCommit[j].Filename)
 				}
 			}
-			if resp.NextPage == 0 {
+			if resp == nil || resp.NextPage == 0 {
 				break
 			}
 			opt.Page = resp.NextPage
@@ -756,7 +763,7 @@ func ListRepos(ctx context.Context, v *Provider) ([]string, error) {
 		for i := range repoList.Repositories {
 			repoURLs = append(repoURLs, *repoList.Repositories[i].HTMLURL)
 		}
-		if resp.NextPage == 0 {
+		if resp == nil || resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -801,9 +808,10 @@ func (v *Provider) CreateToken(ctx context.Context, repository []string, event *
 }
 
 func (v *Provider) expandGlobAndAddRepoIDs(ctx context.Context, repoPattern string, cache *[]*github.Repository) error {
-	// We can skip error check here as all the glob compilation has been checked
-	// before this method is called.
-	reposToScope, _ := glob.Compile(repoPattern)
+	reposToScope, err := glob.Compile(repoPattern)
+	if err != nil {
+		return fmt.Errorf("invalid repo glob pattern %q: %w", repoPattern, err)
+	}
 
 	if *cache == nil {
 		repos, err := v.listAppRepos(ctx)
@@ -837,7 +845,7 @@ func (v *Provider) listAppRepos(ctx context.Context) ([]*github.Repository, erro
 
 		allRepos = append(allRepos, repoList.Repositories...)
 
-		if resp.NextPage == 0 {
+		if resp == nil || resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
@@ -1193,7 +1201,10 @@ func (v *Provider) fetchAppSlug(ctx context.Context, apiURL string) (string, err
 		return "", err
 	}
 
-	client, _, _ := MakeClient(ctx, apiURL, tokenString)
+	client, _, _, err := MakeClient(ctx, apiURL, tokenString)
+	if err != nil {
+		return "", err
+	}
 	app, _, err := client.Apps.Get(ctx, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to get app info: %w", err)

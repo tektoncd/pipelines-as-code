@@ -1039,6 +1039,37 @@ func TestListenerProcessIncoming(t *testing.T) {
 	}
 }
 
+func TestListenerProcessRes(t *testing.T) {
+	tests := []struct {
+		name         string
+		processEvent bool
+		provider     provider.Interface
+		wantErr      string
+	}{
+		{
+			name:         "process event without provider",
+			processEvent: true,
+			wantErr:      "no provider detected",
+		},
+		{
+			name:         "process event with provider",
+			processEvent: true,
+			provider:     github.New(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _, err := (listener{}).processRes(tt.processEvent, tt.provider, zap.NewNop().Sugar(), "", nil)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Assert(t, got != nil)
+		})
+	}
+}
+
 func TestIncomingGitHubAppScopesTokenThroughClientSetup(t *testing.T) {
 	const (
 		namespace    = "pipelines-as-code"

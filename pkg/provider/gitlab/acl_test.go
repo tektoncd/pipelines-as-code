@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	thelp "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab/test"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
+	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -469,6 +471,61 @@ func TestIsAllowedOwnersFile(t *testing.T) {
 			if allowed != tt.wantAllowed {
 				t.Errorf("IsAllowedOwnersFile() = %v, want %v", allowed, tt.wantAllowed)
 			}
+		})
+	}
+}
+
+func TestOwnersAliasesResponseError(t *testing.T) {
+	upstreamErr := errors.New("upstream error")
+	tests := []struct {
+		name    string
+		resp    *gitlab.Response
+		err     error
+		wantErr string
+	}{
+		{
+			name:    "nil response",
+			wantErr: "gitlab API returned no response",
+		},
+		{
+			name:    "nil response preserves upstream error",
+			err:     upstreamErr,
+			wantErr: upstreamErr.Error(),
+		},
+		{
+			name:    "nil embedded HTTP response",
+			resp:    &gitlab.Response{},
+			wantErr: "gitlab API returned no response",
+		},
+		{
+			name: "not found is optional",
+			resp: &gitlab.Response{Response: &http.Response{StatusCode: http.StatusNotFound}},
+			err:  upstreamErr,
+		},
+		{
+			name: "successful response",
+			resp: &gitlab.Response{Response: &http.Response{StatusCode: http.StatusOK}},
+		},
+		{
+			name:    "successful status preserves body error",
+			resp:    &gitlab.Response{Response: &http.Response{StatusCode: http.StatusOK}},
+			err:     upstreamErr,
+			wantErr: upstreamErr.Error(),
+		},
+		{
+			name:    "unexpected status without API error",
+			resp:    &gitlab.Response{Response: &http.Response{StatusCode: http.StatusUnauthorized}},
+			wantErr: "unexpected status code 401",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ownersAliasesResponseError(tt.resp, tt.err)
+			if tt.wantErr == "" {
+				assert.NilError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }

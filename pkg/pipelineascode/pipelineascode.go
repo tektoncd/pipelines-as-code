@@ -105,6 +105,9 @@ func (p *PacRun) Run(ctx context.Context) error {
 		p.debugf("no pipelineruns matched; returning without starting any runs")
 		return nil
 	}
+	if repo == nil {
+		return fmt.Errorf("internal error: %d pipelineruns matched but no repository was resolved", len(matchedPRs))
+	}
 	if repo.Spec.ConcurrencyLimit != nil && *repo.Spec.ConcurrencyLimit != 0 {
 		p.debugf("enabling concurrency manager with limit=%d", *repo.Spec.ConcurrencyLimit)
 		p.manager.Enable()
@@ -312,7 +315,7 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 
 	if len(patchAnnotations) > 0 || len(patchLabels) > 0 {
 		p.debugf("startPR: patching pipelinerun=%s patches=%s annotations=%d labels=%d", pr.GetName(), whatPatching, len(patchAnnotations), len(patchLabels))
-		pr, err = action.PatchPipelineRun(ctx, p.logger, whatPatching, p.run.Clients.Tekton, pr, getMergePatch(patchAnnotations, patchLabels))
+		patchedPR, err := action.PatchPipelineRun(ctx, p.logger, whatPatching, p.run.Clients.Tekton, pr, getMergePatch(patchAnnotations, patchLabels))
 		if err != nil {
 			// if PipelineRun patch is failed then do not return error, just log the error
 			// because its a false negative and on startPR return a failed check is being created
@@ -320,6 +323,12 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 			p.logger.Errorf("cannot patch pipelinerun %s: %w", pr.GetGenerateName(), err)
 			return pr, nil
 		}
+		// PatchPipelineRun only returns a nil PipelineRun when given a nil input,
+		// which cannot happen here since pr is always non-nil at this point.
+		if patchedPR == nil {
+			return pr, nil
+		}
+		pr = patchedPR
 		currentReason := ""
 		if len(pr.Status.GetConditions()) > 0 {
 			currentReason = pr.Status.GetConditions()[0].GetReason()
