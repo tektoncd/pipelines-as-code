@@ -79,4 +79,38 @@ Finally, install the App on the repositories you want to use with Pipelines-as-C
 
 ## Notes
 
-- Pipelines-as-Code supports GitHub Enterprise with no special configuration required. Pipelines-as-Code automatically detects the header set by GitHub Enterprise and uses the GitHub Enterprise API auth URL instead of the public GitHub API.
+- GitHub.com requires no additional configuration.
+- For GitHub Enterprise Server, Pipelines-as-Code validates the first signed
+  webhook and records its GitHub host in the controller's GitHub App Secret.
+  Later credential requests must match that host. Repository CRs and incoming
+  webhook headers cannot change it.
+
+### GitHub Enterprise host pinning
+
+The trusted GitHub Enterprise host is stored under the `github-host` key in
+the controller Secret (`pipelines-as-code-secret` by default). The key is
+created automatically by the first signed webhook and is never overwritten
+with a different host afterwards.
+
+To set the pin manually (for example before any webhook has been received):
+
+```bash
+kubectl -n pipelines-as-code patch secret pipelines-as-code-secret \
+  --type merge -p '{"stringData":{"github-host":"ghe.example.com"}}'
+```
+
+To reset the pin, for example after migrating to a new GitHub Enterprise
+hostname, remove the key. The next signed webhook re-pins the new host:
+
+```bash
+kubectl -n pipelines-as-code patch secret pipelines-as-code-secret \
+  --type json -p '[{"op":"remove","path":"/data/github-host"}]'
+```
+
+If the controller Secret is managed by GitOps tooling (Argo CD,
+External Secrets Operator, ...), the reconciler will treat the
+controller-written `github-host` key as drift and remove it on every sync.
+For GitHub Enterprise, pre-seed the key in the source-of-truth Secret
+manifest with your GitHub Enterprise hostname (for example
+`github-host: ghe.example.com`), or exclude the key from reconciliation
+(for example with Argo CD `ignoreDifferences`).

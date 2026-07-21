@@ -99,6 +99,31 @@ func copyRepositoryForMerge(repo *v1alpha1.Repository) *v1alpha1.Repository {
 
 // ReconcileKind is the main entry point for reconciling PipelineRun resources.
 func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
+	reconcileRun := *r.run
+	reconciler := *r
+	reconciler.run = &reconcileRun
+	return reconciler.reconcileKind(ctx, pr)
+}
+
+func controllerInfoForPipelineRun(pr *tektonv1.PipelineRun, fallback *info.ControllerInfo) (*info.ControllerInfo, error) {
+	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
+		var parsedControllerInfo *info.ControllerInfo
+		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: %w", err)
+		}
+		if parsedControllerInfo == nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: value must not be null")
+		}
+		return parsedControllerInfo, nil
+	}
+	if fallback != nil {
+		controllerInfo := *fallback
+		return &controllerInfo, nil
+	}
+	return info.GetControllerInfoFromEnvOrDefault(), nil
+}
+
+func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	ctx = info.StoreNS(ctx, system.Namespace())
 	logger := logging.FromContext(ctx).With("namespace", pr.GetNamespace())
 
@@ -138,15 +163,11 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	//
 	// We always assume the controller is in the same namespace as the original
 	// controller but that may changes
-	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
-		var parsedControllerInfo *info.ControllerInfo
-		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
-			return fmt.Errorf("failed to parse controllerInfo: %w", err)
-		}
-		r.run.Info.Controller = parsedControllerInfo
-	} else {
-		r.run.Info.Controller = info.GetControllerInfoFromEnvOrDefault()
+	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	if err != nil {
+		return err
 	}
+	r.run.Info.Controller = controllerInfo
 
 	if secretCreated, ok := pr.GetAnnotations()[keys.SecretCreated]; ok && secretCreated == "false" && pacInfo.SecretAutoCreation {
 		// if secret creation is true then return anyway from createSecretForPipelineRun function

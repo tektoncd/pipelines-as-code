@@ -64,11 +64,11 @@ const (
 	SCMReportingPLRStarted = pipelinesascode.GroupName + "/scm-reporting-plr-started"
 	SecretCreated          = pipelinesascode.GroupName + "/secret-created"
 	CloneURL               = pipelinesascode.GroupName + "/clone-url"
-	// PublicGithubAPIURL default is "https://api.github.com" but it can be overridden by X-GitHub-Enterprise-Host header.
-	PublicGithubAPIURL   = "https://api.github.com"
-	GithubApplicationID  = "github-application-id"
-	GithubPrivateKey     = "github-private-key"
-	ResultsRecordSummary = "results.tekton.dev/recordSummaryAnnotations"
+	PublicGithubAPIURL     = "https://api.github.com"
+	GithubApplicationID    = "github-application-id"
+	GithubPrivateKey       = "github-private-key"
+	GithubHost             = "github-host"
+	ResultsRecordSummary   = "results.tekton.dev/recordSummaryAnnotations"
 
 	SpanContextAnnotation = "tekton.dev/pipelinerunSpanContext"
 )
