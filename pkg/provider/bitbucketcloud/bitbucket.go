@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/go-github/v85/github"
 	"github.com/ktrysmt/go-bitbucket"
 	"github.com/mitchellh/mapstructure"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -67,8 +68,25 @@ func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
 const taskStatusTemplate = `{{range $taskrun := .TaskRunList }} | **{{ formatCondition $taskrun.PipelineRunTaskRunStatus.Status.Conditions }}** | {{ $taskrun.ConsoleLogURL }} | *{{ formatDuration $taskrun.PipelineRunTaskRunStatus.Status.StartTime $taskrun.PipelineRunTaskRunStatus.Status.CompletionTime }}* |
 {{ end }}`
 
-func (v *Provider) Validate(_ context.Context, _ *params.Run, _ *info.Event) error {
-	return nil
+func (v *Provider) Validate(_ context.Context, _ *params.Run, event *info.Event) error {
+	if v.pacInfo.BitbucketCloudCheckSourceIP {
+		v.Logger.Info("Skipping signature validation because source IP check is enabled")
+		return nil
+	}
+
+	v.Logger.Info("Validating signature for the event as bitbucket-cloud-check-source-ip is disabled in PaC configmap")
+
+	signature := event.Request.Header.Get(github.SHA256SignatureHeader)
+	if signature == "" {
+		signature = event.Request.Header.Get(github.SHA1SignatureHeader)
+	}
+	if signature == "" || signature == "sha256=" {
+		return fmt.Errorf("no signature has been detected, for security reason we are not allowing webhooks that has no secret (hint: did you forget to set webhook secret in your repository settings?)")
+	}
+	if event.Provider.WebhookSecret == "" {
+		return fmt.Errorf("no webhook secret has been set, in repository CR or secret")
+	}
+	return github.ValidateSignature(signature, event.Request.Payload, []byte(event.Provider.WebhookSecret))
 }
 
 func (v *Provider) SetLogger(logger *zap.SugaredLogger) {

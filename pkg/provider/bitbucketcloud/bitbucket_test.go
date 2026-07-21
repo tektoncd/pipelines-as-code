@@ -1,7 +1,13 @@
 package bitbucketcloud
 
 import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"hash"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -391,6 +397,144 @@ func TestCreateStatus(t *testing.T) {
 
 			err := v.CreateStatus(ctx, event, tt.status)
 			assert.NilError(t, err)
+		})
+	}
+}
+
+func TestValidate(t *testing.T) {
+	observer, log := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	tests := []struct {
+		name          string
+		wantErr       bool
+		secret        string
+		webhookSecret string
+		payload       string
+		hashFunc      func() hash.Hash
+		prefixheader  string
+		header        string
+		sourceIPCheck bool
+		wantLog       string
+	}{
+		{
+			name:          "valid SHA256 signature",
+			secret:        "mysecret",
+			webhookSecret: "mysecret",
+			payload:       `{"hello": "moto"}`,
+			hashFunc:      sha256.New,
+			prefixheader:  "sha256",
+			header:        "X-Hub-Signature-256",
+		},
+		{
+			name:          "valid SHA1 signature",
+			secret:        "mysecret",
+			webhookSecret: "mysecret",
+			payload:       `{"ola": "amigo"}`,
+			hashFunc:      sha256.New,
+			prefixheader:  "sha256",
+			header:        "X-Hub-Signature",
+		},
+		{
+			name:          "invalid signature",
+			secret:        "",
+			webhookSecret: "wrongsecret",
+			payload:       `{"ciao": "ragazzo"}`,
+			hashFunc:      sha256.New,
+			prefixheader:  "sha1",
+			header:        "X-Hub-Signature",
+			wantErr:       true,
+		},
+		{
+			name:    "missing signature header",
+			secret:  "mysecret",
+			payload: `{"hello": "moto"}`,
+			wantErr: true,
+		},
+		{
+			name:         "no webhook secret configured",
+			secret:       "",
+			payload:      `{"hello": "moto"}`,
+			hashFunc:     sha256.New,
+			prefixheader: "sha256",
+			header:       "X-Hub-Signature-256",
+			wantErr:      true,
+		},
+		{
+			name:          "HMAC signature mismatch",
+			secret:        "mysecret",
+			webhookSecret: "wrongsecret",
+			payload:       `{"hola": "mundo"}`,
+			hashFunc:      sha256.New,
+			prefixheader:  "sha256",
+			header:        "X-Hub-Signature-256",
+			wantErr:       true,
+		},
+		{
+			name:          "source IP check enabled",
+			secret:        "mysecret",
+			webhookSecret: "wrongsecret",
+			payload:       `{"hola": "mundo"}`,
+			hashFunc:      sha256.New,
+			prefixheader:  "sha256",
+			header:        "X-Hub-Signature-256",
+			sourceIPCheck: true,
+			wantLog:       "Skipping signature validation because source IP check is enabled",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Provider{Logger: logger}
+
+			httpHeader := http.Header{}
+			if tt.hashFunc != nil {
+				mac := hmac.New(tt.hashFunc, []byte(tt.secret))
+				mac.Write([]byte(tt.payload))
+				signature := hex.EncodeToString(mac.Sum(nil))
+				httpHeader.Add(tt.header, fmt.Sprintf("%s=%s", tt.prefixheader, signature))
+			}
+
+			webhookSecret := tt.webhookSecret
+			if webhookSecret == "" {
+				webhookSecret = tt.secret
+			}
+
+			event := info.NewEvent()
+			event.Request = &info.Request{
+				Header:  httpHeader,
+				Payload: []byte(tt.payload),
+			}
+
+			pacInfo := &info.PacOpts{
+				Settings: settings.Settings{
+					BitbucketCloudCheckSourceIP: tt.sourceIPCheck,
+				},
+			}
+			v.SetPacInfo(pacInfo)
+
+			event.Provider = &info.Provider{
+				WebhookSecret: webhookSecret,
+			}
+
+			err := v.Validate(context.TODO(), nil, event)
+			if tt.wantErr {
+				assert.Assert(t, err != nil, "expected error but got nil")
+			} else {
+				assert.NilError(t, err)
+			}
+
+			if tt.wantLog != "" {
+				assert.Assert(t, log.Len() > 0, "We didn't get any log message")
+				all := log.TakeAll()
+				matched := false
+				for _, entry := range all {
+					if strings.Contains(entry.Message, tt.wantLog) {
+						matched = true
+						break
+					}
+				}
+				assert.Assert(t, matched, "We didn't get the expected log message: %s", tt.wantLog)
+			}
 		})
 	}
 }
