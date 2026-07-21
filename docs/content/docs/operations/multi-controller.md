@@ -181,5 +181,5 @@ PAC_CONTROLLER_TARGET_NS  Target namespace (default: pipelines-as-code)
 PAC_CONTROLLER_SECRET     Secret name (default: <LABEL>-secret)
 PAC_CONTROLLER_CONFIGMAP  ConfigMap name (default: <LABEL>-configmap)
 PAC_CONTROLLER_SMEE_URL   Smee.io URL for webhook tunneling
-PAC_CONTROLLER_IMAGE      Controller image (default: ghcr.io/tektoncd/pipelines-as-code-controller:stable)
+PAC_CONTROLLER_IMAGE      Controller image (default: ghcr.io/tektoncd/pipelines-as-code/pipelines-as-code-controller:stable)
 ```
