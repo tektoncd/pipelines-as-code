@@ -47,6 +47,7 @@ spec:
             - name: source
           steps:
             - name: push-release-to-branch
+              displayName: "Push Release to Branch"
               image: registry.access.redhat.com/ubi9/python-312
               workingDir: $(workspaces.source.path)
               env:

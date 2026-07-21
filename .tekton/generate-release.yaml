@@ -29,6 +29,7 @@ spec:
             - name: source
           steps:
             - name: fetch-repo
+              displayName: "Fetch Repository"
               ref:
                 resolver: hub
                 params:
@@ -50,6 +51,7 @@ spec:
                 - name: revision
                   value: "$(params.revision)"
             - name: cache-fetch
+              displayName: "Fetch Cache"
               ref:
                 resolver: http
                 params:
@@ -65,6 +67,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: unittest
+              displayName: "Run Unit Tests"
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
@@ -86,6 +89,7 @@ spec:
                   -coverprofile=coverage.txt -covermode=atomic ./pkg/... || test_status=$?
                 exit "${test_status}"
             - name: upload-release
+              displayName: "Upload Release YAML"
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
@@ -121,6 +125,7 @@ spec:
                 set -x
                 git checkout -
             - name: cache-upload
+              displayName: "Upload Cache"
               ref:
                 resolver: http
                 params:
@@ -160,6 +165,7 @@ spec:
             - name: image_url
           steps:
             - name: send-slack-notification
+              displayName: "Send Slack Notification"
               ref:
                 resolver: http
                 params:

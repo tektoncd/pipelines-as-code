@@ -26,6 +26,7 @@ spec:
             - name: source
           steps:
             - name: fetch-repo
+              displayName: "Fetch Repository"
               ref:
                 resolver: hub
                 params:
@@ -47,6 +48,7 @@ spec:
                 - name: revision
                   value: "$(params.revision)"
             - name: cache-fetch
+              displayName: "Fetch Cache"
               ref:
                 resolver: http
                 params:
@@ -62,6 +64,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: unittest
+              displayName: "Run Unit Tests"
               # we get bumped out when usingh the official image with docker.io
               # ratelimit so workaround this.
               image: docker.io/golang:1.26
@@ -87,6 +90,7 @@ spec:
                 exit "${test_status}"
 
             - name: lint
+              displayName: "Go Lint"
               image: docker.io/golangci/golangci-lint:v2.12.2
               workingDir: $(workspaces.source.path)
               env:
@@ -102,6 +106,7 @@ spec:
                 make lint-go
                 make lint-fmt
             - name: cache-upload
+              displayName: "Upload Cache"
               ref:
                 resolver: http
                 params:

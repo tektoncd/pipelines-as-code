@@ -25,6 +25,7 @@ spec:
             - name: source
           steps:
             - name: fetch-repo
+              displayName: "Fetch Repository"
               ref:
                 resolver: hub
                 params:
@@ -48,6 +49,7 @@ spec:
                 - name: depth
                   value: 1000
             - name: generate-release-yaml
+              displayName: "Generate Release YAML"
               image: registry.access.redhat.com/ubi9/python-312
               workingDir: $(workspaces.source.path)
               script: |
@@ -55,6 +57,7 @@ spec:
                 mkdir -p bin/ # ignored in .gitignore
                 ./hack/generate-releaseyaml.sh  > bin/release.yaml
             - name: codespell
+              displayName: "Spell Checker (codespell)"
               image: registry.access.redhat.com/ubi9/python-312
               workingDir: $(workspaces.source.path)
               script: |
