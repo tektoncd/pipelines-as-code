@@ -655,6 +655,7 @@ func TestParsePayload(t *testing.T) {
 					assert.Equal(t, tt.want.SHAURL, got.SHAURL)
 				}
 				assert.Equal(t, tt.want.CommitMetadataIncomplete, got.CommitMetadataIncomplete)
+				assert.Equal(t, tt.want.PipelineRunSourceRevision, got.PipelineRunSourceRevision)
 			}
 		})
 	}

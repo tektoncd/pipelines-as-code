@@ -690,13 +690,6 @@ func TestProcessEventSkipCIIntegration(t *testing.T) {
 			description:    "Push events check event.SHATitle directly with provider.SkipCI()",
 		},
 		{
-			name:           "push event with API-resolved skip command",
-			eventType:      "push",
-			hasSkipCommand: true,
-			shouldSkip:     true,
-			description:    "Push events with missing payload metadata use HasSkipCommand from GetCommitInfo()",
-		},
-		{
 			name:           "push event without skip command",
 			eventType:      "push",
 			shaTitle:       "fix: important bug",
@@ -734,8 +727,8 @@ func TestProcessEventSkipCIIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Simulate the skip-CI decision from shouldSkipPushEvent.
-			pushSkip := tt.eventType == "push" && (tt.hasSkipCommand || provider.SkipCI(tt.shaTitle))
+			// Simulate the payload-based push decision. API-resolved metadata is covered by TestShouldSkipPushEvent.
+			pushSkip := tt.eventType == "push" && provider.SkipCI(tt.shaTitle)
 
 			// Line 99-108: PR event skip-CI check
 			prSkip := tt.eventType == "pull_request" && tt.hasSkipCommand
