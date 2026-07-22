@@ -237,6 +237,27 @@ func (t TEvent) PushEventAsJSON(withcommits bool) string {
 	return jeez
 }
 
+func (t TEvent) PushEventWithoutCommitsAsJSON(before, after, checkoutSHA, ref string) string {
+	return fmt.Sprintf(`{
+    "object_kind": "push",
+    "event_name": "push",
+    "before": "%s",
+    "after": "%s",
+    "ref": "%s",
+    "checkout_sha": "%s",
+    "user_username": "%s",
+    "project_id": %d,
+    "user_id": %d,
+    "project": {
+        "default_branch": "%s",
+        "web_url": "%s",
+        "path_with_namespace": "%s"
+    },
+    "commits": [],
+    "total_commits_count": 0
+}`, before, after, ref, checkoutSHA, t.Username, t.TargetProjectID, t.UserID, t.DefaultBranch, t.URL, t.PathWithNameSpace)
+}
+
 func (t TEvent) NoteEventAsJSON(comment string) string {
 	//nolint:misspell
 	return fmt.Sprintf(`{

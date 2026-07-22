@@ -94,9 +94,11 @@ func (s *sinker) processEvent(ctx context.Context, request *http.Request) error 
 			s.logger.Debugf("Client setup completed for event type: %s", s.event.EventType)
 		}
 
-		// For PUSH events: commit message is already in event.SHATitle from the webhook payload
-		// We can check immediately without any API calls or repository lookups
-		if s.event.EventType == "push" && provider.SkipCI(s.event.SHATitle) {
+		skipPush, err := s.shouldSkipPushEvent(ctx, repo)
+		if err != nil {
+			return err
+		}
+		if skipPush {
 			s.logger.Infof("CI skipped for push event: commit %s contains skip command in message", s.event.SHA)
 			return s.createSkipCIStatus(ctx)
 		}
@@ -122,6 +124,23 @@ func (s *sinker) processEvent(ctx context.Context, request *http.Request) error 
 
 	p := pipelineascode.NewPacs(s.event, s.vcx, s.run, s.pacInfo, s.kint, s.logger, s.globalRepo)
 	return p.Run(ctx)
+}
+
+func (s *sinker) shouldSkipPushEvent(ctx context.Context, repo *v1alpha1.Repository) (bool, error) {
+	if s.event.EventType != "push" {
+		return false, nil
+	}
+
+	resolvedMetadata := false
+	if repo != nil && s.event.CommitMetadataIncomplete {
+		// GitLab branch creation payloads omit commits, so fetch metadata before the early skip-CI check.
+		if err := s.vcx.GetCommitInfo(ctx, s.event); err != nil {
+			return false, fmt.Errorf("could not get commit info: %w", err)
+		}
+		resolvedMetadata = true
+	}
+
+	return provider.SkipCI(s.event.SHATitle) || (resolvedMetadata && s.event.HasSkipCommand), nil
 }
 
 // findMatchingRepository finds the Repository CR that matches the event.

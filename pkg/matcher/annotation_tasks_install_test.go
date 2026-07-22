@@ -1,6 +1,7 @@
 package matcher
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -30,6 +31,16 @@ const (
 	testHubURL         = "https://mybelovedhub"
 	testCatalogHubName = "tekton"
 )
+
+type revisionRecordingProvider struct {
+	*provider.TestProviderImp
+	fileInsideRepoRevision string
+}
+
+func (v *revisionRecordingProvider) GetFileInsideRepo(ctx context.Context, event *info.Event, file, revision string) (string, error) {
+	v.fileInsideRepoRevision = revision
+	return v.TestProviderImp.GetFileInsideRepo(ctx, event, file, revision)
+}
 
 func createArtifactHubResponse(t *testing.T, manifestContent string) string {
 	t.Helper()
@@ -219,6 +230,7 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 		gotTaskName            string
 		name                   string
 		remoteURLS             map[string]map[string]string
+		repositoryRevision     string
 		runevent               info.Event
 		wantErr                string
 		wantLog                string
@@ -301,6 +313,7 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 			filesInsideRepo: map[string]string{
 				"be/healthy": readTDfile(t, "task-good"),
 			},
+			repositoryRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 			runevent: info.Event{
 				SHA: "007",
 			},
@@ -412,14 +425,18 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 				},
 			}
 			ctx, _ := rtesting.SetupFakeContext(t)
-			rt := RemoteTasks{
-				Run:    cs,
-				Logger: logger,
-				ProviderInterface: &provider.TestProviderImp{
+			providerImp := &revisionRecordingProvider{
+				TestProviderImp: &provider.TestProviderImp{
 					FilesInsideRepo:        tt.filesInsideRepo,
 					WantProviderRemoteTask: tt.wantProviderRemoteTask,
 				},
-				Event: &tt.runevent,
+			}
+			rt := RemoteTasks{
+				Run:                cs,
+				Logger:             logger,
+				ProviderInterface:  providerImp,
+				Event:              &tt.runevent,
+				RepositoryRevision: tt.repositoryRevision,
 			}
 
 			got, err := rt.GetTaskFromAnnotationName(ctx, tt.task)
@@ -435,6 +452,9 @@ func TestGetTaskFromAnnotationName(t *testing.T) {
 
 			if tt.gotTaskName != "" {
 				assert.Equal(t, tt.gotTaskName, got.GetName())
+			}
+			if tt.repositoryRevision != "" {
+				assert.Equal(t, tt.repositoryRevision, providerImp.fileInsideRepoRevision)
 			}
 		})
 	}

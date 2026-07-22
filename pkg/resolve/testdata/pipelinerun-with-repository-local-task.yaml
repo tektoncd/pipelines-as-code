@@ -1,0 +1,14 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/task: "tasks/repository-local-task.yaml"
+  name: pipelinerun-repository-local-task
+spec:
+  pipelineSpec:
+    tasks:
+      - name: repository-local
+        taskRef:
+          name: repository-local-task
+    finally: []

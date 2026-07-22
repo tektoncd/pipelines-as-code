@@ -173,6 +173,68 @@ func TestOriginalPRNameLabelSet(t *testing.T) {
 	assert.Equal(t, resolved.GetLabels()["pipelinesascode.tekton.dev/original-prname"], "pr")
 }
 
+// revisionRecordingProvider captures the revision Resolve hands to the provider when it
+// fetches a repository-local Task or Pipeline reference.
+type revisionRecordingProvider struct {
+	*testprovider.TestProviderImp
+	fileInsideRepoRevision string
+}
+
+func (v *revisionRecordingProvider) GetFileInsideRepo(ctx context.Context, event *info.Event, file, revision string) (string, error) {
+	v.fileInsideRepoRevision = revision
+	return v.TestProviderImp.GetFileInsideRepo(ctx, event, file, revision)
+}
+
+// TestResolveRepositoryRevisionPropagation guards the wiring between Opts.RepositoryRevision
+// and RemoteTasks, which decides the revision repository-local references are read from.
+func TestResolveRepositoryRevisionPropagation(t *testing.T) {
+	const taskPath = "tasks/repository-local-task.yaml"
+	tests := []struct {
+		name               string
+		repositoryRevision string
+	}{
+		{
+			name:               "explicit repository revision reaches the provider",
+			repositoryRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+		},
+		{
+			name: "empty repository revision leaves the provider to pick its own default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			prData, err := os.ReadFile("testdata/pipelinerun-with-repository-local-task.yaml")
+			assert.NilError(t, err)
+			taskData, err := os.ReadFile("testdata/repository-local-task.yaml")
+			assert.NilError(t, err)
+
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			tprovider := &revisionRecordingProvider{
+				TestProviderImp: &testprovider.TestProviderImp{
+					FilesInsideRepo: map[string]string{taskPath: string(taskData)},
+				},
+			}
+
+			types, err := ReadTektonTypes(ctx, logger, string(prData))
+			assert.NilError(t, err)
+
+			cs := &params.Run{Clients: clients.Clients{}, Info: info.Info{}}
+			// A non-empty SHA routes the repository-local reference through the provider
+			// instead of the local filesystem fallback.
+			event := &info.Event{SHA: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e"}
+			_, err = Resolve(ctx, cs, logger, tprovider, types, event, &Opts{
+				RemoteTasks:        true,
+				RepositoryRevision: tt.repositoryRevision,
+			})
+			assert.NilError(t, err)
+			assert.Equal(t, tt.repositoryRevision, tprovider.fileInsideRepoRevision)
+		})
+	}
+}
+
 func TestPipelineRunRemoteTaskNotPacAnnotations(t *testing.T) {
 	resolved, _, err := readTDfile(t, "pipelinerun-pipeline-task-annotations-not-pac", false, true)
 	assert.NilError(t, err)

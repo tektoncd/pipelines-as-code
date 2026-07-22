@@ -1,6 +1,7 @@
 package pipelineascode
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,6 +60,46 @@ func TestPacRunCheckNeedUpdate(t *testing.T) {
 				assert.Assert(t, strings.Contains(got, tt.upgradeMessageSubstr))
 			}
 			assert.Assert(t, needupdate == tt.needupdate)
+		})
+	}
+}
+
+func TestGetRepositoryRevisionForProvenance(t *testing.T) {
+	tests := []struct {
+		name       string
+		event      *info.Event
+		provenance string
+		want       string
+	}{
+		{
+			name: "source provenance uses immutable event revision",
+			event: &info.Event{
+				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			},
+			provenance: "source",
+			want:       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+		},
+		{
+			name: "default branch provenance uses default branch",
+			event: &info.Event{
+				DefaultBranch:             "main",
+				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			},
+			provenance: "default_branch",
+			want:       "main",
+		},
+		{
+			name: "ordinary event leaves repository revision unset",
+			event: &info.Event{
+				DefaultBranch: "main",
+			},
+			provenance: "default_branch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, getRepositoryRevisionForProvenance(tt.event, tt.provenance))
 		})
 	}
 }
@@ -280,6 +321,136 @@ spec:
 			assert.Assert(t, matchedPRs[0].Repo != nil)
 			assert.Equal(t, matchedPRs[0].Repo.GetNamespace(), tt.wantRepositoryNS)
 			assert.Equal(t, matchedPRs[0].Repo.GetName(), tt.wantRepositoryName)
+		})
+	}
+}
+
+// revisionRecordingProvider captures the revision getPipelineRunsFromRepo ends up handing to
+// the provider when it resolves a repository-local Task reference.
+type revisionRecordingProvider struct {
+	*testprovider.TestProviderImp
+	fileInsideRepoRevision string
+}
+
+func (v *revisionRecordingProvider) GetFileInsideRepo(ctx context.Context, event *info.Event, file, revision string) (string, error) {
+	v.fileInsideRepoRevision = revision
+	return v.TestProviderImp.GetFileInsideRepo(ctx, event, file, revision)
+}
+
+// TestGetPipelineRunsFromRepoRepositoryRevision guards the wiring that carries the revision
+// chosen for the event all the way into resolve.Opts, not just the selection helper itself.
+func TestGetPipelineRunsFromRepoRepositoryRevision(t *testing.T) {
+	const (
+		branchCreateSHA = "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e"
+		localTaskPath   = "tasks/repository-local-task.yaml"
+	)
+	template := `apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: pr-push
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[push]"
+    pipelinesascode.tekton.dev/task: "` + localTaskPath + `"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: repository-local
+      taskRef:
+        name: repository-local-task
+`
+	localTask := `apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: repository-local-task
+spec:
+  steps:
+  - name: task
+    image: quay.io/prometheus/busybox
+    script: |
+      exit 0
+`
+
+	tests := []struct {
+		name         string
+		provenance   string
+		event        *info.Event
+		wantRevision string
+	}{
+		{
+			name: "source provenance pins repository-local tasks to the event revision",
+			event: &info.Event{
+				PipelineRunSourceRevision: branchCreateSHA,
+				DefaultBranch:             "main",
+			},
+			wantRevision: branchCreateSHA,
+		},
+		{
+			name:       "default_branch provenance pins repository-local tasks to the default branch",
+			provenance: "default_branch",
+			event: &info.Event{
+				PipelineRunSourceRevision: branchCreateSHA,
+				DefaultBranch:             "main",
+			},
+			wantRevision: "main",
+		},
+		{
+			name:  "ordinary event leaves the provider to pick its own revision",
+			event: &info.Event{DefaultBranch: "main"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observerCore, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observerCore).Sugar()
+			ctx, _ := rtesting.SetupFakeContext(t)
+
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "foo"},
+				Spec: v1alpha1.RepositorySpec{
+					URL:      "https://ghe.pipelinesascode.com/pipelines-as-code/e2e",
+					Settings: &v1alpha1.Settings{PipelineRunProvenance: tt.provenance},
+				},
+			}
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			cs := &params.Run{
+				Clients: clients.Clients{
+					PipelineAsCode: stdata.PipelineAsCode,
+					Kube:           stdata.Kube,
+					Tekton:         stdata.Pipeline,
+					Log:            logger,
+				},
+			}
+			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			event := tt.event
+			event.URL = repo.Spec.URL
+			event.Organization = "pipelines-as-code"
+			event.Repository = "e2e"
+			event.Sender = "foo"
+			event.SHA = branchCreateSHA
+			event.HeadBranch = "main"
+			event.BaseBranch = "main"
+			event.EventType = "push"
+			event.TriggerTarget = triggertype.Push
+
+			vcx := &revisionRecordingProvider{
+				TestProviderImp: &testprovider.TestProviderImp{
+					TektonDirTemplate: template,
+					FilesInsideRepo:   map[string]string{localTaskPath: localTask},
+				},
+			}
+			pacInfo := &info.PacOpts{Settings: settings.Settings{RemoteTasks: true}}
+			p := NewPacs(event, vcx, cs, pacInfo, nil, logger, nil)
+			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
+
+			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo)
+			assert.NilError(t, err)
+			assert.Equal(t, 1, len(matchedPRs))
+			assert.Equal(t, tt.wantRevision, vcx.fileInsideRepoRevision)
 		})
 	}
 }

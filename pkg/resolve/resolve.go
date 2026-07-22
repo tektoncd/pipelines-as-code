@@ -143,10 +143,11 @@ func inlineTasks(tasks []tektonv1.PipelineTask, ropt *Opts, remoteResource Fetch
 }
 
 type Opts struct {
-	GenerateName  bool     // whether to GenerateName
-	RemoteTasks   bool     // whether to parse annotation to fetch tasks from remote
-	SkipInlining  []string // task to skip inlining
-	ProviderToken string
+	GenerateName       bool     // whether to GenerateName
+	RemoteTasks        bool     // whether to parse annotation to fetch tasks from remote
+	SkipInlining       []string // task to skip inlining
+	ProviderToken      string
+	RepositoryRevision string // revision for repository-local Task and Pipeline references
 }
 
 func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (TektonTypes, error) {
@@ -226,10 +227,11 @@ func Resolve(ctx context.Context, cs *params.Run, logger *zap.SugaredLogger, pro
 	}
 
 	rt := &matcher.RemoteTasks{
-		Run:               cs,
-		Event:             event,
-		ProviderInterface: providerintf,
-		Logger:            logger,
+		Run:                cs,
+		Event:              event,
+		ProviderInterface:  providerintf,
+		Logger:             logger,
+		RepositoryRevision: ropt.RepositoryRevision,
 	}
 
 	fetchedResources, err := resolveRemoteResources(ctx, rt, types, ropt)

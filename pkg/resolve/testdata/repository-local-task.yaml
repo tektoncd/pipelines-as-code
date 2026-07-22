@@ -1,0 +1,11 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: repository-local-task
+spec:
+  steps:
+    - name: first-step
+      image: image
+      script: |
+        echo hello
