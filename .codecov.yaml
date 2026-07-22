@@ -12,6 +12,16 @@ coverage:
       # See https://docs.codecov.io/docs/commit-status#disabling-a-status.
       default: false
 
+flag_management:
+  individual_flags:
+    - name: unit-tests
+      carryforward: false
+    # The e2e workflow is path-filtered and does not run on every PR;
+    # carryforward reuses the last e2e report instead of showing a
+    # coverage drop when it did not run.
+    - name: e2e
+      carryforward: true
+
 ignore:
   - "**/zz_generated*.go"
   - "**/*.pb.go"

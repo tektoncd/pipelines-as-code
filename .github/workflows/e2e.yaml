@@ -46,6 +46,8 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+      # for codecov OIDC upload of e2e coverage
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -357,6 +359,11 @@ jobs:
             kubectl -n pipelines-as-code rollout status deployment/pipelines-as-code-$name --timeout=120s
           done
 
+      - name: Instrument PAC with coverage
+        id: coverage-deploy
+        run: |
+          ./hack/dev/e2e-coverage.sh deploy
+
       # Adjusted step-level conditions based on the new job-level logic
       - name: Run E2E Tests
         # This step runs for schedule, PR target (if job started), or workflow_dispatch (if job started)
@@ -402,6 +409,37 @@ jobs:
         if: ${{ always() }}
         run: |
           ./hack/gh-workflow-ci.sh output_logs
+
+      # Coverage collection scales the deployments down (SIGTERM flushes the
+      # counters), so it must run after all the log gathering steps.
+      - name: Collect e2e coverage
+        id: coverage-collect
+        if: ${{ always() && steps.coverage-deploy.outcome == 'success' }}
+        env:
+          OUTPUT_DIR: /tmp/e2e-coverage
+        run: |
+          ./hack/dev/e2e-coverage.sh collect
+          ./hack/dev/e2e-coverage.sh report
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload e2e coverage artifact
+        if: ${{ always() && steps.coverage-collect.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-e2e-${{ matrix.provider }}
+          path: /tmp/e2e-coverage/e2e-coverage.txt
+
+      - name: Upload e2e coverage to Codecov
+        if: ${{ always() && steps.coverage-collect.outcome == 'success' }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: /tmp/e2e-coverage/e2e-coverage.txt
+          flags: e2e
+          use_oidc: true
+          disable_search: true
+          fail_ci_if_error: false
+          override_commit: ${{ steps.coverage-collect.outputs.sha }}
+          override_pr: ${{ github.event.pull_request.number }}
 
       - name: Upload artifacts
         if: ${{ always() }}

@@ -83,6 +83,16 @@ test-e2e:  ## run e2e tests
 	env GODEBUG=asynctimerchan=1 \
 		$(GO) test $(DEFAULT_GO_TEST_FLAGS) $(GO_TEST_FLAGS) -timeout $(TIMEOUT_E2E)  -failfast -count=1 -tags=e2e ./test
 
+.PHONY: e2e-coverage-deploy
+e2e-coverage-deploy: ## redeploy PAC on local kind with coverage instrumentation
+	@./hack/dev/e2e-coverage.sh deploy
+
+.PHONY: e2e-coverage
+e2e-coverage: ## run e2e tests (E2E_TEST=TestName to filter) and collect coverage from the cluster
+	$(MAKE) test-e2e GO_TEST_FLAGS="$(GO_TEST_FLAGS) $(if $(E2E_TEST),-run $(E2E_TEST))" || true
+	@./hack/dev/e2e-coverage.sh collect
+	@./hack/dev/e2e-coverage.sh report
+
 .PHONY: html-coverage
 html-coverage: ## generate html coverage
 	@mkdir -p tmp
