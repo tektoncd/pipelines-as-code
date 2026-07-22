@@ -42,8 +42,8 @@ type Event struct {
 	// CommitMetadataIncomplete marks webhook events that need an authenticated commit lookup
 	// before consumers can rely on title, URL, message, author, or committer fields.
 	CommitMetadataIncomplete bool
-	// PipelineRunSourceRevision keeps repository-local references on the same revision
-	// selected when loading PipelineRun definitions.
+	// PipelineRunSourceRevision records the immutable repository revision supplied by an event.
+	// PipelineRun provenance may explicitly select another revision, such as the default branch.
 	PipelineRunSourceRevision string
 
 	// Full commit information populated by provider.GetCommitInfo()

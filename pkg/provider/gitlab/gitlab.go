@@ -592,11 +592,6 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 		}
 		v.Logger.Infof("Using PipelineRun definition from source %s on commit SHA: %s", trigger, event.SHA)
 	}
-	if branchCreate {
-		// Keep later repository-local references on the exact source selected for this event.
-		event.PipelineRunSourceRevision = revision
-	}
-
 	opt := &gitlab.ListTreeOptions{
 		Path:      gitlab.Ptr(path),
 		Ref:       gitlab.Ptr(revision),
@@ -674,13 +669,13 @@ func (v *Provider) getObject(fname, branch string, pid int64) ([]byte, *gitlab.R
 	return file, resp, nil
 }
 
-func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, path, _ string) (string, error) {
-	revision := runevent.HeadBranch
-	if isBranchCreationRunEvent(runevent) {
-		revision = runevent.PipelineRunSourceRevision
-		if revision == "" {
-			// Repository-local references must follow GetTektonDir so provenance cannot be lost.
-			return "", fmt.Errorf("pipeline run source revision is not set for branch creation event")
+func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, path, targetRevision string) (string, error) {
+	revision := targetRevision
+	if revision == "" {
+		revision = runevent.HeadBranch
+		if isBranchCreationRunEvent(runevent) {
+			// The immutable event SHA is the source revision when no explicit target was selected.
+			revision = runevent.SHA
 		}
 	}
 	getobj, _, err := v.getObject(path, revision, v.sourceProjectID)

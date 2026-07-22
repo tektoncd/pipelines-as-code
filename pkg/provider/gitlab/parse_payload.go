@@ -122,6 +122,7 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 			// After is the immutable branch tip when GitLab creates a branch without adding commits.
 			processedEvent.SHA = gitEvent.After
 			processedEvent.CommitMetadataIncomplete = true
+			processedEvent.PipelineRunSourceRevision = gitEvent.After
 		} else {
 			lastCommitIdx := len(gitEvent.Commits) - 1
 			processedEvent.SHA = gitEvent.Commits[lastCommitIdx].ID

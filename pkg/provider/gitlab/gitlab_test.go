@@ -1552,7 +1552,6 @@ func TestGetTektonDir(t *testing.T) {
 		wantClient           bool
 		prcontent            string
 		wantRevision         string
-		wantSourceRevision   string
 		filterMessageSnippet string
 	}{
 		{
@@ -1633,7 +1632,6 @@ func TestGetTektonDir(t *testing.T) {
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
 			wantRevision:         "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
-			wantSourceRevision:   "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
 		},
 		{
@@ -1657,10 +1655,9 @@ func TestGetTektonDir(t *testing.T) {
 			fields: fields{
 				sourceProjectID: 100,
 			},
-			wantClient:         true,
-			wantStr:            "kind: PipelineRun",
-			wantRevision:       "main",
-			wantSourceRevision: "main",
+			wantClient:   true,
+			wantStr:      "kind: PipelineRun",
+			wantRevision: "main",
 		},
 		{
 			name:      "list tekton dir on default_branch",
@@ -1762,7 +1759,6 @@ func TestGetTektonDir(t *testing.T) {
 			if tt.wantStr != "" {
 				assert.Assert(t, strings.Contains(got, tt.wantStr), "%s is not in %s", tt.wantStr, got)
 			}
-			assert.Equal(t, tt.wantSourceRevision, tt.args.event.PipelineRunSourceRevision)
 			if tt.filterMessageSnippet != "" {
 				gotcha := exporter.FilterMessageSnippet(tt.filterMessageSnippet)
 				assert.Assert(t, gotcha.Len() > 0, "expected to find %s in logs, found %v", tt.filterMessageSnippet, exporter.All())
@@ -1774,10 +1770,10 @@ func TestGetTektonDir(t *testing.T) {
 func TestGetFileInsideRepo(t *testing.T) {
 	const content = "hello moto"
 	tests := []struct {
-		name         string
-		event        *info.Event
-		wantRevision string
-		wantErr      string
+		name           string
+		event          *info.Event
+		targetRevision string
+		wantRevision   string
 	}{
 		{
 			name: "ordinary event uses head branch",
@@ -1787,12 +1783,11 @@ func TestGetFileInsideRepo(t *testing.T) {
 			wantRevision: "branch",
 		},
 		{
-			name: "branch creation uses selected source revision",
+			name: "branch creation without explicit target uses event SHA",
 			event: &info.Event{
-				SHA:                       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
-				HeadBranch:                "refs/heads/release-0.1",
-				TriggerTarget:             triggertype.Push,
-				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:    "refs/heads/release-0.1",
+				TriggerTarget: triggertype.Push,
 				Event: &gitlab.PushEvent{
 					Before: "0000000000000000000000000000000000000000",
 					After:  "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
@@ -1802,7 +1797,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 			wantRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 		},
 		{
-			name: "branch creation without selected source revision fails",
+			name: "branch creation uses explicit source revision",
 			event: &info.Event{
 				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 				HeadBranch:    "refs/heads/release-0.1",
@@ -1813,23 +1808,24 @@ func TestGetFileInsideRepo(t *testing.T) {
 					Ref:    "refs/heads/release-0.1",
 				},
 			},
-			wantErr: "pipeline run source revision is not set for branch creation event",
+			targetRevision: "1111111111111111111111111111111111111111",
+			wantRevision:   "1111111111111111111111111111111111111111",
 		},
 		{
-			name: "branch creation with default branch provenance uses default branch",
+			name: "branch creation uses explicit default branch revision",
 			event: &info.Event{
-				SHA:                       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
-				HeadBranch:                "refs/heads/release-0.1",
-				DefaultBranch:             "main",
-				TriggerTarget:             triggertype.Push,
-				PipelineRunSourceRevision: "main",
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:    "refs/heads/release-0.1",
+				DefaultBranch: "main",
+				TriggerTarget: triggertype.Push,
 				Event: &gitlab.PushEvent{
 					Before: "0000000000000000000000000000000000000000",
 					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 					Ref:    "refs/heads/release-0.1",
 				},
 			},
-			wantRevision: "main",
+			targetRevision: "main",
+			wantRevision:   "main",
 		},
 	}
 
@@ -1849,11 +1845,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 					fmt.Fprint(rw, content)
 				})
 
-			got, err := v.GetFileInsideRepo(ctx, tt.event, "pr.yaml", "")
-			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
-				return
-			}
+			got, err := v.GetFileInsideRepo(ctx, tt.event, "pr.yaml", tt.targetRevision)
 			assert.NilError(t, err)
 			assert.Equal(t, content, got)
 		})
