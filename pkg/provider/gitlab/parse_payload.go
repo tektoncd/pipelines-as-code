@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -115,15 +116,21 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 		processedEvent.EventType = strings.ReplaceAll(event, " Hook", "")
 	case *gitlab.PushEvent:
 		if len(gitEvent.Commits) == 0 {
-			return nil, fmt.Errorf("no commits attached to this push event")
+			if !isBranchCreationPayload(gitEvent) {
+				return nil, fmt.Errorf("no commits attached to this push event")
+			}
+			// After is the immutable branch tip when GitLab creates a branch without adding commits.
+			processedEvent.SHA = gitEvent.After
+			processedEvent.CommitMetadataIncomplete = true
+		} else {
+			lastCommitIdx := len(gitEvent.Commits) - 1
+			processedEvent.SHA = gitEvent.Commits[lastCommitIdx].ID
+			processedEvent.SHAURL = gitEvent.Commits[lastCommitIdx].URL
+			processedEvent.SHATitle = gitEvent.Commits[lastCommitIdx].Title
 		}
-		lastCommitIdx := len(gitEvent.Commits) - 1
 		processedEvent.Sender = gitEvent.UserUsername
 		processedEvent.DefaultBranch = gitEvent.Project.DefaultBranch
 		processedEvent.URL = gitEvent.Project.WebURL
-		processedEvent.SHA = gitEvent.Commits[lastCommitIdx].ID
-		processedEvent.SHAURL = gitEvent.Commits[lastCommitIdx].URL
-		processedEvent.SHATitle = gitEvent.Commits[lastCommitIdx].Title
 		processedEvent.HeadBranch = gitEvent.Ref
 		processedEvent.BaseBranch = gitEvent.Ref
 		processedEvent.HeadURL = gitEvent.Project.WebURL
@@ -170,6 +177,22 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 
 	v.repoURL = processedEvent.URL
 	return processedEvent, nil
+}
+
+func isBranchCreationPayload(event *gitlab.PushEvent) bool {
+	const branchRefPrefix = "refs/heads/"
+	return strings.HasPrefix(event.Ref, branchRefPrefix) &&
+		strings.TrimPrefix(event.Ref, branchRefPrefix) != "" &&
+		provider.IsZeroSHA(event.Before) &&
+		isValidCommitSHA(event.After)
+}
+
+func isValidCommitSHA(sha string) bool {
+	if len(sha) != 40 || provider.IsZeroSHA(sha) {
+		return false
+	}
+	_, err := hex.DecodeString(sha)
+	return err == nil
 }
 
 func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*info.Event, error) {

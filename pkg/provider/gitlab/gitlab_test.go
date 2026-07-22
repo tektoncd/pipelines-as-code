@@ -800,8 +800,12 @@ func TestGetCommitInfo(t *testing.T) {
 		name                string
 		event               *info.Event
 		sourceProjectID     int
+		commitRef           string
 		mockCommitResponse  string
+		mockStatus          int
 		wantErr             bool
+		wantErrMsg          string
+		wantSHA             string
 		wantSHATitle        string
 		wantSHAURL          string
 		wantSHAMessage      string
@@ -812,6 +816,7 @@ func TestGetCommitInfo(t *testing.T) {
 		wantCommitterEmail  string
 		wantCommitterDate   string
 		checkExtendedFields bool
+		wantHasSkipCommand  bool
 		noClient            bool
 	}{
 		{
@@ -820,6 +825,7 @@ func TestGetCommitInfo(t *testing.T) {
 				HeadBranch: "feature-branch",
 			},
 			sourceProjectID: 123,
+			commitRef:       "feature-branch",
 			mockCommitResponse: `{
 				"id": "abc123",
 				"title": "feat: add new feature",
@@ -832,6 +838,7 @@ func TestGetCommitInfo(t *testing.T) {
 				"committer_email": "noreply@gitlab.com",
 				"committed_date": "2024-01-15T10:31:00Z"
 			}`,
+			wantSHA:             "abc123",
 			wantSHATitle:        "feat: add new feature",
 			wantSHAURL:          "https://gitlab.com/owner/repo/-/commit/abc123",
 			wantSHAMessage:      "feat: add new feature\n\nThis is the full commit message with details.",
@@ -849,26 +856,126 @@ func TestGetCommitInfo(t *testing.T) {
 				HeadBranch: "main",
 			},
 			sourceProjectID: 123,
+			commitRef:       "main",
 			mockCommitResponse: `{
 				"id": "def456",
 				"title": "fix: simple fix",
 				"message": "fix: simple fix",
 				"web_url": "https://gitlab.com/owner/repo/-/commit/def456"
 			}`,
+			wantSHA:        "def456",
 			wantSHATitle:   "fix: simple fix",
 			wantSHAURL:     "https://gitlab.com/owner/repo/-/commit/def456",
 			wantSHAMessage: "fix: simple fix",
+		},
+		{
+			name: "resolve branch creation metadata by event SHA",
+			event: &info.Event{
+				TriggerTarget: triggertype.Push,
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:    "refs/heads/release-0.1",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			sourceProjectID: 123,
+			commitRef:       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			mockCommitResponse: `{
+				"id": "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				"title": "sync: bump artifacts versions.yaml",
+				"message": "sync: bump artifacts versions.yaml [skip ci]",
+				"web_url": "https://gitlab.com/owner/repo/-/commit/dc922f5e",
+				"author_name": "Test User",
+				"author_email": "testuser@example.com",
+				"committer_name": "Test User",
+				"committer_email": "testuser@example.com"
+			}`,
+			wantSHA:             "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			wantSHATitle:        "sync: bump artifacts versions.yaml",
+			wantSHAURL:          "https://gitlab.com/owner/repo/-/commit/dc922f5e",
+			wantSHAMessage:      "sync: bump artifacts versions.yaml [skip ci]",
+			wantAuthorName:      "Test User",
+			wantAuthorEmail:     "testuser@example.com",
+			wantCommitterName:   "Test User",
+			wantCommitterEmail:  "testuser@example.com",
+			checkExtendedFields: true,
+			wantHasSkipCommand:  true,
+		},
+		{
+			name: "reject branch creation metadata for a different SHA",
+			event: &info.Event{
+				TriggerTarget: triggertype.Push,
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			sourceProjectID: 123,
+			commitRef:       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			mockCommitResponse: `{
+				"id": "1111111111111111111111111111111111111111",
+				"title": "different commit",
+				"web_url": "https://gitlab.com/owner/repo/-/commit/11111111"
+			}`,
+			wantErr:    true,
+			wantErrMsg: "does not match event SHA",
+		},
+		{
+			name: "accept canonical metadata SHA with different hex casing",
+			event: &info.Event{
+				TriggerTarget: triggertype.Push,
+				SHA:           "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			sourceProjectID: 123,
+			commitRef:       "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
+			mockCommitResponse: `{
+				"id": "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				"title": "canonical commit",
+				"message": "canonical commit",
+				"web_url": "https://gitlab.com/owner/repo/-/commit/dc922f5e"
+			}`,
+			wantSHA:        "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			wantSHATitle:   "canonical commit",
+			wantSHAURL:     "https://gitlab.com/owner/repo/-/commit/dc922f5e",
+			wantSHAMessage: "canonical commit",
+		},
+		{
+			name: "branch creation commit lookup failure",
+			event: &info.Event{
+				TriggerTarget: triggertype.Push,
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			sourceProjectID: 123,
+			commitRef:       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			mockStatus:      http.StatusNotFound,
+			wantErr:         true,
+			wantErrMsg:      "404",
 		},
 		{
 			name: "no client error",
 			event: &info.Event{
 				HeadBranch: "main",
 			},
-			noClient: true,
-			wantErr:  true,
+			noClient:   true,
+			wantErr:    true,
+			wantErrMsg: noClientErrStr,
 		},
 		{
-			name: "no SHA, no HeadBranch - no API call",
+			name: "event with existing SHA makes no API call",
 			event: &info.Event{
 				SHA: "already-set",
 			},
@@ -885,10 +992,14 @@ func TestGetCommitInfo(t *testing.T) {
 				client, mux, tearDown := thelp.Setup(t)
 				defer tearDown()
 
-				// Mock the GetCommit API endpoint if we expect it to be called
-				if tt.event.SHA == "" && tt.event.HeadBranch != "" {
-					mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/commits/%s", tt.sourceProjectID, tt.event.HeadBranch),
+				// Register only the expected ref so an unintended branch lookup cannot satisfy an exact-SHA test.
+				if tt.commitRef != "" {
+					mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/commits/%s", tt.sourceProjectID, tt.commitRef),
 						func(rw http.ResponseWriter, _ *http.Request) {
+							if tt.mockStatus != 0 {
+								rw.WriteHeader(tt.mockStatus)
+								return
+							}
 							fmt.Fprint(rw, tt.mockCommitResponse)
 						})
 				}
@@ -905,13 +1016,19 @@ func TestGetCommitInfo(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Assert(t, err != nil, "expected error but got nil")
+				if tt.wantErrMsg != "" {
+					assert.ErrorContains(t, err, tt.wantErrMsg)
+				}
 				return
 			}
 
 			assert.NilError(t, err)
 
-			// Only check fields if API was supposed to be called
-			if tt.event.SHA == "" && tt.event.HeadBranch != "" {
+			// Only check fields if the API returned commit metadata.
+			if tt.commitRef != "" {
+				if tt.wantSHA != "" {
+					assert.Equal(t, tt.wantSHA, tt.event.SHA, "SHA should match")
+				}
 				assert.Equal(t, tt.wantSHATitle, tt.event.SHATitle, "SHATitle should match")
 				assert.Equal(t, tt.wantSHAURL, tt.event.SHAURL, "SHAURL should match")
 				assert.Equal(t, tt.wantSHAMessage, tt.event.SHAMessage, "SHAMessage should match")
@@ -933,6 +1050,7 @@ func TestGetCommitInfo(t *testing.T) {
 					}
 				}
 			}
+			assert.Equal(t, tt.wantHasSkipCommand, tt.event.HasSkipCommand, "HasSkipCommand should match")
 		})
 	}
 }
@@ -1433,6 +1551,8 @@ func TestGetTektonDir(t *testing.T) {
 		wantFilesAPIErr      bool
 		wantClient           bool
 		prcontent            string
+		wantRevision         string
+		wantSourceRevision   string
 		filterMessageSnippet string
 	}{
 		{
@@ -1490,6 +1610,57 @@ func TestGetTektonDir(t *testing.T) {
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
 			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
+		},
+		{
+			name:      "list tekton dir for branch creation by event SHA",
+			prcontent: string(samplePR),
+			args: args{
+				path: ".tekton",
+				event: &info.Event{
+					SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					HeadBranch:    "refs/heads/release-0.1",
+					TriggerTarget: triggertype.Push,
+					Event: &gitlab.PushEvent{
+						Before: "0000000000000000000000000000000000000000",
+						After:  "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
+						Ref:    "refs/heads/release-0.1",
+					},
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+			},
+			wantClient:           true,
+			wantStr:              "kind: PipelineRun",
+			wantRevision:         "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			wantSourceRevision:   "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
+		},
+		{
+			name:      "list tekton dir for branch creation from default branch",
+			prcontent: string(samplePR),
+			args: args{
+				path:       ".tekton",
+				provenance: "default_branch",
+				event: &info.Event{
+					SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					HeadBranch:    "refs/heads/release-0.1",
+					DefaultBranch: "main",
+					TriggerTarget: triggertype.Push,
+					Event: &gitlab.PushEvent{
+						Before: "0000000000000000000000000000000000000000",
+						After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+						Ref:    "refs/heads/release-0.1",
+					},
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+			},
+			wantClient:         true,
+			wantStr:            "kind: PipelineRun",
+			wantRevision:       "main",
+			wantSourceRevision: "main",
 		},
 		{
 			name:      "list tekton dir on default_branch",
@@ -1573,6 +1744,8 @@ func TestGetTektonDir(t *testing.T) {
 				muxbranch := tt.args.event.HeadBranch
 				if tt.args.provenance == "default_branch" {
 					muxbranch = tt.args.event.DefaultBranch
+				} else if tt.wantRevision != "" {
+					muxbranch = tt.wantRevision
 				}
 				if tt.args.path != "" && tt.prcontent != "" {
 					thelp.MuxListTektonDir(t, mux, tt.fields.sourceProjectID, muxbranch, tt.prcontent, tt.wantTreeAPIErr, tt.wantFilesAPIErr)
@@ -1589,6 +1762,7 @@ func TestGetTektonDir(t *testing.T) {
 			if tt.wantStr != "" {
 				assert.Assert(t, strings.Contains(got, tt.wantStr), "%s is not in %s", tt.wantStr, got)
 			}
+			assert.Equal(t, tt.wantSourceRevision, tt.args.event.PipelineRunSourceRevision)
 			if tt.filterMessageSnippet != "" {
 				gotcha := exporter.FilterMessageSnippet(tt.filterMessageSnippet)
 				assert.Assert(t, gotcha.Len() > 0, "expected to find %s in logs, found %v", tt.filterMessageSnippet, exporter.All())
@@ -1598,25 +1772,92 @@ func TestGetTektonDir(t *testing.T) {
 }
 
 func TestGetFileInsideRepo(t *testing.T) {
-	content := "hello moto"
-	ctx, _ := rtesting.SetupFakeContext(t)
-	client, mux, tearDown := thelp.Setup(t)
-	defer tearDown()
-
-	event := &info.Event{
-		HeadBranch: "branch",
+	const content = "hello moto"
+	tests := []struct {
+		name         string
+		event        *info.Event
+		wantRevision string
+		wantErr      string
+	}{
+		{
+			name: "ordinary event uses head branch",
+			event: &info.Event{
+				HeadBranch: "branch",
+			},
+			wantRevision: "branch",
+		},
+		{
+			name: "branch creation uses selected source revision",
+			event: &info.Event{
+				SHA:                       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:                "refs/heads/release-0.1",
+				TriggerTarget:             triggertype.Push,
+				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "DC922F5EA0C57EF5FB1CBC0F3EA550DFE3B5786E",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			wantRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+		},
+		{
+			name: "branch creation without selected source revision fails",
+			event: &info.Event{
+				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:    "refs/heads/release-0.1",
+				TriggerTarget: triggertype.Push,
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			wantErr: "pipeline run source revision is not set for branch creation event",
+		},
+		{
+			name: "branch creation with default branch provenance uses default branch",
+			event: &info.Event{
+				SHA:                       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+				HeadBranch:                "refs/heads/release-0.1",
+				DefaultBranch:             "main",
+				TriggerTarget:             triggertype.Push,
+				PipelineRunSourceRevision: "main",
+				Event: &gitlab.PushEvent{
+					Before: "0000000000000000000000000000000000000000",
+					After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+					Ref:    "refs/heads/release-0.1",
+				},
+			},
+			wantRevision: "main",
+		},
 	}
-	v := Provider{
-		sourceProjectID: 10,
-		gitlabClient:    client,
-	}
-	thelp.MuxListTektonDir(t, mux, int(v.sourceProjectID), event.HeadBranch, content, false, false)
-	got, err := v.GetFileInsideRepo(ctx, event, "pr.yaml", "")
-	assert.NilError(t, err)
-	assert.Equal(t, content, got)
 
-	_, err = v.GetFileInsideRepo(ctx, event, "notfound", "")
-	assert.Assert(t, err != nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			client, mux, tearDown := thelp.Setup(t)
+			defer tearDown()
+
+			v := Provider{
+				sourceProjectID: 10,
+				gitlabClient:    client,
+			}
+			mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/pr.yaml/raw", v.sourceProjectID),
+				func(rw http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, tt.wantRevision, r.URL.Query().Get("ref"))
+					fmt.Fprint(rw, content)
+				})
+
+			got, err := v.GetFileInsideRepo(ctx, tt.event, "pr.yaml", "")
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, content, got)
+		})
+	}
 }
 
 func TestValidate(t *testing.T) {

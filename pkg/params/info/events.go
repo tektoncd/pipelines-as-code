@@ -39,6 +39,12 @@ type Event struct {
 	URL           string // WEB url not the git URL, which would match to the repo.spec
 	SHAURL        string // pretty URL for web browsing for UIs (cli/web)
 	SHATitle      string // commit title for UIs
+	// CommitMetadataIncomplete marks webhook events that need an authenticated commit lookup
+	// before consumers can rely on title, URL, message, author, or committer fields.
+	CommitMetadataIncomplete bool
+	// PipelineRunSourceRevision keeps repository-local references on the same revision
+	// selected when loading PipelineRun definitions.
+	PipelineRunSourceRevision string
 
 	// Full commit information populated by provider.GetCommitInfo()
 	SHAMessage        string    // full commit message (not just title)

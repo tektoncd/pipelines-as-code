@@ -575,17 +575,26 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 		return "", fmt.Errorf("no gitlab client has been initialized, " +
 			"exiting... (hint: did you forget setting a secret on your repo?)")
 	}
-	// default set provenance from head
+	branchCreate := isBranchCreationRunEvent(event)
+	// Default to the branch ref for existing event types.
 	revision := event.HeadBranch
 	if provenance == "default_branch" {
 		revision = event.DefaultBranch
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", event.DefaultBranch)
 	} else {
+		if branchCreate {
+			// Pin branch creation to the webhook SHA so a later push cannot change the matched definitions.
+			revision = event.SHA
+		}
 		trigger := event.TriggerTarget.String()
 		if event.TriggerTarget == triggertype.PullRequest {
 			trigger = "merge request"
 		}
 		v.Logger.Infof("Using PipelineRun definition from source %s on commit SHA: %s", trigger, event.SHA)
+	}
+	if branchCreate {
+		// Keep later repository-local references on the exact source selected for this event.
+		event.PipelineRunSourceRevision = revision
 	}
 
 	opt := &gitlab.ListTreeOptions{
@@ -666,7 +675,15 @@ func (v *Provider) getObject(fname, branch string, pid int64) ([]byte, *gitlab.R
 }
 
 func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, path, _ string) (string, error) {
-	getobj, _, err := v.getObject(path, runevent.HeadBranch, v.sourceProjectID)
+	revision := runevent.HeadBranch
+	if isBranchCreationRunEvent(runevent) {
+		revision = runevent.PipelineRunSourceRevision
+		if revision == "" {
+			// Repository-local references must follow GetTektonDir so provenance cannot be lost.
+			return "", fmt.Errorf("pipeline run source revision is not set for branch creation event")
+		}
+	}
+	getobj, _, err := v.getObject(path, revision, v.sourceProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -678,33 +695,55 @@ func (v *Provider) GetCommitInfo(_ context.Context, runevent *info.Event) error 
 		return fmt.Errorf("%s", noClientErrStr)
 	}
 
-	// if we don't have a SHA (ie: incoming-webhook) then get it from the branch
-	// and populate in the runevent.
-	if runevent.SHA == "" && runevent.HeadBranch != "" {
-		branchinfo, _, err := v.Client().Commits.GetCommit(v.sourceProjectID, runevent.HeadBranch, &gitlab.GetCommitOptions{})
+	commitRef := ""
+	expectedSHA := ""
+	if isBranchCreationRunEvent(runevent) {
+		// Resolve the immutable event SHA so a later push cannot move the branch creation to a new HEAD.
+		commitRef = runevent.SHA
+		expectedSHA = runevent.SHA
+	} else if runevent.SHA == "" && runevent.HeadBranch != "" {
+		// Incoming webhooks do not carry a SHA, so resolve their mutable branch ref as before.
+		commitRef = runevent.HeadBranch
+	}
+
+	if commitRef != "" {
+		commitInfo, _, err := v.Client().Commits.GetCommit(v.sourceProjectID, commitRef, &gitlab.GetCommitOptions{})
 		if err != nil {
 			return err
 		}
-		runevent.SHA = branchinfo.ID
-		runevent.SHATitle = branchinfo.Title
-		runevent.SHAURL = branchinfo.WebURL
+		if expectedSHA != "" && !strings.EqualFold(commitInfo.ID, expectedSHA) {
+			return fmt.Errorf("resolved commit SHA %s does not match event SHA %s", commitInfo.ID, expectedSHA)
+		}
+		runevent.SHA = commitInfo.ID
+		runevent.SHATitle = commitInfo.Title
+		runevent.SHAURL = commitInfo.WebURL
 
 		// Populate full commit information for LLM context
-		runevent.SHAMessage = branchinfo.Message
-		runevent.SHAAuthorName = branchinfo.AuthorName
-		runevent.SHAAuthorEmail = branchinfo.AuthorEmail
-		if branchinfo.AuthoredDate != nil {
-			runevent.SHAAuthorDate = *branchinfo.AuthoredDate
+		runevent.SHAMessage = commitInfo.Message
+		runevent.SHAAuthorName = commitInfo.AuthorName
+		runevent.SHAAuthorEmail = commitInfo.AuthorEmail
+		if commitInfo.AuthoredDate != nil {
+			runevent.SHAAuthorDate = *commitInfo.AuthoredDate
 		}
-		runevent.SHACommitterName = branchinfo.CommitterName
-		runevent.SHACommitterEmail = branchinfo.CommitterEmail
-		if branchinfo.CommittedDate != nil {
-			runevent.SHACommitterDate = *branchinfo.CommittedDate
+		runevent.SHACommitterName = commitInfo.CommitterName
+		runevent.SHACommitterEmail = commitInfo.CommitterEmail
+		if commitInfo.CommittedDate != nil {
+			runevent.SHACommitterDate = *commitInfo.CommittedDate
 		}
+		runevent.CommitMetadataIncomplete = false
 	}
 	runevent.HasSkipCommand = provider.SkipCI(runevent.SHAMessage)
 
 	return nil
+}
+
+func isBranchCreationRunEvent(runevent *info.Event) bool {
+	pushEvent, ok := runevent.Event.(*gitlab.PushEvent)
+	return ok &&
+		runevent.TriggerTarget == triggertype.Push &&
+		strings.EqualFold(runevent.SHA, pushEvent.After) &&
+		len(pushEvent.Commits) == 0 &&
+		isBranchCreationPayload(pushEvent)
 }
 
 // GetFiles gets and caches the list of files changed by a given event.
