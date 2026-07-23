@@ -21,6 +21,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	bbtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
 	bbtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
@@ -1016,6 +1017,101 @@ func TestGetFiles(t *testing.T) {
 					// caching on success so we expect 1 metric
 					assert.Equal(t, count.DataPoints[0].Value, int64(1))
 				}
+			}
+		})
+	}
+}
+
+func TestGetCommitStatuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		nilClient    bool
+		statuses     []bbtest.BuildStatus
+		wantErr      bool
+		wantStatuses []provider.CommitStatusInfo
+	}{
+		{
+			name:      "nil client returns error",
+			nilClient: true,
+			wantErr:   true,
+		},
+		{
+			name: "statuses with mixed states",
+			statuses: []bbtest.BuildStatus{
+				{Key: "Pipelines as Code CI / lint", Name: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+				{Key: "Pipelines as Code CI / test", Name: "Pipelines as Code CI / test", State: "FAILED"},
+				{Key: "Pipelines as Code CI / build", Name: "Pipelines as Code CI / build", State: "INPROGRESS"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "failure"},
+				{Name: "Pipelines as Code CI / build", Status: "pending"},
+			},
+		},
+		{
+			name: "deduplication removes duplicate label and state pairs",
+			statuses: []bbtest.BuildStatus{
+				{Key: "Pipelines as Code CI / lint", Name: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+				{Key: "Pipelines as Code CI / lint", Name: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+			},
+		},
+		{
+			name:         "empty statuses",
+			statuses:     []bbtest.BuildStatus{},
+			wantStatuses: nil,
+		},
+		{
+			name: "same label different states are kept",
+			statuses: []bbtest.BuildStatus{
+				{Key: "Pipelines as Code CI / lint", Name: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+				{Key: "Pipelines as Code CI / lint", Name: "Pipelines as Code CI / lint", State: "FAILED"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / lint", Status: "failure"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			if tt.nilClient {
+				v := &Provider{Logger: logger}
+				_, err := v.GetCommitStatuses(ctx, bbtest.MakeEvent(nil))
+				assert.Assert(t, err != nil)
+				return
+			}
+
+			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
+			defer tearDown()
+
+			event := bbtest.MakeEvent(nil)
+			bbtest.MuxListCommitStatuses(t, mux, event, tt.statuses)
+
+			v := &Provider{
+				client:     client,
+				baseURL:    tURL,
+				Logger:     logger,
+				projectKey: event.Organization,
+			}
+
+			got, err := v.GetCommitStatuses(ctx, event)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, len(got), len(tt.wantStatuses))
+			for i, want := range tt.wantStatuses {
+				assert.Equal(t, got[i].Name, want.Name)
+				assert.Equal(t, got[i].Status, want.Status)
 			}
 		})
 	}

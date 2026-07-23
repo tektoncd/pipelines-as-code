@@ -171,8 +171,41 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	return nil
 }
 
-func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
-	return nil, nil
+func (v *Provider) GetCommitStatuses(ctx context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.client == nil {
+		return nil, fmt.Errorf("no token has been set, cannot get commit statuses")
+	}
+
+	orgAndRepo := fmt.Sprintf("%s/%s", event.Organization, event.Repository)
+	opts := &scm.ListOptions{Page: 1, Size: apiResponseLimit}
+
+	var (
+		result []provider.CommitStatusInfo
+		seen   = map[string]struct{}{}
+	)
+	for {
+		statuses, resp, err := v.Client().Repositories.ListStatus(ctx, orgAndRepo, event.SHA, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range statuses {
+			key := fmt.Sprintf("%s\x00%s", s.Label, s.State.String())
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, provider.CommitStatusInfo{
+				Name:   s.Label,
+				Status: s.State.String(),
+			})
+		}
+		if resp.Page.Next == 0 {
+			break
+		}
+		opts.Page = resp.Page.Next
+	}
+
+	return result, nil
 }
 
 func (v *Provider) concatAllYamlFiles(ctx context.Context, objects []string, sha string, runevent *info.Event) (string, error) {

@@ -220,6 +220,21 @@ func MuxCreateAndTestCommitStatus(t *testing.T, mux *http.ServeMux, event *info.
 	})
 }
 
+func MuxListCommitStatuses(t *testing.T, mux *http.ServeMux, event *info.Event, statuses []BuildStatus) {
+	t.Helper()
+	path := fmt.Sprintf("/commits/%s", event.SHA)
+	mux.HandleFunc(path, func(rw http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"values":     statuses,
+			"isLastPage": true,
+			"size":       len(statuses),
+		}
+		b, err := json.Marshal(resp)
+		assert.NilError(t, err)
+		fmt.Fprint(rw, string(b))
+	})
+}
+
 func muxPermissions(t *testing.T, mux *http.ServeMux, path string, values any) {
 	t.Helper()
 	mux.HandleFunc(path, func(rw http.ResponseWriter, _ *http.Request) {
