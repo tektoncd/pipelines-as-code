@@ -125,6 +125,10 @@ type Comments struct {
 	Values []Comment
 }
 
+type Statuses struct {
+	Values []Status
+}
+
 type Status struct {
 	Key         string     `json:"key"`
 	Type        string     `json:"type"`
