@@ -3,10 +3,12 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/gitclient"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/matcher"
@@ -15,10 +17,12 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/pipelineascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type sinker struct {
@@ -70,6 +74,14 @@ func (s *sinker) processEventPayload(ctx context.Context, request *http.Request)
 	return nil
 }
 
+func (s *sinker) handleEvent(ctx context.Context, request *http.Request) error {
+	err := s.processEvent(ctx, request)
+	if err != nil {
+		s.logger.Errorf("error handling event: %v", err)
+	}
+	return err
+}
+
 func (s *sinker) processEvent(ctx context.Context, request *http.Request) error {
 	if s.event.EventType != "incoming" {
 		if err := s.processEventPayload(ctx, request); err != nil {
@@ -89,6 +101,14 @@ func (s *sinker) processEvent(ctx context.Context, request *http.Request) error 
 			// We found the repository, now setup client with token scoping
 			// If setup fails here, it's a configuration error and we should fail fast
 			if err := s.setupClient(ctx, repo); err != nil {
+				if errors.Is(err, secrets.ErrSecretNotFound) {
+					events.NewEventEmitter(s.run.Clients.Kube, s.logger).EmitMessage(
+						repo,
+						zapcore.ErrorLevel,
+						"RepositorySecretMissing",
+						fmt.Sprintf("cannot process event, cannot setup vcs client: %v", err),
+					)
+				}
 				return fmt.Errorf("client setup failed: %w", err)
 			}
 			s.logger.Debugf("Client setup completed for event type: %s", s.event.EventType)
