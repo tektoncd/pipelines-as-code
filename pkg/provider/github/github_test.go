@@ -26,6 +26,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
@@ -2744,6 +2745,291 @@ func TestFetchAppSlug(t *testing.T) {
 
 			assert.NilError(t, err)
 			assert.Equal(t, slug, tt.wantSlug)
+		})
+	}
+}
+
+func TestGetCommitStatuses(t *testing.T) {
+	defaultEvent := &info.Event{
+		Organization: "owner",
+		Repository:   "repo",
+		SHA:          "abc123",
+	}
+
+	appEvent := &info.Event{
+		Organization:   "owner",
+		Repository:     "repo",
+		SHA:            "abc123",
+		InstallationID: 12345,
+	}
+
+	tests := []struct {
+		name         string
+		event        *info.Event
+		wantErr      bool
+		wantStatuses []provider.CommitStatusInfo
+		noClient     bool
+		clock        clockwork.Clock
+		setupMux     func(t *testing.T, mux *http.ServeMux, event *info.Event)
+	}{
+		{
+			name:     "nil client returns error",
+			noClient: true,
+			event:    &info.Event{},
+			wantErr:  true,
+		},
+		{
+			name:  "check runs with mixed conclusions",
+			event: appEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "failure"},
+				{Name: "Pipelines as Code CI / build", Status: "success"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `{
+							"total_count": 3,
+							"check_runs": [
+								{"name": "Pipelines as Code CI / lint", "status": "completed", "conclusion": "success"},
+								{"name": "Pipelines as Code CI / test", "status": "completed", "conclusion": "failure"},
+								{"name": "Pipelines as Code CI / build", "status": "completed", "conclusion": "success"}
+							]
+						}`)
+					})
+			},
+		},
+		{
+			name:  "check runs with in progress status",
+			event: appEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "in_progress"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `{
+							"total_count": 2,
+							"check_runs": [
+								{"name": "Pipelines as Code CI / lint", "status": "completed", "conclusion": "success"},
+								{"name": "Pipelines as Code CI / test", "status": "in_progress"}
+							]
+						}`)
+					})
+			},
+		},
+		{
+			name:         "no check runs returns empty",
+			event:        appEvent,
+			wantStatuses: nil,
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `{"total_count": 0, "check_runs": []}`)
+					})
+			},
+		},
+		{
+			name:    "check runs API error",
+			event:   appEvent,
+			wantErr: true,
+			clock:   clockwork.NewFakeClock(),
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusInternalServerError)
+					})
+			},
+		},
+		{
+			name:  "check runs with pagination",
+			event: appEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "failure"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				urlPath := fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA)
+				mux.HandleFunc(urlPath, func(w http.ResponseWriter, r *http.Request) {
+					page := r.URL.Query().Get("page")
+					if page == "" || page == "1" {
+						w.Header().Add("Link", fmt.Sprintf(`<https://api.github.com%s?page=2&per_page=1>; rel="next"`, urlPath))
+						fmt.Fprint(w, `{
+							"total_count": 2,
+							"check_runs": [
+								{"name": "Pipelines as Code CI / lint", "status": "completed", "conclusion": "success"}
+							]
+						}`)
+					} else {
+						fmt.Fprint(w, `{
+							"total_count": 2,
+							"check_runs": [
+								{"name": "Pipelines as Code CI / test", "status": "completed", "conclusion": "failure"}
+							]
+						}`)
+					}
+				})
+			},
+		},
+		{
+			name:  "check runs deduplication",
+			event: appEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `{
+							"total_count": 2,
+							"check_runs": [
+								{"name": "Pipelines as Code CI / lint", "status": "completed", "conclusion": "success"},
+								{"name": "Pipelines as Code CI / lint", "status": "completed", "conclusion": "success"}
+							]
+						}`)
+					})
+			},
+		},
+		{
+			name:  "commit statuses PAT mode",
+			event: defaultEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "failure"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/statuses",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `[
+							{"context": "Pipelines as Code CI / lint", "state": "success"},
+							{"context": "Pipelines as Code CI / test", "state": "failure"}
+						]`)
+					})
+			},
+		},
+		{
+			name:  "commit statuses with pagination PAT mode",
+			event: defaultEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+				{Name: "Pipelines as Code CI / test", Status: "failure"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				urlPath := fmt.Sprintf("/repos/%s/%s/commits/%s/statuses",
+					event.Organization, event.Repository, event.SHA)
+				mux.HandleFunc(urlPath, func(w http.ResponseWriter, r *http.Request) {
+					page := r.URL.Query().Get("page")
+					if page == "" || page == "1" {
+						w.Header().Add("Link", fmt.Sprintf(`<https://api.github.com%s?page=2&per_page=1>; rel="next"`, urlPath))
+						fmt.Fprint(w, `[
+							{"context": "Pipelines as Code CI / lint", "state": "success"}
+						]`)
+					} else {
+						fmt.Fprint(w, `[
+							{"context": "Pipelines as Code CI / test", "state": "failure"}
+						]`)
+					}
+				})
+			},
+		},
+		{
+			name:  "commit statuses deduplication PAT mode",
+			event: defaultEvent,
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "success"},
+			},
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/statuses",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						fmt.Fprint(w, `[
+							{"context": "Pipelines as Code CI / lint", "state": "success"},
+							{"context": "Pipelines as Code CI / lint", "state": "success"}
+						]`)
+					})
+			},
+		},
+		{
+			name:    "commit statuses API error PAT mode",
+			event:   defaultEvent,
+			wantErr: true,
+			setupMux: func(t *testing.T, mux *http.ServeMux, event *info.Event) {
+				t.Helper()
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/commits/%s/statuses",
+					event.Organization, event.Repository, event.SHA),
+					func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusInternalServerError)
+					})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			l, _ := logger.GetLogger()
+
+			if tt.noClient {
+				cnx := &Provider{Logger: l}
+				_, err := cnx.GetCommitStatuses(ctx, tt.event)
+				assert.Assert(t, err != nil)
+				return
+			}
+
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			cnx := &Provider{
+				ghClient:      fakeclient,
+				PaginedNumber: defaultPaginedNumber,
+				Logger:        l,
+			}
+			if tt.clock != nil {
+				cnx.clock = tt.clock
+			}
+
+			if tt.setupMux != nil {
+				tt.setupMux(t, mux, tt.event)
+			}
+
+			if fc, ok := tt.clock.(*clockwork.FakeClock); ok {
+				go func() {
+					for range checkRunsFetchMaxRetries {
+						fc.BlockUntilContext(ctx, 1) //nolint:errcheck
+						fc.Advance(time.Second)
+					}
+				}()
+			}
+
+			got, err := cnx.GetCommitStatuses(ctx, tt.event)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, len(got), len(tt.wantStatuses))
+			for i, want := range tt.wantStatuses {
+				assert.Equal(t, got[i].Name, want.Name)
+				assert.Equal(t, got[i].Status, want.Status)
+			}
 		})
 	}
 }

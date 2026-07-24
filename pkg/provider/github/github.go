@@ -380,8 +380,64 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 	return nil
 }
 
-func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
-	return nil, nil
+func (v *Provider) GetCommitStatuses(ctx context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.ghClient == nil {
+		return nil, fmt.Errorf("no github client has been initialized")
+	}
+
+	var (
+		result []provider.CommitStatusInfo
+		seen   = map[string]struct{}{}
+	)
+
+	if event.InstallationID > 0 {
+		checkRuns, err := v.fetchAllCheckRunPagesWithRetry(ctx, event)
+		if err != nil {
+			return nil, err
+		}
+		for _, cr := range checkRuns {
+			status := cr.GetStatus()
+			if status == "completed" {
+				status = cr.GetConclusion()
+			}
+			key := cr.GetName() + "\x00" + status
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, provider.CommitStatusInfo{
+				Name:   cr.GetName(),
+				Status: status,
+			})
+		}
+	} else {
+		opt := &github.ListOptions{PerPage: v.PaginedNumber}
+		for {
+			statuses, resp, err := wrapAPI(v, "list_statuses", func() ([]*github.RepoStatus, *github.Response, error) {
+				return v.Client().Repositories.ListStatuses(ctx, event.Organization, event.Repository, event.SHA, opt)
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range statuses {
+				key := s.GetContext() + "\x00" + s.GetState()
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				result = append(result, provider.CommitStatusInfo{
+					Name:   s.GetContext(),
+					Status: s.GetState(),
+				})
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			opt.Page = resp.NextPage
+		}
+	}
+
+	return result, nil
 }
 
 // GetTektonDir retrieves all YAML files from the .tekton directory and returns them as a single concatenated multi-document YAML file.
