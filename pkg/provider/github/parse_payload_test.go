@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -1630,17 +1631,63 @@ func TestAppTokenGeneration(t *testing.T) {
 		},
 	})
 
+	ctxPinnedHost, _ := rtesting.SetupFakeContext(t)
+	pinnedHost, _ := testclient.SeedTestData(t, ctxPinnedHost, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
+					"github-host":           []byte("github.example.com"),
+				},
+			},
+		},
+	})
+
+	ctxGHE, _ := rtesting.SetupFakeContext(t)
+	gheSecret, _ := testclient.SeedTestData(t, ctxGHE, testclient.Data{
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
+				},
+			},
+		},
+	})
+	ghePayloadEvent := samplePRevent
+	ghePayloadEvent.Installation = &github.Installation{ID: &testInstallationID}
+	gheRepository := *sampleRepo
+	gheRepository.HTMLURL = github.Ptr("https://github.example.com/owner/repo")
+	ghePayloadEvent.Repo = &gheRepository
+	ghePayload, err := json.Marshal(ghePayloadEvent)
+	assert.NilError(t, err)
+
 	tests := []struct {
-		ctx            context.Context
-		ctxNS          string
-		name           string
-		wantErrSubst   string
-		nilClient      bool
-		seedData       testclient.Clients
-		omitSignature  bool
-		enterpriseHost string
-		payload        string
-		wantLogMessage string
+		ctx             context.Context
+		ctxNS           string
+		name            string
+		wantErrSubst    string
+		nilClient       bool
+		seedData        testclient.Clients
+		omitSignature   bool
+		enterpriseHost  string
+		payload         string
+		wantLogMessage  string
+		wantPinnedHost  string
+		wantTokenCalls  int
+		wantProviderURL string
+		wantGHEURL      string
 	}{
 		{
 			name:           "secret not found",
@@ -1665,7 +1712,7 @@ func TestAppTokenGeneration(t *testing.T) {
 			ctxNS:          testNamespace,
 			seedData:       vaildSecret,
 			enterpriseHost: "127.0.0.1:1",
-			wantErrSubst:   `github enterprise host "127.0.0.1:1" does not match repository host "github.com"`,
+			wantErrSubst:   `GitHub enterprise header host "127.0.0.1:1" does not match signed repository host "github.com"`,
 			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
 		},
 		{
@@ -1679,11 +1726,33 @@ func TestAppTokenGeneration(t *testing.T) {
 			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
 		},
 		{
-			ctx:       ctx,
-			name:      "secret found",
-			ctxNS:     testNamespace,
-			seedData:  vaildSecret,
-			nilClient: false,
+			ctx:            ctxPinnedHost,
+			name:           "signed payload conflicts with pinned host",
+			ctxNS:          testNamespace,
+			seedData:       pinnedHost,
+			wantErrSubst:   `authenticated GitHub host "github.com" conflicts with controller-pinned host "github.example.com"`,
+			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+		},
+		{
+			ctx:            ctx,
+			name:           "secret found",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			nilClient:      false,
+			wantPinnedHost: "github.com",
+			wantTokenCalls: 1,
+		},
+		{
+			ctx:             ctxGHE,
+			name:            "authenticated enterprise payload configures event endpoints",
+			ctxNS:           testNamespace,
+			seedData:        gheSecret,
+			enterpriseHost:  "github.example.com",
+			payload:         string(ghePayload),
+			wantPinnedHost:  "github.example.com",
+			wantTokenCalls:  1,
+			wantProviderURL: "https://github.example.com",
+			wantGHEURL:      "https://github.example.com",
 		},
 		{
 			ctx:          ctxInvalidAppID,
@@ -1704,7 +1773,13 @@ func TestAppTokenGeneration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeghclient, mux, serverURL, teardown := ghtesthelper.SetupGH()
 			defer teardown()
+			tokenCalls := 0
 			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+				tokenCalls++
+				_, _ = fmt.Fprint(w, "{}")
+			})
+			mux.HandleFunc(fmt.Sprintf("/api/v3/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+				tokenCalls++
 				_, _ = fmt.Fprint(w, "{}")
 			})
 
@@ -1750,10 +1825,11 @@ func TestAppTokenGeneration(t *testing.T) {
 			tt.ctx = info.StoreCurrentControllerName(tt.ctx, "default")
 			tt.ctx = info.StoreNS(tt.ctx, tt.ctxNS)
 
-			_, err := gprovider.ParsePayload(tt.ctx, run, request, string(jeez))
+			event, err := gprovider.ParsePayload(tt.ctx, run, request, string(jeez))
 			if tt.wantErrSubst != "" {
 				assert.Assert(t, err != nil)
 				assert.ErrorContains(t, err, tt.wantErrSubst)
+				assert.Equal(t, tokenCalls, tt.wantTokenCalls)
 				if tt.wantLogMessage != "" {
 					found := false
 					for _, entry := range observedLogs.All() {
@@ -1767,6 +1843,11 @@ func TestAppTokenGeneration(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+			assert.Equal(t, tokenCalls, tt.wantTokenCalls)
+			if tt.wantProviderURL != "" {
+				assert.Equal(t, tt.wantProviderURL, event.Provider.URL)
+				assert.Equal(t, tt.wantGHEURL, event.GHEURL)
+			}
 			if tt.nilClient {
 				assert.Assert(t, gprovider.Client() == nil)
 				return
@@ -1774,8 +1855,202 @@ func TestAppTokenGeneration(t *testing.T) {
 
 			// Verify client was created successfully for GitHub App
 			assert.Assert(t, gprovider.Client() != nil)
+			if tt.wantPinnedHost != "" {
+				secret, err := tt.seedData.Kube.CoreV1().Secrets(tt.ctxNS).Get(tt.ctx, secretName, metav1.GetOptions{})
+				assert.NilError(t, err)
+				assert.Equal(t, string(secret.Data["github-host"]), tt.wantPinnedHost)
+			}
 		})
 	}
+}
+
+func TestGithubEndpointFromPayload(t *testing.T) {
+	tests := []struct {
+		name           string
+		enterpriseHost string
+		payload        string
+		wantErrSubstr  string
+		wantBaseURL    string
+		wantAPIURL     string
+		wantRepoHost   string
+	}{
+		{
+			name:           "enterprise payload with matching header",
+			enterpriseHost: "ghe.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantBaseURL:    "https://ghe.example.com",
+			wantAPIURL:     "https://ghe.example.com/api/v3",
+			wantRepoHost:   "ghe.example.com",
+		},
+		{
+			name:         "public github payload without enterprise header",
+			payload:      `{"repository":{"html_url":"https://github.com/owner/repo"}}`,
+			wantAPIURL:   "https://api.github.com",
+			wantRepoHost: "github.com",
+		},
+		{
+			name:          "invalid json",
+			payload:       `{`,
+			wantErrSubstr: "unexpected end of JSON input",
+		},
+		{
+			name:          "missing repository URL",
+			payload:       `{"repository":{}}`,
+			wantErrSubstr: "repository HTML URL is missing",
+		},
+		{
+			name:          "rejects insecure repository URL",
+			payload:       `{"repository":{"html_url":"http://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr: "invalid repository URL in GitHub payload",
+		},
+		{
+			name:          "rejects repository URL with userinfo",
+			payload:       `{"repository":{"html_url":"https://user@ghe.example.com/owner/repo"}}`,
+			wantErrSubstr: "invalid repository URL in GitHub payload",
+		},
+		{
+			name:           "rejects invalid enterprise header",
+			enterpriseHost: "http://ghe.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr:  "invalid X-GitHub-Enterprise-Host header",
+		},
+		{
+			name:           "rejects mismatched enterprise header",
+			enterpriseHost: "other.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr:  `does not match signed repository host "ghe.example.com"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, err := githubEndpointFromPayload(tt.enterpriseHost, tt.payload)
+			if tt.wantErrSubstr != "" {
+				assert.ErrorContains(t, err, tt.wantErrSubstr)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantBaseURL, endpoint.BaseURL)
+			assert.Equal(t, tt.wantAPIURL, endpoint.APIURL)
+			assert.Equal(t, tt.wantRepoHost, endpoint.RepositoryHost)
+		})
+	}
+}
+
+func TestParseEventTypeMissingHeader(t *testing.T) {
+	provider := &Provider{}
+	err := provider.parseEventType(&http.Request{Header: http.Header{}}, info.NewEvent())
+	assert.ErrorContains(t, err, "failed to find event type in request header")
+}
+
+func TestValidateAppWebhookSignatureRequiresControllerSecret(t *testing.T) {
+	const (
+		namespace  = "pipelinesascode"
+		secretName = "pipelines-as-code-secret"
+	)
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{},
+		}},
+	})
+	payload := []byte(`{"repository":{"html_url":"https://github.com/owner/repo"}}`)
+	event := info.NewEvent()
+	event.Request = &info.Request{
+		Header:  http.Header{},
+		Payload: payload,
+	}
+	event.Request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature("webhook-secret", payload))
+	run := &params.Run{
+		Clients: clients.Clients{Kube: seedData.Kube},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+		},
+	}
+
+	err := validateAppWebhookSignature(ctx, run, event)
+	assert.ErrorContains(t, err, "no webhook secret has been set in controller secret")
+}
+
+func TestGetAppTokenRejectsHostOutsidePin(t *testing.T) {
+	const (
+		namespace  = "pipelinesascode"
+		secretName = "pipelines-as-code-secret"
+	)
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", server.URL+"/api/v3")
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-host": []byte("github.com"),
+			},
+		}},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: seedData.Kube,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+		},
+	}
+	gprovider := Provider{Run: run}
+
+	_, err := gprovider.GetAppToken(ctx, seedData.Kube, server.URL, 1, namespace)
+	assert.ErrorContains(t, err, "does not match controller-pinned GitHub host")
+	assert.Equal(t, requests, 0)
+}
+
+func TestGetAppTokenRejectsInvalidTokenAPIURL(t *testing.T) {
+	const (
+		namespace  = "pipelinesascode"
+		secretName = "pipelines-as-code-secret"
+	)
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", "https://example.com/api/v3")
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+				"github-host":           []byte("github.com"),
+			},
+		}},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: seedData.Kube,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+		},
+	}
+	gprovider := Provider{Run: run}
+
+	_, err := gprovider.GetAppToken(ctx, seedData.Kube, "", 1, namespace)
+	assert.ErrorContains(t, err, "PAC_GIT_PROVIDER_TOKEN_APIURL must target a loopback IP address")
 }
 
 func TestGetAppTokenScopesRepositoryNames(t *testing.T) {

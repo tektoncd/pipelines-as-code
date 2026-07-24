@@ -68,6 +68,140 @@ func getTestPR(name, state string) *tektonv1.PipelineRun {
 	}
 }
 
+func TestControllerInfoForPipelineRun(t *testing.T) {
+	fallback := &info.ControllerInfo{Name: "default", Secret: "default-secret"}
+	tests := []struct {
+		name       string
+		annotation string
+		fallback   *info.ControllerInfo
+		want       *info.ControllerInfo
+		wantErrSub string
+	}{
+		{
+			name:       "controller annotation",
+			annotation: `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			fallback:   fallback,
+			want: &info.ControllerInfo{
+				Name:             "secondary",
+				Configmap:        "secondary-config",
+				Secret:           "secondary-secret",
+				GlobalRepository: "secondary-global",
+			},
+		},
+		{
+			name:     "fallback controller",
+			fallback: fallback,
+			want:     fallback,
+		},
+		{
+			name:     "default controller without fallback",
+			fallback: nil,
+			want: &info.ControllerInfo{
+				Name:             "default",
+				Configmap:        info.DefaultPipelinesAscodeConfigmapName,
+				Secret:           info.DefaultPipelinesAscodeSecretName,
+				GlobalRepository: info.DefaultGlobalRepoName,
+			},
+		},
+		{
+			name:       "invalid annotation",
+			annotation: "{",
+			fallback:   fallback,
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:       "null annotation",
+			annotation: "null",
+			fallback:   fallback,
+			wantErrSub: "value must not be null",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PAC_CONTROLLER_LABEL", "default")
+			t.Setenv("PAC_CONTROLLER_SECRET", info.DefaultPipelinesAscodeSecretName)
+			t.Setenv("PAC_CONTROLLER_CONFIGMAP", info.DefaultPipelinesAscodeConfigmapName)
+			t.Setenv("PAC_CONTROLLER_GLOBAL_REPOSITORY", info.DefaultGlobalRepoName)
+
+			pr := &tektonv1.PipelineRun{}
+			if tt.annotation != "" {
+				pr.Annotations = map[string]string{keys.ControllerInfo: tt.annotation}
+			}
+			got, err := controllerInfoForPipelineRun(pr, tt.fallback)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.want)
+			if tt.fallback != nil {
+				assert.Assert(t, got != tt.fallback, "controller info must be copied per reconciliation")
+			}
+		})
+	}
+}
+
+func TestFinalizeKindControllerInfoHandling(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		wantErrSub  string
+		wantControl *info.ControllerInfo
+	}{
+		{
+			name:       "invalid controller annotation",
+			annotation: "{",
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:        "controller annotation does not mutate shared run",
+			annotation:  `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			controller := &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"}
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:          kubeinteraction.StateStarted,
+						keys.ControllerInfo: tt.annotation,
+					},
+				},
+			}
+			r := &Reconciler{
+				run: &params.Run{
+					Clients: clients.Clients{Log: logger},
+					Info: info.Info{
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: controller,
+						Pac:        info.NewPacOpts(),
+					},
+				},
+			}
+
+			err := r.FinalizeKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			if tt.wantControl != nil {
+				assert.DeepEqual(t, r.run.Info.Controller, tt.wantControl)
+				assert.Assert(t, r.run.Info.Controller == controller, "finalize must keep the shared controller pointer")
+			}
+		})
+	}
+}
+
 func TestReconcilerFinalizeKind(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	fakelogger := zap.New(observer).Sugar()

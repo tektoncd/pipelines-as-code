@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1263,6 +1264,86 @@ func TestGithubSetClient(t *testing.T) {
 	}
 }
 
+func TestGithubSetClientUsesSignedEnterpriseEndpoint(t *testing.T) {
+	const webhookSecret = "webhook-secret"
+	payload := []byte(`{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`)
+
+	tests := []struct {
+		name           string
+		enterpriseHost string
+		webhookSecret  string
+		signingSecret  string
+		wantErrSub     string
+	}{
+		{
+			name:           "matching signed enterprise host",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+		},
+		{
+			name:           "forged enterprise host",
+			enterpriseHost: "attacker.example",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+			wantErrSub:     `does not match signed repository host "ghe.example.com"`,
+		},
+		{
+			name:           "signature validation fails before endpoint derivation",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  "wrong-secret",
+			wantErrSub:     "payload signature check failed",
+		},
+		{
+			name:           "missing webhook secret fails before endpoint derivation",
+			enterpriseHost: "ghe.example.com",
+			signingSecret:  webhookSecret,
+			wantErrSub:     "no webhook secret has been set",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := info.NewEvent()
+			event.EventType = "pull_request"
+			event.Provider.Token = "pat"
+			event.Provider.WebhookSecret = tt.webhookSecret
+			event.Request = &info.Request{
+				Header:  http.Header{},
+				Payload: payload,
+			}
+			event.Request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature(tt.signingSecret, payload))
+			event.Request.Header.Set("X-GitHub-Enterprise-Host", tt.enterpriseHost)
+
+			testLogger, _ := logger.GetLogger()
+			run := &params.Run{
+				Clients: clients.Clients{Log: testLogger},
+			}
+			provider := &Provider{
+				Logger:  testLogger,
+				pacInfo: &info.PacOpts{},
+			}
+			err := provider.SetClient(
+				context.Background(),
+				run,
+				event,
+				&v1alpha1.Repository{Spec: v1alpha1.RepositorySpec{Settings: &v1alpha1.Settings{}}},
+				nil,
+			)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, "https://ghe.example.com", event.Provider.URL)
+			assert.Equal(t, "https://ghe.example.com", event.GHEURL)
+			assert.Equal(t, "ghe.example.com", provider.Client().BaseURL.Host)
+			assert.Equal(t, "/api/v3/", provider.Client().BaseURL.Path)
+		})
+	}
+}
+
 func TestSetClientFallbackScopesToken(t *testing.T) {
 	testNamespace := "pipelinesascode"
 	secretName := "pipelines-as-code-secret"
@@ -1278,6 +1359,7 @@ func TestSetClientFallbackScopesToken(t *testing.T) {
 				Data: map[string][]byte{
 					"github-application-id": []byte("12345"),
 					"github-private-key":    []byte(fakePrivateKey),
+					"github-host":           []byte("github.example.com"),
 				},
 			},
 		},
@@ -1321,6 +1403,7 @@ func TestSetClientFallbackScopesToken(t *testing.T) {
 			event := info.NewEvent()
 			event.InstallationID = testInstallationID
 			event.Provider.Token = initialToken
+			event.GHEURL = "https://github.example.com"
 
 			testLog, _ := logger.GetLogger()
 			v := Provider{
@@ -1880,6 +1963,63 @@ func TestCreateToken(t *testing.T) {
 	if err != nil {
 		assert.ErrorContains(t, err, "could not refresh installation id 1234567's token")
 	}
+}
+
+func TestCreateTokenUsesEventGHEURLForAppToken(t *testing.T) {
+	const (
+		namespace      = "pipelinesascode"
+		secretName     = "pipelines-as-code-secret"
+		scopedToken    = "ghs_scoped_token"
+		enterpriseHost = "github.example.com"
+	)
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	logger, _ := logger.GetLogger()
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+				"github-host":           []byte(enterpriseHost),
+			},
+		}},
+	})
+	fakeclient, mux, serverURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	tokenRequests := 0
+	mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequests++
+		_, _ = fmt.Fprintf(w, `{"token":%q,"expires_at":"2099-01-01T00:00:00Z"}`, scopedToken)
+	})
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
+	provider := &Provider{
+		Logger:   logger,
+		ghClient: fakeclient,
+		Run: &params.Run{
+			Clients: clients.Clients{
+				Kube: seedData.Kube,
+				Log:  logger,
+			},
+			Info: info.Info{
+				Controller: &info.ControllerInfo{Secret: secretName},
+			},
+		},
+	}
+	event := info.NewEvent()
+	event.Provider.URL = "https://github.com"
+	event.GHEURL = "https://" + enterpriseHost
+	event.InstallationID = testInstallationID
+
+	token, err := provider.CreateToken(ctx, []string{"owner/missing"}, event)
+	assert.NilError(t, err)
+	assert.Equal(t, scopedToken, token)
+	assert.Equal(t, 1, tokenRequests)
 }
 
 func TestGetPullRequest(t *testing.T) {
@@ -2623,61 +2763,90 @@ func TestFetchAppSlug(t *testing.T) {
 		name             string
 		privateKey       []byte
 		applicationID    int64
-		setupMux         func(mux *http.ServeMux)
+		apiURL           string
+		pinnedHost       string
+		tokenAPIURL      string
+		setupMux         func(mux *http.ServeMux, requests *atomic.Int32)
 		wantSlug         string
 		wantErrSubstring string
+		wantRequests     int32
 	}{
 		{
 			name:          "success fetch app slug",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprintf(w, `{"slug": "%s", "name": "My GitHub App"}`, validSlug)
 				})
 			},
-			wantSlug: validSlug,
+			wantSlug:     validSlug,
+			wantRequests: 1,
 		},
 		{
 			name:          "app endpoint returns 404",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					w.WriteHeader(http.StatusNotFound)
 					_, _ = fmt.Fprint(w, `{"message": "Not Found"}`)
 				})
 			},
 			wantErrSubstring: "failed to get app info",
+			wantRequests:     1,
 		},
 		{
 			name:             "invalid private key",
 			privateKey:       []byte("invalid-key"),
 			applicationID:    testAppID,
-			setupMux:         func(_ *http.ServeMux) {},
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
 			wantErrSubstring: "failed to parse private key",
 		},
 		{
 			name:          "app returns empty slug",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprint(w, `{"slug": "", "name": "My GitHub App"}`)
 				})
 			},
-			wantSlug: "",
+			wantSlug:     "",
+			wantRequests: 1,
 		},
 		{
 			name:          "app endpoint returns malformed JSON",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprint(w, `{invalid json`)
 				})
 			},
 			wantErrSubstring: "failed to get app info",
+			wantRequests:     1,
+		},
+		{
+			name:             "rejects untrusted app URL before sending JWT",
+			privateKey:       []byte(fakePrivateKey),
+			applicationID:    testAppID,
+			apiURL:           "https://attacker.example",
+			pinnedHost:       "ghe.example.com",
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
+			wantErrSubstring: "does not match controller-pinned GitHub host",
+		},
+		{
+			name:             "rejects invalid app token test URL",
+			privateKey:       []byte(fakePrivateKey),
+			applicationID:    testAppID,
+			tokenAPIURL:      "https://example.com/api/v3",
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
+			wantErrSubstring: "PAC_GIT_PROVIDER_TOKEN_APIURL must target a loopback IP address",
 		},
 	}
 
@@ -2686,8 +2855,9 @@ func TestFetchAppSlug(t *testing.T) {
 			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 
+			var requests atomic.Int32
 			if tt.setupMux != nil {
-				tt.setupMux(mux)
+				tt.setupMux(mux, &requests)
 			}
 
 			// Set up context with namespace
@@ -2712,6 +2882,9 @@ func TestFetchAppSlug(t *testing.T) {
 					"github-private-key":    tt.privateKey,
 				},
 			}
+			if tt.pinnedHost != "" {
+				testSecret.Data[keys.GithubHost] = []byte(tt.pinnedHost)
+			}
 
 			// Set up test data with kubernetes client
 			tdata := testclient.Data{
@@ -2733,17 +2906,24 @@ func TestFetchAppSlug(t *testing.T) {
 					},
 				},
 			}
+			tokenAPIURL := tt.tokenAPIURL
+			if tokenAPIURL == "" {
+				tokenAPIURL = serverURL + "/api/v3"
+			}
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", tokenAPIURL)
 
-			slug, err := provider.fetchAppSlug(ctx, serverURL)
+			slug, err := provider.fetchAppSlug(ctx, tt.apiURL)
 
 			if tt.wantErrSubstring != "" {
 				assert.Assert(t, err != nil, "expected error but got none")
 				assert.ErrorContains(t, err, tt.wantErrSubstring)
+				assert.Equal(t, tt.wantRequests, requests.Load())
 				return
 			}
 
 			assert.NilError(t, err)
 			assert.Equal(t, slug, tt.wantSlug)
+			assert.Equal(t, tt.wantRequests, requests.Load())
 		})
 	}
 }
