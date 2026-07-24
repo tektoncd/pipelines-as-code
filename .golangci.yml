@@ -116,6 +116,7 @@ linters:
         text: "G115|G117|G702|G703|G704|G705|G706"
     paths:
       - vendor
+      - pkg/generated
       - pkg/provider/gitea/structs
       - third_party$
       - builtin$
@@ -132,6 +133,7 @@ formatters:
     paths:
       - vendor
       - go-build-cache
+      - pkg/generated
       - pkg/provider/gitea/structs
       - third_party$
       - builtin$

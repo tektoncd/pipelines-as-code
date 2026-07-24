@@ -48,7 +48,10 @@ func SetupBBDataCenterClient() (*scm.Client, *http.ServeMux, func(), string) {
 		server.Close()
 	}
 
-	scmClient, _ := stash.New(server.URL)
+	scmClient, err := stash.New(server.URL)
+	if err != nil {
+		panic(fmt.Sprintf("test setup: stash.New(%q): %v", server.URL, err))
+	}
 	scmClient.Client = server.Client()
 	return scmClient, mux, tearDown, server.URL
 }

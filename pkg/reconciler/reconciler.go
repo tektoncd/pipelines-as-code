@@ -54,7 +54,16 @@ var (
 )
 
 func copyRepositoryForMerge(repo *v1alpha1.Repository) *v1alpha1.Repository {
-	repo = repo.DeepCopy()
+	if repo == nil {
+		return nil
+	}
+	// DeepCopy never returns nil for a non-nil receiver (see the generated
+	// implementation's nil-guard), so this can't actually happen.
+	copied := repo.DeepCopy()
+	if copied == nil {
+		return nil
+	}
+	repo = copied
 	if repo.Spec.Settings != nil {
 		settings := *repo.Spec.Settings
 		if settings.Policy != nil {
@@ -317,8 +326,10 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 			secretNS = globalRepo.GetNamespace()
 			inheritedGlobalSecret = true
 		}
-		repo = copyRepositoryForMerge(repo)
-		repo.Spec.Merge(globalRepo.Spec)
+		if merged := copyRepositoryForMerge(repo); merged != nil {
+			repo = merged
+			repo.Spec.Merge(globalRepo.Spec)
+		}
 	}
 
 	cp := customparams.NewCustomParams(event, repo, r.run, r.kinteract, r.eventEmitter, nil)
@@ -365,7 +376,9 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	// LLM Analysis orchestrator checks if it is enabled and if the CEL condition
 	// is matched for the defined roles, defaults to failed PipelineRuns only if
 	// no CEL expression is defined.
-	if err := r.performLLMAnalysis(ctx, logger, repo, newPr, event, provider); err != nil {
+	if newPr == nil {
+		logger.Warn("skipping LLM analysis: no final pipelinerun status available")
+	} else if err := r.performLLMAnalysis(ctx, logger, repo, newPr, event, provider); err != nil {
 		logger.Warnf("LLM analysis failed (non-blocking): %v", err)
 		r.eventEmitter.EmitMessage(repo, zap.WarnLevel, "LLMAnalysisFailed",
 			fmt.Sprintf("AI/LLM analysis failed for repository %s/%s and pipeline run %s: %v", repo.Namespace, repo.Name, newPr.Name, err))
@@ -475,8 +488,10 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 				secretNS = globalRepo.GetNamespace()
 				inheritedGlobalSecret = true
 			}
-			repo = copyRepositoryForMerge(repo)
-			repo.Spec.Merge(globalRepo.Spec)
+			if merged := copyRepositoryForMerge(repo); merged != nil {
+				repo = merged
+				repo.Spec.Merge(globalRepo.Spec)
+			}
 		}
 
 		secretFromRepo := secrets.SecretFromRepository{

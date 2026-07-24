@@ -22,6 +22,9 @@ func (p *PacRun) makeTemplate(ctx context.Context, repo *v1alpha1.Repository, te
 	} else {
 		p.debugf("makeTemplate: resolved %d params and %d changed file groups", len(maptemplate), len(changedFiles))
 	}
+	if maptemplate == nil {
+		maptemplate = map[string]string{}
+	}
 
 	// convert pull request number to string
 	if p.event.PullRequestNumber != 0 {

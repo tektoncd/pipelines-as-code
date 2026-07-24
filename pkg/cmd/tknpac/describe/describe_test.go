@@ -1,6 +1,7 @@
 package describe
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,9 +19,12 @@ import (
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	knativeapis "knative.dev/pkg/apis"
 	knativeduckv1 "knative.dev/pkg/apis/duck/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
@@ -65,11 +69,14 @@ func TestDescribe(t *testing.T) {
 		opts             *describeOpts
 		pruns            []*tektonv1.PipelineRun
 		events           []*corev1.Event
+		eventListErr     error
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name          string
+		args          args
+		wantErr       bool
+		wantErrOutput string
+		skipGolden    bool
 	}{
 		{
 			name: "one live run",
@@ -324,6 +331,22 @@ func TestDescribe(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "repository event list failure is non-blocking",
+			args: args{
+				repoName:         "test-run",
+				currentNamespace: "namespace",
+				opts: &describeOpts{
+					PacCliOpts: cli.PacCliOpts{
+						Namespace: "namespace",
+					},
+					ShowEvents: true,
+				},
+				eventListErr: fmt.Errorf("events is forbidden"),
+			},
+			wantErrOutput: "warning: could not fetch repository events: events is forbidden\n",
+			skipGolden:    true,
+		},
+		{
 			name: "multiple pipelineruns",
 			args: args{
 				opts:             &describeOpts{},
@@ -391,6 +414,11 @@ func TestDescribe(t *testing.T) {
 			}
 			ctx, _ := rtesting.SetupFakeContext(t)
 			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+			if tt.args.eventListErr != nil {
+				stdata.Kube.PrependReactor("list", "events", func(_ k8stesting.Action) (bool, k8sruntime.Object, error) {
+					return true, nil, tt.args.eventListErr
+				})
+			}
 			cs := &params.Run{
 				Clients: clients.Clients{
 					PipelineAsCode: stdata.PipelineAsCode,
@@ -402,11 +430,17 @@ func TestDescribe(t *testing.T) {
 			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
 
 			io, out := tcli.NewIOStream()
-			if err := describe(
+			errOut := &bytes.Buffer{}
+			io.ErrOut = errOut
+			err := describe(
 				ctx, cs, cw, tt.args.opts, io, tt.args.repoName,
-			); (err != nil) != tt.wantErr {
+			)
+			if (err != nil) != tt.wantErr {
 				t.Errorf("describe() error = %v, wantErr %v", err, tt.wantErr)
-			} else {
+				return
+			}
+			assert.Equal(t, tt.wantErrOutput, errOut.String())
+			if !tt.skipGolden {
 				golden.Assert(t, out.String(), strings.ReplaceAll(fmt.Sprintf("%s.golden", t.Name()), "/", "-"))
 			}
 		})

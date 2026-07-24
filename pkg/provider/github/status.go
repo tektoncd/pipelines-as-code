@@ -60,7 +60,7 @@ func (v *Provider) fetchAllCheckRunPages(ctx context.Context, runevent *info.Eve
 			return nil, err
 		}
 		all = append(all, res.CheckRuns...)
-		if resp.NextPage == 0 {
+		if resp == nil || resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage

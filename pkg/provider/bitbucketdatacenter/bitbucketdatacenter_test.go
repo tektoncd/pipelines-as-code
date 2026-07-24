@@ -314,6 +314,7 @@ func TestSetClient(t *testing.T) {
 		wantErrSubstr string
 		muxToken      func(w http.ResponseWriter, r *http.Request)
 		muxUser       func(w http.ResponseWriter, r *http.Request)
+		closeServer   bool
 	}{
 		{
 			name:          "bad/no token",
@@ -438,6 +439,17 @@ func TestSetClient(t *testing.T) {
 			wantErrSubstr: "token validation failed: Internal Server Error",
 		},
 		{
+			name: "transport error at whoami",
+			opts: &info.Event{
+				Provider: &info.Provider{
+					Token: "bar",
+					URL:   "https://fakebitbucketdc",
+				},
+			},
+			closeServer:   true,
+			wantErrSubstr: "token validation failed:",
+		},
+		{
 			name: "good/url append /rest",
 			opts: &info.Event{
 				Provider: &info.Provider{
@@ -465,7 +477,11 @@ func TestSetClient(t *testing.T) {
 			}
 			ctx, _ := rtesting.SetupFakeContext(t)
 			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient()
-			defer tearDown()
+			if tt.closeServer {
+				tearDown()
+			} else {
+				defer tearDown()
+			}
 			if tt.muxToken != nil {
 				mux.HandleFunc("/whoami", tt.muxToken)
 			}
@@ -758,6 +774,11 @@ func TestRemoveLastSegment(t *testing.T) {
 			name:        "path with double slashes",
 			inputURL:    "http://example.com/api//v1/users", // Double slashes in path
 			expectedURL: "http://example.com/api//v1",       // Double slashes are preserved by net/url and strings.Split
+		},
+		{
+			name:        "invalid URL",
+			inputURL:    "http://[::1",
+			expectedURL: "http://[::1",
 		},
 	}
 

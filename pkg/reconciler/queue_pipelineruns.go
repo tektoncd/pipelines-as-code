@@ -49,8 +49,10 @@ func (r *Reconciler) queuePipelineRun(ctx context.Context, logger *zap.SugaredLo
 	// for further concurrency and other operations.
 	if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
 		logger.Info("Merging global repository settings with local repository settings")
-		repo = copyRepositoryForMerge(repo)
-		repo.Spec.Merge(globalRepo.Spec)
+		if merged := copyRepositoryForMerge(repo); merged != nil {
+			repo = merged
+			repo.Spec.Merge(globalRepo.Spec)
+		}
 	}
 
 	// if concurrency was set and later removed or changed to zero

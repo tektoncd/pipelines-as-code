@@ -74,7 +74,10 @@ func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, stri
 		}
 	}
 
-	client, _, _ := github.MakeClient(ctx, apiURL, jwtToken)
+	client, _, _, err := github.MakeClient(ctx, apiURL, jwtToken)
+	if err != nil {
+		return "", "", 0, err
+	}
 	// Directly get the installation for the repository
 	installation, _, err := client.Apps.FindRepositoryInstallation(ctx, owner, repoName)
 	if err != nil {

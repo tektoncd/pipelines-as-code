@@ -267,6 +267,10 @@ Run linters
 make lint
 ```
 
+This runs all configured linters, including NilAway's nil-flow analysis for Go
+production code. The pinned NilAway version is downloaded automatically, so it
+does not need to be installed separately.
+
 3
 
 Or run both together

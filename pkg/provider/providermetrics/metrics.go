@@ -11,6 +11,9 @@ func RecordAPIUsage(logger *zap.SugaredLogger, provider, eventType string, repo 
 	if err != nil {
 		logger.Errorf("Error initializing metrics recorder: %v", err)
 	}
+	if recorder == nil {
+		return
+	}
 	repoName := ""
 	namespace := ""
 	if repo != nil {

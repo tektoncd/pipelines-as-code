@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 
@@ -47,20 +48,24 @@ func detectWebhookSecret(filenames []string) bool {
 // we first try to reuse the one that is already created on cluster with the label matching the repo owner and name
 // we then try to reuse the PAC_PROVIDER_TOKEN env var if it exists
 // if any of the above is not possible, we ask the user to provide the token.
-func makeGitAuthSecret(ctx context.Context, cs *params.Run, filenames []string, token string, params map[string]string) (string, string, error) {
+func makeGitAuthSecret(ctx context.Context, cs *params.Run, errOut io.Writer, filenames []string, token string, params map[string]string) (string, string, error) {
 	allFilenames := listAllYamls(filenames)
 	var ret, basicAuthsecretName string
 	if !detectWebhookSecret(allFilenames) {
 		return "", "", nil
 	}
 
-	if cs.Clients.Kube != nil {
-		list, _ := cs.Clients.Kube.CoreV1().Secrets(cs.Info.Kube.Namespace).List(ctx, metav1.ListOptions{
+	if cs.Clients.Kube != nil && cs.Info.Kube != nil {
+		list, err := cs.Clients.Kube.CoreV1().Secrets(cs.Info.Kube.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s,%s=%s", keys.URLOrg, formatting.CleanValueKubernetes(params["repo_owner"]),
 				keys.URLRepository, formatting.CleanValueKubernetes(params["repo_name"])),
 		})
+		if err != nil {
+			fmt.Fprintf(errOut, "warning: could not list existing git authentication secrets: %v\n", err)
+			list = nil
+		}
 
-		if len(list.Items) > 0 {
+		if list != nil && len(list.Items) > 0 {
 			if tokendata := list.Items[0].Data[gitProviderTokenKey]; string(tokendata) != "" {
 				return "", list.Items[0].GetName(), nil
 			}

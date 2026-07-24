@@ -114,6 +114,7 @@ Create a pull request following our [contribution workflow](#contribution-workfl
 The project uses several tools to maintain code quality:
 
 - **golangci-lint**: Go code linting
+- **NilAway**: Go nil-flow analysis
 - **yamllint**: YAML file validation
 - **markdownlint**: Markdown documentation linting
 - **ruff**: Python code formatting and linting

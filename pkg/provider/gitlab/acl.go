@@ -19,11 +19,30 @@ func (v *Provider) IsAllowedOwnersFile(_ context.Context, event *info.Event) (bo
 	}
 	// OWNERS_ALIASES file existence is not required, if we get "not found" continue
 	ownerAliasesContent, resp, err := v.getObject("OWNERS_ALIASES", event.DefaultBranch, v.targetProjectID)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+	if err := ownersAliasesResponseError(resp, err); err != nil {
 		return false, err
 	}
 	allowed, _ := acl.UserInOwnerFile(string(ownerContent), string(ownerAliasesContent), event.Sender)
 	return allowed, nil
+}
+
+func ownersAliasesResponseError(resp *gitlab.Response, err error) error {
+	if resp == nil || resp.Response == nil {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("gitlab API returned no response for OWNERS_ALIASES")
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code %d while fetching OWNERS_ALIASES", resp.StatusCode)
+	}
+	return nil
 }
 
 func (v *Provider) checkMembership(ctx context.Context, event *info.Event, userid int64) bool {

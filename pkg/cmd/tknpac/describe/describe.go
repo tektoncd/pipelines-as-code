@@ -191,7 +191,11 @@ func describe(ctx context.Context, cs *params.Run, clock clockwork.Clock, opts *
 		if err != nil {
 			return err
 		}
-		events, _ := kinteract.GetEvents(ctx, repository.GetNamespace(), "Repository", repository.GetName())
+		events, err := kinteract.GetEvents(ctx, repository.GetNamespace(), "Repository", repository.GetName())
+		if err != nil {
+			fmt.Fprintf(ioStreams.ErrOut, "warning: could not fetch repository events: %v\n", err)
+			events = &corev1.EventList{}
+		}
 
 		// events to runtime obj
 		runTimeObj := []runtime.Object{}

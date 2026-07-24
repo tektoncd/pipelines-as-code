@@ -275,14 +275,8 @@ func DetectPacInstallation(ctx context.Context, wantedNS string, run *params.Run
 }
 
 func getConfigMap(ctx context.Context, run *params.Run) (*corev1.ConfigMap, error) {
-	var (
-		err            error
-		configMap      *corev1.ConfigMap
-		foundConfigmap bool
-	)
-
 	for _, n := range defaultNamespaces {
-		configMap, err = run.Clients.Kube.CoreV1().ConfigMaps(n).Get(ctx, infoConfigMap, metav1.GetOptions{})
+		configMap, err := run.Clients.Kube.CoreV1().ConfigMaps(n).Get(ctx, infoConfigMap, metav1.GetOptions{})
 		if err != nil {
 			if kapierror.IsNotFound(err) {
 				continue
@@ -293,14 +287,10 @@ func getConfigMap(ctx context.Context, run *params.Run) (*corev1.ConfigMap, erro
 			return nil, err
 		}
 		if configMap != nil && configMap.GetName() != "" {
-			foundConfigmap = true
-			break
+			return configMap, nil
 		}
 	}
-	if !foundConfigmap {
-		return nil, fmt.Errorf("ConfigMap not found in default namespaces (\"openshift-pipelines\", \"pipelines-as-code\")")
-	}
-	return configMap, nil
+	return nil, fmt.Errorf("ConfigMap not found in default namespaces (\"openshift-pipelines\", \"pipelines-as-code\")")
 }
 
 func addGithubAppFlag(cmd *cobra.Command, opts *bootstrapOpts) {

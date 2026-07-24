@@ -47,8 +47,10 @@ func (r *Reconciler) FinalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 		}
 
 		if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
-			repo = copyRepositoryForMerge(repo)
-			repo.Spec.Merge(globalRepo.Spec)
+			if merged := copyRepositoryForMerge(repo); merged != nil {
+				repo = merged
+				repo.Spec.Merge(globalRepo.Spec)
+			}
 		}
 		logger = logger.With("namespace", repo.Namespace)
 		next := r.qm.RemoveAndTakeItemFromQueue(repo, pr)
