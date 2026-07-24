@@ -44,6 +44,7 @@ func Succeeded(ctx context.Context, t *testing.T, runcnx *params.Run, opts optio
 		MinNumberStatus: minNumberStatus,
 		PollTimeout:     DefaultTimeout,
 		TargetSHA:       targetSHA,
+		TargetEventType: sopt.OnEvent,
 	}
 	prs, err := UntilPipelineRunsFinished(ctx, runcnx.Clients, waitOpts)
 	assert.NilError(t, err)

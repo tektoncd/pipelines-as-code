@@ -61,6 +61,12 @@ type Opts struct {
 	PollTimeout     time.Duration
 	AdminNS         string
 	TargetSHA       []string
+	// TargetEventType, when set, restricts UntilPipelineRunsFinished to
+	// PipelineRuns whose EventType annotation matches. This disambiguates
+	// PipelineRuns that share the same SHA but were triggered by different
+	// events (e.g. a pull_request and a pull_request_labeled delivery both
+	// matching an on-label annotation).
+	TargetEventType string
 }
 
 func minNumberStatus(opts Opts) int {
@@ -132,6 +138,16 @@ func UntilPipelineRunCreated(ctx context.Context, clients clients.Clients, opts 
 // after all status reporting and annotation patching (log-url, check-run-id,
 // ...), so waiting on it guarantees those annotations are present — the same
 // ordering the previous wait implementation provided.
+//
+// If TargetEventType is set, MinNumberStatus still counts all finished
+// PipelineRuns (matching the cumulative-count semantics existing callers
+// rely on, e.g. counting PipelineRuns finished across several webhook
+// deliveries), but at least one of the finished PipelineRuns must also carry
+// that EventType, and only PipelineRuns with that EventType are returned.
+// This disambiguates PipelineRuns that share the same SHA but were
+// triggered by different events (e.g. a pull_request and a
+// pull_request_labeled delivery both matching an on-label annotation),
+// without changing the readiness threshold for other callers.
 // Results are sorted by completion time ascending (oldest first, newest last).
 func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opts Opts) ([]v1.PipelineRun, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.PollTimeout)
@@ -148,21 +164,29 @@ func UntilPipelineRunsFinished(ctx context.Context, clients clients.Clients, opt
 			return true, err
 		}
 
-		var finished []v1.PipelineRun
+		var finished, targetFinished []v1.PipelineRun
 		for _, pr := range prs.Items {
 			cond := pr.Status.GetCondition(apis.ConditionSucceeded)
 			state := pr.GetAnnotations()[keys.State]
-			if cond != nil && cond.Status != corev1.ConditionUnknown &&
-				(state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed) {
-				finished = append(finished, pr)
+			if cond == nil || cond.Status == corev1.ConditionUnknown ||
+				(state != kubeinteraction.StateCompleted && state != kubeinteraction.StateFailed) {
+				continue
+			}
+			finished = append(finished, pr)
+			if opts.TargetEventType == "" || pr.GetAnnotations()[keys.EventType] == opts.TargetEventType {
+				targetFinished = append(targetFinished, pr)
 			}
 		}
 
 		clients.Log.Infof("still waiting for %d pipelinerun(s) to finish in %s namespace (finished=%d, total=%d)",
 			minStatus, opts.Namespace, len(finished), len(prs.Items))
-		if len(finished) >= minStatus {
-			SortPipelineRunsByCompletionMillis(finished)
-			matched = finished
+		if len(finished) >= minStatus && (opts.TargetEventType == "" || len(targetFinished) > 0) {
+			result := finished
+			if opts.TargetEventType != "" {
+				result = targetFinished
+			}
+			SortPipelineRunsByCompletionMillis(result)
+			matched = result
 			return true, nil
 		}
 		return false, nil
