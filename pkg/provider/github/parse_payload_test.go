@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -346,6 +347,132 @@ func TestGetPullRequestsWithCommit(t *testing.T) {
 	}
 }
 
+func TestFindOpenPullRequestBySHA(t *testing.T) {
+	tests := []struct {
+		name         string
+		sha          string
+		setup        func(t *testing.T, mux *http.ServeMux)
+		wantPRNumber int
+		wantErr      string
+	}{
+		{
+			name: "single matching open PR",
+			sha:  "forkPRsha",
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/repos/owner/reponame/pulls", func(rw http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(rw, `[
+						{"number": 101, "state": "open", "head": {"sha": "otherSHA"}},
+						{"number": 202, "state": "open", "head": {"sha": "forkPRsha"}}
+					]`)
+				})
+			},
+			wantPRNumber: 202,
+		},
+		{
+			name: "multiple matching open PRs across pages returns ambiguity error",
+			sha:  "ambiguousSHA",
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/repos/owner/reponame/pulls", func(rw http.ResponseWriter, r *http.Request) {
+					switch r.URL.Query().Get("page") {
+					case "", "1":
+						rw.Header().Set("Link", `<https://api.github.com/repos/owner/reponame/pulls?page=2>; rel="next"`)
+						fmt.Fprint(rw, `[{"number": 101, "state": "open", "head": {"sha": "ambiguousSHA"}}]`)
+					case "2":
+						fmt.Fprint(rw, `[{"number": 202, "state": "open", "head": {"sha": "ambiguousSHA"}}]`)
+					default:
+						t.Fatalf("unexpected page %q", r.URL.Query().Get("page"))
+					}
+				})
+			},
+			wantErr: "found 2 open pull requests associated with the commit",
+		},
+		{
+			name: "matching open PR after ten pages",
+			sha:  "lateSHA",
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/repos/owner/reponame/pulls", func(rw http.ResponseWriter, r *http.Request) {
+					page := r.URL.Query().Get("page")
+					if page == "" {
+						page = "1"
+					}
+					pageNumber, err := strconv.Atoi(page)
+					assert.NilError(t, err)
+
+					switch {
+					case pageNumber < 11:
+						rw.Header().Set("Link", fmt.Sprintf(`<https://api.github.com/repos/owner/reponame/pulls?page=%d>; rel="next"`, pageNumber+1))
+						fmt.Fprintf(rw, `[{"number": %d, "state": "open", "head": {"sha": "otherSHA"}}]`, pageNumber)
+					case pageNumber == 11:
+						fmt.Fprint(rw, `[{"number": 303, "state": "open", "head": {"sha": "lateSHA"}}]`)
+					default:
+						t.Fatalf("unexpected page %q", page)
+					}
+				})
+			},
+			wantPRNumber: 303,
+		},
+		{
+			name: "matching open PR before and after ten pages returns ambiguity error",
+			sha:  "lateAmbiguousSHA",
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/repos/owner/reponame/pulls", func(rw http.ResponseWriter, r *http.Request) {
+					page := r.URL.Query().Get("page")
+					if page == "" {
+						page = "1"
+					}
+					pageNumber, err := strconv.Atoi(page)
+					assert.NilError(t, err)
+
+					switch {
+					case pageNumber < 11:
+						rw.Header().Set("Link", fmt.Sprintf(`<https://api.github.com/repos/owner/reponame/pulls?page=%d>; rel="next"`, pageNumber+1))
+						headSHA := "otherSHA"
+						if pageNumber == 1 {
+							headSHA = "lateAmbiguousSHA"
+						}
+						fmt.Fprintf(rw, `[{"number": %d, "state": "open", "head": {"sha": %q}}]`, pageNumber, headSHA)
+					case pageNumber == 11:
+						fmt.Fprint(rw, `[{"number": 303, "state": "open", "head": {"sha": "lateAmbiguousSHA"}}]`)
+					default:
+						t.Fatalf("unexpected page %q", page)
+					}
+				})
+			},
+			wantErr: "found 2 open pull requests associated with the commit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			tt.setup(t, mux)
+
+			logger, _ := logger.GetLogger()
+			provider := &Provider{
+				ghClient: fakeclient,
+				Logger:   logger,
+			}
+
+			pr, err := provider.findOpenPullRequestBySHA(ctx, "owner", "reponame", tt.sha)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+
+			assert.NilError(t, err)
+			assert.Assert(t, pr != nil)
+			assert.Equal(t, tt.wantPRNumber, pr.GetNumber())
+		})
+	}
+}
+
 func TestIsCommitPartOfPullRequest(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -450,6 +577,10 @@ func TestParsePayLoad(t *testing.T) {
 			State:  github.Ptr("open"),
 		},
 	}
+	rerunSender := &github.User{
+		Login: github.Ptr("maintainer"),
+		Type:  github.Ptr("User"),
+	}
 
 	tests := []struct {
 		name                       string
@@ -464,6 +595,10 @@ func TestParsePayLoad(t *testing.T) {
 		targetPipelinerun          string
 		targetCancelPipelinerun    string
 		wantedBranchName           string
+		wantedHeadBranch           string
+		wantedHeadURL              string
+		wantedSender               string
+		wantedUserType             string
 		wantedTagName              string
 		wantedPullRequestNumber    int
 		isCancelPipelineRunEnabled bool
@@ -571,14 +706,17 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckRunEvent{
 				Action: github.Ptr("rerequested"),
 				Repo:   sampleRepo,
+				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
 						PullRequests: []*github.PullRequest{&samplePR},
 					},
 				},
 			},
-			muxReplies: map[string]any{"/repos/owner/reponame/pulls/54321": samplePR},
-			shaRet:     "samplePRsha",
+			muxReplies:     map[string]any{"/repos/owner/reponame/pulls/54321": samplePR},
+			shaRet:         "samplePRsha",
+			wantedSender:   "maintainer",
+			wantedUserType: "User",
 		},
 		// all checks in a check_suite
 		{
@@ -589,12 +727,15 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckSuiteEvent{
 				Action: github.Ptr("rerequested"),
 				Repo:   sampleRepo,
+				Sender: rerunSender,
 				CheckSuite: &github.CheckSuite{
 					PullRequests: []*github.PullRequest{&samplePR},
 				},
 			},
-			muxReplies: map[string]any{"/repos/owner/reponame/pulls/54321": samplePR},
-			shaRet:     "samplePRsha",
+			muxReplies:     map[string]any{"/repos/owner/reponame/pulls/54321": samplePR},
+			shaRet:         "samplePRsha",
+			wantedSender:   "maintainer",
+			wantedUserType: "User",
 		},
 		{
 			name:         "good/rerequest on push",
@@ -603,6 +744,7 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckRunEvent{
 				Action: github.Ptr("rerequested"),
 				Repo:   sampleRepo,
+				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
 						HeadBranch: github.Ptr("main"),
@@ -610,7 +752,9 @@ func TestParsePayLoad(t *testing.T) {
 					},
 				},
 			},
-			shaRet: "headSHACheckSuite",
+			shaRet:         "headSHACheckSuite",
+			wantedSender:   "maintainer",
+			wantedUserType: "User",
 		},
 		{
 			name:          "good/rerequest check_run null head_branch resolves PR from SHA",
@@ -620,6 +764,7 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckRunEvent{
 				Action: github.Ptr("rerequested"),
 				Repo:   sampleRepo,
+				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
 						HeadSHA: github.Ptr("samplePRsha"),
@@ -631,6 +776,236 @@ func TestParsePayLoad(t *testing.T) {
 			},
 			shaRet:                  "samplePRsha",
 			wantedPullRequestNumber: 54321,
+			wantedSender:            "maintainer",
+			wantedUserType:          "User",
+		},
+		{
+			name:          "good/rerequest check_run resolves PR from check_run pull requests",
+			eventType:     "check_run",
+			githubClient:  true,
+			triggerTarget: string(triggertype.PullRequest),
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				Sender: rerunSender,
+				CheckRun: &github.CheckRun{
+					PullRequests: []*github.PullRequest{&samplePR},
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("samplePRsha"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/54321": samplePR,
+			},
+			shaRet:                  "samplePRsha",
+			wantedPullRequestNumber: 54321,
+			wantedSender:            "maintainer",
+			wantedUserType:          "User",
+		},
+		{
+			name:          "bad/rerequest check_run with multiple pull requests in payload",
+			eventType:     "check_run",
+			githubClient:  true,
+			wantErrString: "cannot determine pull request for check_run rerequest: found 2 associated pull requests in webhook payload",
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					PullRequests: []*github.PullRequest{
+						&samplePR,
+						&samplePRAnother,
+					},
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("samplePRsha"),
+					},
+				},
+			},
+			shaRet: "samplePRsha",
+		},
+		{
+			name:          "bad/rerequest check_run with multiple check suite pull requests in payload",
+			eventType:     "check_run",
+			githubClient:  true,
+			wantErrString: "cannot determine pull request for check_run rerequest: found 2 associated pull requests in webhook payload",
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						PullRequests: []*github.PullRequest{
+							&samplePR,
+							&samplePRAnother,
+						},
+						HeadSHA: github.Ptr("samplePRsha"),
+					},
+				},
+			},
+			shaRet: "samplePRsha",
+		},
+		{
+			name:          "bad/rerequest check_suite with multiple pull requests in payload",
+			eventType:     "check_suite",
+			githubClient:  true,
+			wantErrString: "cannot determine pull request for check_suite rerequest: found 2 associated pull requests in webhook payload",
+			payloadEventStruct: github.CheckSuiteEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckSuite: &github.CheckSuite{
+					PullRequests: []*github.PullRequest{
+						&samplePR,
+						&samplePRAnother,
+					},
+					HeadSHA: github.Ptr("samplePRsha"),
+				},
+			},
+			shaRet: "samplePRsha",
+		},
+		{
+			name:          "good/rerequest check_run null head_branch resolves fork PR from open PR list",
+			eventType:     "check_run",
+			githubClient:  true,
+			triggerTarget: string(triggertype.PullRequest),
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				Sender: rerunSender,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("forkPRsha"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/forkPRsha/pulls": []*github.PullRequest{},
+				"/repos/owner/reponame/pulls": []*github.PullRequest{
+					{
+						Number:  github.Ptr(987),
+						State:   github.Ptr("open"),
+						HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/987"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("forkPRsha"),
+							Ref: github.Ptr("fork-feature"),
+							Repo: &github.Repository{
+								Owner: &github.User{
+									Login: github.Ptr("fork-owner"),
+								},
+								Name:    github.Ptr("reponame"),
+								HTMLURL: github.Ptr("https://github.com/fork-owner/reponame"),
+							},
+						},
+						Base: &github.PullRequestBranch{
+							Ref:  github.Ptr("main"),
+							SHA:  github.Ptr("basesha"),
+							Repo: sampleRepo,
+						},
+						User: &github.User{
+							Login: github.Ptr("fork-contributor"),
+						},
+						Title: github.Ptr("fork PR"),
+					},
+				},
+			},
+			shaRet:                  "forkPRsha",
+			wantedPullRequestNumber: 987,
+			wantedHeadBranch:        "fork-feature",
+			wantedHeadURL:           "https://github.com/fork-owner/reponame",
+			wantedSender:            "maintainer",
+			wantedUserType:          "User",
+		},
+		{
+			name:          "good/rerequest check_run ignores commit API PR when SHA is not PR head",
+			eventType:     "check_run",
+			githubClient:  true,
+			triggerTarget: string(triggertype.PullRequest),
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				Sender: rerunSender,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("forkPRsha"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/forkPRsha/pulls": []*github.PullRequest{
+					{
+						Number: github.Ptr(654),
+						State:  github.Ptr("open"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("newerSHA"),
+						},
+					},
+				},
+				"/repos/owner/reponame/pulls": []*github.PullRequest{
+					{
+						Number:  github.Ptr(987),
+						State:   github.Ptr("open"),
+						HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/987"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("forkPRsha"),
+							Ref: github.Ptr("fork-feature"),
+							Repo: &github.Repository{
+								Owner: &github.User{
+									Login: github.Ptr("fork-owner"),
+								},
+								Name:    github.Ptr("reponame"),
+								HTMLURL: github.Ptr("https://github.com/fork-owner/reponame"),
+							},
+						},
+						Base: &github.PullRequestBranch{
+							Ref:  github.Ptr("main"),
+							SHA:  github.Ptr("basesha"),
+							Repo: sampleRepo,
+						},
+						User: &github.User{
+							Login: github.Ptr("fork-contributor"),
+						},
+						Title: github.Ptr("fork PR"),
+					},
+				},
+			},
+			shaRet:                  "forkPRsha",
+			wantedPullRequestNumber: 987,
+			wantedHeadBranch:        "fork-feature",
+			wantedHeadURL:           "https://github.com/fork-owner/reponame",
+			wantedSender:            "maintainer",
+			wantedUserType:          "User",
+		},
+		{
+			name:          "bad/rerequest check_run null head_branch ambiguous fallback PRs found",
+			eventType:     "check_run",
+			githubClient:  true,
+			wantErrString: "found 2 open pull requests associated with the commit",
+			payloadEventStruct: github.CheckRunEvent{
+				Action: github.Ptr("rerequested"),
+				Repo:   sampleRepo,
+				CheckRun: &github.CheckRun{
+					CheckSuite: &github.CheckSuite{
+						HeadSHA: github.Ptr("ambiguousFallbackSHA"),
+					},
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/commits/ambiguousFallbackSHA/pulls": []*github.PullRequest{},
+				"/repos/owner/reponame/pulls": []*github.PullRequest{
+					{
+						Number: github.Ptr(301),
+						State:  github.Ptr("open"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("ambiguousFallbackSHA"),
+						},
+					},
+					{
+						Number: github.Ptr(302),
+						State:  github.Ptr("open"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("ambiguousFallbackSHA"),
+						},
+					},
+				},
+			},
 		},
 		{
 			name:          "good/rerequest check_suite null head_branch resolves PR from SHA",
@@ -640,6 +1015,7 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CheckSuiteEvent{
 				Action: github.Ptr("rerequested"),
 				Repo:   sampleRepo,
+				Sender: rerunSender,
 				CheckSuite: &github.CheckSuite{
 					HeadSHA: github.Ptr("samplePRsha"),
 				},
@@ -649,6 +1025,8 @@ func TestParsePayLoad(t *testing.T) {
 			},
 			shaRet:                  "samplePRsha",
 			wantedPullRequestNumber: 54321,
+			wantedSender:            "maintainer",
+			wantedUserType:          "User",
 		},
 		{
 			name:          "bad/rerequest check_run null head_branch no PR found",
@@ -666,6 +1044,7 @@ func TestParsePayLoad(t *testing.T) {
 			},
 			muxReplies: map[string]any{
 				"/repos/owner/reponame/commits/orphanSHA/pulls": []*github.PullRequest{},
+				"/repos/owner/reponame/pulls":                   []*github.PullRequest{},
 			},
 		},
 		{
@@ -682,6 +1061,7 @@ func TestParsePayLoad(t *testing.T) {
 			},
 			muxReplies: map[string]any{
 				"/repos/owner/reponame/commits/orphanSHA/pulls": []*github.PullRequest{},
+				"/repos/owner/reponame/pulls":                   []*github.PullRequest{},
 			},
 		},
 		{
@@ -705,6 +1085,7 @@ func TestParsePayLoad(t *testing.T) {
 						State:  github.Ptr("closed"),
 					},
 				},
+				"/repos/owner/reponame/pulls": []*github.PullRequest{},
 			},
 		},
 		{
@@ -724,10 +1105,16 @@ func TestParsePayLoad(t *testing.T) {
 					{
 						Number: github.Ptr(101),
 						State:  github.Ptr("open"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("ambiguousSHA"),
+						},
 					},
 					{
 						Number: github.Ptr(202),
 						State:  github.Ptr("open"),
+						Head: &github.PullRequestBranch{
+							SHA: github.Ptr("ambiguousSHA"),
+						},
 					},
 				},
 			},
@@ -1551,6 +1938,18 @@ func TestParsePayLoad(t *testing.T) {
 				assert.Equal(t, tt.wantedBranchName, ret.HeadBranch)
 				assert.Equal(t, tt.wantedBranchName, ret.BaseBranch)
 				assert.Equal(t, tt.isCancelPipelineRunEnabled, ret.CancelPipelineRuns)
+			}
+			if tt.wantedHeadBranch != "" {
+				assert.Equal(t, tt.wantedHeadBranch, ret.HeadBranch)
+			}
+			if tt.wantedHeadURL != "" {
+				assert.Equal(t, tt.wantedHeadURL, ret.HeadURL)
+			}
+			if tt.wantedSender != "" {
+				assert.Equal(t, tt.wantedSender, ret.Sender)
+			}
+			if tt.wantedUserType != "" {
+				assert.Equal(t, tt.wantedUserType, gprovider.userType)
 			}
 			if tt.wantedPullRequestNumber != 0 {
 				assert.Equal(t, tt.wantedPullRequestNumber, ret.PullRequestNumber)

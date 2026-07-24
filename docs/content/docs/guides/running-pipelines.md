@@ -183,4 +183,10 @@ re-executes the PipelineRun.
 
 You can rerun a specific pipeline or the entire suite of checks.
 
+Re-runs also work for pull requests coming from forks.
+
+The re-run is attributed to the user who clicked the "Re-Run" button, and that
+user must be authorized to run CI on the repository according to the
+[policy]({{< relref "/docs/advanced/policy-authorization" >}}) or ACL rules.
+
 ![github apps rerun check](/images/github-apps-rerun-checks.png)

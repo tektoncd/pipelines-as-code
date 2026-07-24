@@ -20,7 +20,11 @@ import (
 )
 
 // TestGithubPullRerequest is a test that will create a pull request and check
-// if we can rerequest a specific check or the full check suite.
+// if we can rerequest a specific check or the full check suite. It also
+// covers the fork PR re-run recovery cases: resolving the PR from the SHA
+// when head_branch/pull_requests are missing from the check_suite payload,
+// and resolving the PR from pull_requests data attached directly to the
+// check_run event (as GitHub sometimes only populates it there).
 func TestGithubGHEPullRerequest(t *testing.T) {
 	ctx := context.TODO()
 	g := &tgithub.PRTest{
@@ -194,5 +198,62 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	assert.Assert(t, len(prs) >= 3, "no successful pipelineruns found")
 
 	g.Cnx.Clients.Log.Infof("Check if the third run succeeded (null head_branch case)")
+	assert.Assert(t, prs[len(prs)-1].Status.Conditions[0].Status == corev1.ConditionTrue)
+
+	// Fourth rerequest: pull_requests data attached directly to the
+	// check_run event (not check_suite) — this is what GitHub sends for
+	// re-runs on fork PRs when it omits the pull_requests on check_suite.
+	g.Cnx.Clients.Log.Infof("Sending check_run rerequest with pull_requests attached directly to check_run")
+	directPREvent := github.CheckRunEvent{
+		Action: github.Ptr("rerequested"),
+		Installation: &github.Installation{
+			ID: &installID,
+		},
+		CheckRun: &github.CheckRun{
+			CheckSuite: &github.CheckSuite{
+				HeadBranch:   &runinfo.HeadBranch,
+				HeadSHA:      &runinfo.SHA,
+				PullRequests: []*github.PullRequest{},
+			},
+			PullRequests: []*github.PullRequest{
+				{
+					Number: github.Ptr(g.PRNumber),
+				},
+			},
+		},
+		Repo: &github.Repository{
+			DefaultBranch: &runinfo.DefaultBranch,
+			HTMLURL:       &runinfo.URL,
+			Name:          &runinfo.Repository,
+			Owner:         &github.User{Login: &runinfo.Organization},
+		},
+		Sender: &github.User{
+			Login: &runinfo.Sender,
+		},
+	}
+
+	err = payload.Send(
+		ctx,
+		g.Cnx,
+		os.Getenv("TEST_GITHUB_SECOND_EL_URL"),
+		os.Getenv("TEST_GITHUB_SECOND_WEBHOOK_SECRET"),
+		os.Getenv("TEST_GITHUB_SECOND_API_URL"),
+		os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"),
+		directPREvent,
+		"check_run",
+	)
+	assert.NilError(t, err)
+
+	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed (PR resolved from check_run.pull_requests)")
+	prs, err = twait.UntilPipelineRunsFinished(ctx, g.Cnx.Clients, twait.Opts{
+		Namespace:       g.TargetNamespace,
+		MinNumberStatus: 4,
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{g.SHA},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, len(prs) >= 4, "no successful pipelineruns found")
+
+	g.Cnx.Clients.Log.Infof("Check if the fourth run succeeded (check_run.pull_requests case)")
 	assert.Assert(t, prs[len(prs)-1].Status.Conditions[0].Status == corev1.ConditionTrue)
 }
