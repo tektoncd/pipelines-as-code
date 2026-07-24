@@ -125,9 +125,9 @@ spec:
           - name: package
             value: github.com/tektoncd/pipelines-as-code
           - name: github-token-secret
-            value: "nightly-ci-github-hub-token"
+            value: "{{ git_auth_secret }}"
           - name: github-token-secret-key
-            value: "hub-token"
+            value: "git-provider-token"
         workspaces:
           - name: source
             workspace: source
