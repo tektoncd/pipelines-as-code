@@ -11,6 +11,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	bbcloudtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/test"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
@@ -391,6 +392,101 @@ func TestCreateStatus(t *testing.T) {
 
 			err := v.CreateStatus(ctx, event, tt.status)
 			assert.NilError(t, err)
+		})
+	}
+}
+
+func TestGetCommitStatuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		noClient     bool
+		statuses     []types.Status
+		wantErr      bool
+		wantStatuses []provider.CommitStatusInfo
+	}{
+		{
+			name:     "nil client returns error",
+			noClient: true,
+			wantErr:  true,
+		},
+		{
+			name: "statuses with mixed states",
+			statuses: []types.Status{
+				{Key: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+				{Key: "Pipelines as Code CI / test", State: "FAILED"},
+				{Key: "Pipelines as Code CI / build", State: "INPROGRESS"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "successful"},
+				{Name: "Pipelines as Code CI / test", Status: "failed"},
+				{Name: "Pipelines as Code CI / build", Status: "inprogress"},
+			},
+		},
+		{
+			name: "deduplication removes duplicate key and status pairs",
+			statuses: []types.Status{
+				{Key: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+				{Key: "Pipelines as Code CI / lint", State: "SUCCESSFUL"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "Pipelines as Code CI / lint", Status: "successful"},
+			},
+		},
+		{
+			name:         "empty statuses",
+			statuses:     []types.Status{},
+			wantStatuses: nil,
+		},
+		{
+			name: "raw key without prefix returned as-is",
+			statuses: []types.Status{
+				{Key: "my-very-long-pipeline-run-name", State: "SUCCESSFUL"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "my-very-long-pipeline-run-name", Status: "successful"},
+			},
+		},
+		{
+			name: "truncated key with hash returned as-is",
+			statuses: []types.Status{
+				{Key: "ccccccccccccccccccccccccccccccccc-5de6bf", State: "SUCCESSFUL"},
+			},
+			wantStatuses: []provider.CommitStatusInfo{
+				{Name: "ccccccccccccccccccccccccccccccccc-5de6bf", Status: "successful"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+
+			if tt.noClient {
+				v := &Provider{}
+				_, err := v.GetCommitStatuses(ctx, bbcloudtest.MakeEvent(nil))
+				assert.Assert(t, err != nil)
+				return
+			}
+
+			bbclient, mux, tearDown := bbcloudtest.SetupBBCloudClient(t)
+			defer tearDown()
+
+			event := bbcloudtest.MakeEvent(nil)
+			bbcloudtest.MuxListCommitStatuses(t, mux, event, tt.statuses)
+
+			v := &Provider{bbClient: bbclient}
+
+			got, err := v.GetCommitStatuses(ctx, event)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, len(got), len(tt.wantStatuses))
+			for i, want := range tt.wantStatuses {
+				assert.Equal(t, got[i].Name, want.Name)
+				assert.Equal(t, got[i].Status, want.Status)
+			}
 		})
 	}
 }

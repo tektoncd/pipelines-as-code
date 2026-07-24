@@ -226,6 +226,17 @@ func MuxCreateComment(t *testing.T, mux *http.ServeMux, event *info.Event, expec
 	})
 }
 
+func MuxListCommitStatuses(t *testing.T, mux *http.ServeMux, event *info.Event, statuses []types.Status) {
+	t.Helper()
+	path := fmt.Sprintf("/repositories/%s/%s/commit/%s/statuses", event.Organization, event.Repository, event.SHA)
+	mux.HandleFunc(path, func(rw http.ResponseWriter, _ *http.Request) {
+		resp := &types.Statuses{Values: statuses}
+		b, err := json.Marshal(resp)
+		assert.NilError(t, err)
+		fmt.Fprint(rw, string(b))
+	})
+}
+
 func MuxDirContent(t *testing.T, mux *http.ServeMux, event *info.Event, testdir, provenance string) {
 	t.Helper()
 	files, err := os.ReadDir(testdir)

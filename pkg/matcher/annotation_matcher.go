@@ -19,6 +19,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 
 	"github.com/gobwas/glob"
 	"github.com/google/cel-go/common/types"
@@ -491,32 +492,63 @@ func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, c
 		}
 	}
 
-	// Also check provider commit statuses (covers pruned PipelineRuns)
+	// Also check provider commit statuses (covers pruned PipelineRuns).
+	// Two matching strategies are used:
+	// - parseOriginalPRName: strips the "AppName / " prefix to recover the
+	//   template name. Works for all providers and for Bitbucket Cloud when
+	//   the combined key fits within the 40-char limit.
+	// - GetBBCloudStatusKey fallback: computes the status key each template
+	//   would have produced and matches against the raw status keys. Handles
+	//   Bitbucket Cloud where the key is truncated (no prefix or hash suffix)
+	//   and parseOriginalPRName returns "".
 	commitStatuses, err := vcx.GetCommitStatuses(ctx, event)
 	if err != nil {
 		logger.Warnf("failed to get commit statuses from provider for SHA %s: %v", event.SHA, err)
-	} else if len(commitStatuses) > 0 {
-		appName := cs.Info.GetPacOpts().ApplicationName
-		for _, cs := range commitStatuses {
-			originalName := parseOriginalPRName(cs.Name, appName)
-			if originalName != "" && isSuccessStatus(cs.Status) {
-				successfulTemplates[originalName] = &tektonv1.PipelineRun{} // placeholder
-			}
+	}
+
+	var pacOpts info.PacOpts
+	if cs.Info.Pac != nil {
+		pacOpts = cs.Info.GetPacOpts()
+	}
+	successfulStatusKeys := map[string]struct{}{}
+	for _, cs := range commitStatuses {
+		if !isSuccessStatus(cs.Status) {
+			continue
+		}
+		successfulStatusKeys[cs.Name] = struct{}{}
+		if originalName := parseOriginalPRName(cs.Name, pacOpts.ApplicationName); originalName != "" {
+			successfulTemplates[originalName] = &tektonv1.PipelineRun{} // placeholder
 		}
 	}
 
-	// Filter out templates that have successful runs
 	var filteredPRs []Match
 
 	for _, match := range matchedPRs {
 		templateName := getName(match.PipelineRun)
 
 		if successfulPR, hasSuccessfulRun := successfulTemplates[templateName]; hasSuccessfulRun {
-			logger.Infof("skipping template '%s' for sha %s as it already has a successful pipelinerun '%s'",
-				templateName, event.SHA, successfulPR.Name)
-		} else {
-			filteredPRs = append(filteredPRs, match)
+			logger.Infof(
+				"skipping template '%s' for sha %s as it already has a successful pipelinerun '%s'",
+				templateName, event.SHA, successfulPR.Name,
+			)
+			continue
 		}
+
+		if vcx.GetConfig().Name == "bitbucket-cloud" && len(successfulStatusKeys) > 0 {
+			bbKey := provider.GetBBCloudStatusKey(
+				providerstatus.StatusOpts{OriginalPipelineRunName: templateName},
+				&pacOpts,
+			)
+			if _, ok := successfulStatusKeys[bbKey]; ok {
+				logger.Infof(
+					"skipping template '%s' for sha %s as it already has a successful commit status (key: %s)",
+					templateName, event.SHA, bbKey,
+				)
+				continue
+			}
+		}
+
+		filteredPRs = append(filteredPRs, match)
 	}
 
 	// Return the filtered list (which may be empty if all templates were skipped)

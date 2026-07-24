@@ -162,8 +162,44 @@ func (v *Provider) CreateStatus(_ context.Context, event *info.Event, statusopts
 	return nil
 }
 
-func (v *Provider) GetCommitStatuses(_ context.Context, _ *info.Event) ([]provider.CommitStatusInfo, error) {
-	return nil, nil
+func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]provider.CommitStatusInfo, error) {
+	if v.bbClient == nil {
+		return nil, fmt.Errorf("no token has been set, cannot get commit statuses")
+	}
+
+	response, err := v.Client().Repositories.Commits.GetCommitStatuses(&bitbucket.CommitsOptions{
+		Owner:    event.Organization,
+		RepoSlug: event.Repository,
+		Revision: event.SHA,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	statuses := &types.Statuses{}
+	err = mapstructure.Decode(response, statuses)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		result []provider.CommitStatusInfo
+		seen   = map[string]struct{}{}
+	)
+	for _, s := range statuses.Values {
+		st := strings.ToLower(s.State)
+		key := fmt.Sprintf("%s\x00%s", s.Key, st)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, provider.CommitStatusInfo{
+			Name:   s.Key,
+			Status: st,
+		})
+	}
+
+	return result, nil
 }
 
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
