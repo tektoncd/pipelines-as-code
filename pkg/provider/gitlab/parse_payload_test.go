@@ -27,6 +27,11 @@ import (
 )
 
 func TestParsePayload(t *testing.T) {
+	const (
+		zeroSHA         = "0000000000000000000000000000000000000000"
+		branchCreateSHA = "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e"
+		checkoutSHA     = "1111111111111111111111111111111111111111"
+	)
 	sample := thelp.TEvent{
 		Username:          "foo",
 		DefaultBranch:     "main",
@@ -42,6 +47,29 @@ func TestParsePayload(t *testing.T) {
 		SourceProjectID:   200,
 		PathWithNameSpace: "hello/this/is/me/ze/project",
 	}
+	multiCommitPayload := fmt.Sprintf(`{
+    "user_username": %q,
+    "project_id": %d,
+    "user_id": %d,
+    "ref": "refs/heads/main",
+    "project": {
+        "default_branch": %q,
+        "web_url": %q,
+        "path_with_namespace": %q
+    },
+    "commits": [
+        {
+            "id": "1111111111111111111111111111111111111111",
+            "url": "https://gitlab.example/commit/11111111",
+            "title": "first commit"
+        },
+        {
+            "id": "2222222222222222222222222222222222222222",
+            "url": "https://gitlab.example/commit/22222222",
+            "title": "second commit"
+        }
+    ]
+}`, sample.Username, sample.TargetProjectID, sample.UserID, sample.DefaultBranch, sample.URL, sample.PathWithNameSpace)
 	type fields struct {
 		targetProjectID int
 		sourceProjectID int
@@ -113,6 +141,94 @@ func TestParsePayload(t *testing.T) {
 			wantErrMsg: "no commits attached to this push event",
 		},
 		{
+			name: "push event creates branch without commits",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					zeroSHA,
+					branchCreateSHA,
+					checkoutSHA,
+					"refs/heads/release-0.1",
+				),
+			},
+			want: &info.Event{
+				EventType:                 "push",
+				TriggerTarget:             triggertype.Push,
+				Organization:              "hello/this/is/me/ze",
+				Repository:                "project",
+				SHA:                       branchCreateSHA,
+				HeadBranch:                "refs/heads/release-0.1",
+				BaseBranch:                "refs/heads/release-0.1",
+				CommitMetadataIncomplete:  true,
+				PipelineRunSourceRevision: branchCreateSHA,
+			},
+		},
+		{
+			name: "push event deletes branch without commits",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					branchCreateSHA,
+					zeroSHA,
+					"",
+					"refs/heads/release-0.1",
+				),
+			},
+			wantErrMsg: "no commits attached to this push event",
+		},
+		{
+			name: "push event without commits is not branch creation when before is nonzero",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					checkoutSHA,
+					branchCreateSHA,
+					branchCreateSHA,
+					"refs/heads/release-0.1",
+				),
+			},
+			wantErrMsg: "no commits attached to this push event",
+		},
+		{
+			name: "push event without commits rejects tag ref",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					zeroSHA,
+					branchCreateSHA,
+					branchCreateSHA,
+					"refs/tags/v0.0.1",
+				),
+			},
+			wantErrMsg: "no commits attached to this push event",
+		},
+		{
+			name: "push event without commits rejects empty branch name",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					zeroSHA,
+					branchCreateSHA,
+					branchCreateSHA,
+					"refs/heads/",
+				),
+			},
+			wantErrMsg: "no commits attached to this push event",
+		},
+		{
+			name: "push event without commits rejects invalid after SHA",
+			args: args{
+				event: gitlab.EventTypePush,
+				payload: sample.PushEventWithoutCommitsAsJSON(
+					zeroSHA,
+					"not-a-commit",
+					"not-a-commit",
+					"refs/heads/release-0.1",
+				),
+			},
+			wantErrMsg: "no commits attached to this push event",
+		},
+		{
 			name: "push event",
 			args: args{
 				event:   gitlab.EventTypePush,
@@ -123,6 +239,25 @@ func TestParsePayload(t *testing.T) {
 				TriggerTarget: "push",
 				Organization:  "hello/this/is/me/ze",
 				Repository:    "project",
+				SHA:           "sha",
+				SHATitle:      "commit it",
+				SHAURL:        "https://url",
+			},
+		},
+		{
+			name: "push event with multiple commits uses the last commit",
+			args: args{
+				event:   gitlab.EventTypePush,
+				payload: multiCommitPayload,
+			},
+			want: &info.Event{
+				EventType:     "push",
+				TriggerTarget: triggertype.Push,
+				Organization:  "hello/this/is/me/ze",
+				Repository:    "project",
+				SHA:           "2222222222222222222222222222222222222222",
+				SHATitle:      "second commit",
+				SHAURL:        "https://gitlab.example/commit/22222222",
 			},
 		},
 		{
@@ -510,6 +645,17 @@ func TestParsePayload(t *testing.T) {
 				if tt.want.BaseBranch != "" {
 					assert.Equal(t, tt.want.BaseBranch, got.BaseBranch)
 				}
+				if tt.want.SHA != "" {
+					assert.Equal(t, tt.want.SHA, got.SHA)
+				}
+				if tt.want.EventType == "push" && tt.want.SHATitle != "" {
+					assert.Equal(t, tt.want.SHATitle, got.SHATitle)
+				}
+				if tt.want.EventType == "push" && tt.want.SHAURL != "" {
+					assert.Equal(t, tt.want.SHAURL, got.SHAURL)
+				}
+				assert.Equal(t, tt.want.CommitMetadataIncomplete, got.CommitMetadataIncomplete)
+				assert.Equal(t, tt.want.PipelineRunSourceRevision, got.PipelineRunSourceRevision)
 			}
 		})
 	}

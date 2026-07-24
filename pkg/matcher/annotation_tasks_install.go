@@ -26,10 +26,11 @@ const (
 )
 
 type RemoteTasks struct {
-	Run               *params.Run
-	ProviderInterface provider.Interface
-	Event             *info.Event
-	Logger            *zap.SugaredLogger
+	Run                *params.Run
+	ProviderInterface  provider.Interface
+	Event              *info.Event
+	Logger             *zap.SugaredLogger
+	RepositoryRevision string
 }
 
 // nolint: dupl
@@ -138,7 +139,7 @@ func (rt *RemoteTasks) getRemote(ctx context.Context, uri string, fromHub bool, 
 		var data string
 		var err error
 		if rt.Event.SHA != "" {
-			data, err = rt.ProviderInterface.GetFileInsideRepo(ctx, rt.Event, uri, "")
+			data, err = rt.ProviderInterface.GetFileInsideRepo(ctx, rt.Event, uri, rt.RepositoryRevision)
 			if err != nil {
 				return "", err
 			}

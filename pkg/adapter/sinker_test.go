@@ -2,19 +2,25 @@ package adapter
 
 import (
 	"context"
+	"fmt"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	testprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
+	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -202,6 +208,187 @@ type trackingProviderImpl struct {
 
 func (t *trackingProviderImpl) CreateToken(_ context.Context, _ []string, _ *info.Event) (string, error) {
 	return "fake-token", nil
+}
+
+type commitInfoProvider struct {
+	testprovider.TestProviderImp
+	commitInfoCalls   int
+	commitTitle       string
+	commitMessage     string
+	commitInfoFailure bool
+	statusCalls       int
+	lastStatus        providerstatus.StatusOpts
+}
+
+func (p *commitInfoProvider) GetCommitInfo(_ context.Context, event *info.Event) error {
+	p.commitInfoCalls++
+	if p.commitInfoFailure {
+		return fmt.Errorf("commit lookup failed")
+	}
+	event.SHATitle = p.commitTitle
+	event.SHAMessage = p.commitMessage
+	event.HasSkipCommand = provider.SkipCI(p.commitMessage)
+	event.CommitMetadataIncomplete = false
+	return nil
+}
+
+func (p *commitInfoProvider) CreateStatus(_ context.Context, _ *info.Event, status providerstatus.StatusOpts) error {
+	p.statusCalls++
+	p.lastStatus = status
+	return nil
+}
+
+func TestShouldSkipPushEvent(t *testing.T) {
+	tests := []struct {
+		name              string
+		event             *info.Event
+		commitTitle       string
+		commitMessage     string
+		commitInfoFailure bool
+		wantSkip          bool
+		wantErr           string
+		wantCalls         int
+	}{
+		{
+			name: "ordinary push with skip command uses payload metadata",
+			event: &info.Event{
+				EventType: "push",
+				SHA:       "abc123",
+				SHATitle:  "fix: bug [skip ci]",
+				SHAURL:    "https://gitlab.example/commit/abc123",
+			},
+			wantSkip: true,
+		},
+		{
+			name: "ordinary push without skip command makes no API call",
+			event: &info.Event{
+				EventType: "push",
+				SHA:       "abc123",
+				SHATitle:  "fix: bug",
+				SHAURL:    "https://gitlab.example/commit/abc123",
+			},
+		},
+		{
+			name: "push with missing metadata resolves skip command from full message",
+			event: &info.Event{
+				EventType:                "push",
+				SHA:                      "abc123",
+				CommitMetadataIncomplete: true,
+			},
+			commitTitle:   "fix: bug",
+			commitMessage: "fix: bug\n\n[skip ci]",
+			wantSkip:      true,
+			wantCalls:     1,
+		},
+		{
+			name: "push with missing metadata propagates lookup failure",
+			event: &info.Event{
+				EventType:                "push",
+				SHA:                      "abc123",
+				CommitMetadataIncomplete: true,
+			},
+			commitInfoFailure: true,
+			wantErr:           "commit lookup failed",
+			wantCalls:         1,
+		},
+		{
+			name: "ordinary push with empty payload metadata makes no API call",
+			event: &info.Event{
+				EventType:      "push",
+				SHA:            "abc123",
+				HasSkipCommand: true,
+			},
+		},
+		{
+			name: "non-push event makes no API call",
+			event: &info.Event{
+				EventType: "pull_request",
+				SHA:       "abc123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			commitProvider := &commitInfoProvider{
+				commitTitle:       tt.commitTitle,
+				commitMessage:     tt.commitMessage,
+				commitInfoFailure: tt.commitInfoFailure,
+			}
+			s := &sinker{
+				vcx:   commitProvider,
+				event: tt.event,
+			}
+
+			got, err := s.shouldSkipPushEvent(ctx, &v1alpha1.Repository{})
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				assert.NilError(t, err)
+				assert.Equal(t, tt.wantSkip, got)
+			}
+			assert.Equal(t, tt.wantCalls, commitProvider.commitInfoCalls)
+		})
+	}
+}
+
+func TestProcessEventBranchCreationSkipCI(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	log, _ := logger.GetLogger()
+	repo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+		Name:             "test-repo",
+		URL:              "https://gitlab.example/org/repo",
+		InstallNamespace: "default",
+	})
+	repo.Spec.GitProvider = &v1alpha1.GitProvider{
+		URL: "https://gitlab.example",
+		Secret: &v1alpha1.Secret{
+			Name: "test-secret",
+			Key:  "provider.token",
+		},
+		WebhookSecret: &v1alpha1.Secret{
+			Name: "test-secret",
+			Key:  "webhook.secret",
+		},
+	}
+	run := setupTestData(t, []*v1alpha1.Repository{repo})
+	run.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+	event := &info.Event{
+		EventType:                "push",
+		URL:                      repo.Spec.URL,
+		SHA:                      "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+		Provider:                 &info.Provider{},
+		CommitMetadataIncomplete: true,
+		TriggerTarget:            triggertype.Push,
+		Event: &gitlab.PushEvent{
+			Before: "0000000000000000000000000000000000000000",
+			After:  "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			Ref:    "refs/heads/release-0.1",
+		},
+	}
+	commitProvider := &commitInfoProvider{
+		TestProviderImp: testprovider.TestProviderImp{
+			AllowIT: true,
+			Event:   event,
+		},
+		commitTitle:   "fix: branch creation",
+		commitMessage: "fix: branch creation\n\n[skip ci]",
+	}
+	s := &sinker{
+		run:     run,
+		vcx:     commitProvider,
+		kint:    &kubeinteraction.Interaction{Run: run},
+		event:   event,
+		logger:  log,
+		pacInfo: &info.PacOpts{},
+	}
+
+	err := s.processEvent(ctx, httptest.NewRequestWithContext(ctx, "POST", repo.Spec.URL, nil))
+	assert.NilError(t, err)
+	assert.Equal(t, 1, commitProvider.commitInfoCalls)
+	assert.Equal(t, 1, commitProvider.statusCalls)
+	assert.Equal(t, providerstatus.ConclusionSkipped, commitProvider.lastStatus.Conclusion)
 }
 
 // TestGetCommitInfoError tests that GetCommitInfo errors work correctly with test provider.
@@ -540,8 +727,7 @@ func TestProcessEventSkipCIIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Simulate the skip-CI logic from sinker.go processEvent()
-			// Line 92-95: Push event skip-CI check
+			// Simulate the payload-based push decision. API-resolved metadata is covered by TestShouldSkipPushEvent.
 			pushSkip := tt.eventType == "push" && provider.SkipCI(tt.shaTitle)
 
 			// Line 99-108: PR event skip-CI check

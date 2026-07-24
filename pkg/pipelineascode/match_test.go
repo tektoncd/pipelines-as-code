@@ -63,6 +63,46 @@ func TestPacRunCheckNeedUpdate(t *testing.T) {
 	}
 }
 
+func TestGetRepositoryRevisionForProvenance(t *testing.T) {
+	tests := []struct {
+		name       string
+		event      *info.Event
+		provenance string
+		want       string
+	}{
+		{
+			name: "source provenance uses immutable event revision",
+			event: &info.Event{
+				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			},
+			provenance: "source",
+			want:       "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+		},
+		{
+			name: "default branch provenance uses default branch",
+			event: &info.Event{
+				DefaultBranch:             "main",
+				PipelineRunSourceRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			},
+			provenance: "default_branch",
+			want:       "main",
+		},
+		{
+			name: "ordinary event leaves repository revision unset",
+			event: &info.Event{
+				DefaultBranch: "main",
+			},
+			provenance: "default_branch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, getRepositoryRevisionForProvenance(tt.event, tt.provenance))
+		})
+	}
+}
+
 func TestChangePipelineRun(t *testing.T) {
 	repo := &v1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
