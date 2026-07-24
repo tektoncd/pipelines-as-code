@@ -339,6 +339,69 @@ skip-push-event-for-pr-commits: "true"
 
 {{< /param >}}
 
+### API Retry
+
+{{< tech_preview "Provider API Retry for GitHub and GitLab" >}}
+
+{{< param name="enable-api-retry" type="boolean" default="false" id="param-enable-api-retry" >}}
+Enables retrying GitHub and GitLab API requests when Pipelines-as-Code
+encounters a temporary provider failure. This includes rate limits, temporary
+server errors, and selected network failures.
+
+Retries use backoff with jitter so multiple requests do not all retry at the
+same time. When the provider supplies a retry or reset time, Pipelines-as-Code
+uses that information as long as it does not exceed
+`api-retry-max-wait-seconds`.
+
+The setting is disabled by default. Enabling it affects API operations made
+while processing an event, including temporary clients and GitHub App setup.
+
+Pipelines-as-Code only repeats an operation when it can do so safely. It does
+not repeat provider changes after an uncertain network or server failure when
+doing so could create duplicate comments, statuses, or other mutations.
+
+```yaml
+enable-api-retry: "false"
+```
+
+{{< /param >}}
+
+{{< param name="api-retry-max-attempts" type="integer" default="4" id="param-api-retry-max-attempts" >}}
+Sets the maximum number of attempts when `enable-api-retry` is `true`. The
+initial request counts as the first attempt. For example, a value of `4`
+allows the initial request followed by up to three retries.
+
+```yaml
+api-retry-max-attempts: "4"
+```
+
+{{< /param >}}
+
+{{< param name="api-retry-max-wait-seconds" type="integer" default="120" id="param-api-retry-max-wait-seconds" >}}
+Sets the maximum time in seconds that Pipelines-as-Code waits between
+attempts. If a provider asks the client to wait longer than this value,
+Pipelines-as-Code stops retrying rather than holding the event for a long
+cooling period.
+
+```yaml
+api-retry-max-wait-seconds: "120"
+```
+
+{{< /param >}}
+
+#### Failure reporting and limitations
+
+If all attempts fail, Pipelines-as-Code reports the original provider error
+through its normal logs, events, and provider status handling. Reporting a
+failure status to GitHub or GitLab is best effort because a fully exhausted or
+unavailable provider API might also reject the status update.
+
+These settings are intended for short, temporary provider failures. They do
+not provide persistent queueing for long rate-limit windows and do not control
+how quickly a large backlog of PipelineRuns is admitted to the cluster.
+Long-duration queueing and workload admission should be handled separately at
+the pipeline or platform level.
+
 ## Complete Example
 
 ```yaml

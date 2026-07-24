@@ -160,6 +160,25 @@ data:
   # Default: false
   require-ok-to-test-sha: "false"
 
+  # Enable retrying Git provider API requests when hitting rate limits (429,
+  # or 403 with rate limit headers on GitHub) or transient server errors.
+  # Retries use exponential backoff with jitter and honor the Retry-After and
+  # X-RateLimit-Reset headers, giving up when the reset is further away than
+  # api-retry-max-wait-seconds.
+  # Default: false
+  enable-api-retry: "false"
+
+  # Maximum number of attempts (initial request included) when enable-api-retry
+  # is true.
+  # Default: 4
+  api-retry-max-attempts: "4"
+
+  # Maximum time in seconds to wait between retries when enable-api-retry is
+  # true. If the provider rate limit reset is further away than this, the
+  # request fails instead of blocking.
+  # Default: 120
+  api-retry-max-wait-seconds: "120"
+
   # When enabled, this option prevents duplicate pipeline runs when a commit appears in
   # both a push event and a pull request. If a push event comes from a commit that is
   # part of an open pull request, the push event will be skipped as it would create

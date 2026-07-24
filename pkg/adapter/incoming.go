@@ -176,6 +176,10 @@ func (l *listener) detectIncoming(ctx context.Context, event *info.Event, req *h
 	if repo.Spec.GitProvider == nil || repo.Spec.GitProvider.Type == "" {
 		gh := github.New()
 		gh.Run = l.run
+		if l.run.Info.Pac != nil {
+			pacInfo := l.run.Info.GetPacOpts()
+			gh.SetPacInfo(&pacInfo)
+		}
 		ns := info.GetNS(ctx)
 		ip := app.NewInstallation(req, l.run, repo, gh, ns)
 		enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
