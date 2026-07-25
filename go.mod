@@ -21,7 +21,7 @@ require (
 	github.com/juju/ansiterm v1.0.0
 	github.com/ktrysmt/go-bitbucket v0.10.0
 	github.com/mattn/go-colorable v0.1.15
-	github.com/mattn/go-isatty v0.0.23
+	github.com/mattn/go-isatty v0.0.24
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
@@ -42,9 +42,9 @@ require (
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.5.2
-	k8s.io/api v0.36.2
-	k8s.io/apimachinery v0.36.2
-	k8s.io/client-go v0.36.2
+	k8s.io/api v0.36.3
+	k8s.io/apimachinery v0.36.3
+	k8s.io/client-go v0.36.3
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	knative.dev/eventing v0.49.2
 	knative.dev/pkg v0.0.0-20260622140654-39ebae2ee2dc
@@ -101,7 +101,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	sigs.k8s.io/gateway-api v1.5.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.3 // indirect
 )
 
 require (
@@ -141,15 +141,15 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.69.0
-	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/prometheus/common v0.70.1
+	github.com/prometheus/procfs v0.21.0 // indirect
 	github.com/rickb777/date v1.22.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/xlzd/gotp v0.1.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0
 	golang.org/x/time v0.15.0 // indirect
