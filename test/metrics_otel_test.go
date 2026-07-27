@@ -279,7 +279,7 @@ func TestOthersOTelMetricsAfterPACRun(t *testing.T) {
 	// PR, waits for PAC to process it. It fails if Gitea is not configured
 	// via TEST_GITEA_API_URL / TEST_GITEA_PASSWORD env vars.
 	topts := &tgitea.TestOpts{
-		Regexp:         successRegexp,
+		Regexp:         tgitea.SuccessRegexp,
 		TargetEvent:    triggertype.PullRequest.String(),
 		YAMLFiles:      map[string]string{".tekton/pr.yaml": "testdata/always-good-pipelinerun.yaml"},
 		CheckForStatus: "success",

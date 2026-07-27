@@ -18,7 +18,7 @@ import (
 
 func TestGiteaResultsAnnotations(t *testing.T) {
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: triggertype.PullRequest.String(),
 		YAMLFiles: map[string]string{
 			".tekton/pipeline.yaml": "testdata/pipelinerun.yaml",

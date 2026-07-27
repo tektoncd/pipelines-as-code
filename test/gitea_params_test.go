@@ -40,7 +40,7 @@ func TestGiteaParamsStandardCheckForPushAndPullEvent(t *testing.T) {
 		targetBranch string
 	)
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: "pull_request, push",
 		YAMLFiles: map[string]string{
 			".tekton/pr.yaml": "testdata/pipelinerun-standard-params-display.yaml",
@@ -506,7 +506,7 @@ func TestGiteaParamsBodyHeadersCEL(t *testing.T) {
 	// dir, one matching pull via cel filtering expression and one for push
 	// and make it succeed
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: "pull_request",
 		YAMLFiles: map[string]string{
 			".tekton/pullrequest.yaml": "testdata/pipelinerun-cel-params-pullrequest.yaml",
@@ -578,7 +578,7 @@ my email is a true beauty and you can call me pacman`
 // as a CEL expression and cel filter.
 func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: "pull_request",
 		YAMLFiles: map[string]string{
 			".tekton/pullrequest.yaml": "testdata/pipelinerun-changed-files-pullrequest.yaml",
@@ -694,7 +694,7 @@ func TestGiteaParamsChangedFilesCEL(t *testing.T) {
 // The cel: prefix allows evaluating full CEL expressions with access to body, headers, files, and pac namespaces.
 func TestGiteaParamsCelPrefix(t *testing.T) {
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: "pull_request",
 		YAMLFiles: map[string]string{
 			".tekton/pr.yaml": "testdata/pipelinerun-cel-prefix-test.yaml",

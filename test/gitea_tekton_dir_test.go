@@ -14,7 +14,7 @@ import (
 
 func TestGiteaTektonDirRecursive(t *testing.T) {
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: triggertype.PullRequest.String(),
 		YAMLFiles: map[string]string{
 			".tekton/pipelinerun.yaml":                "testdata/pipelinerun.yaml",

@@ -28,7 +28,7 @@ import (
 // - Custom params are available for template expansion in the PipelineRun.
 func TestGiteaCustomParamsInCELExpression(t *testing.T) {
 	topts := &tgitea.TestOpts{
-		Regexp:      successRegexp,
+		Regexp:      tgitea.SuccessRegexp,
 		TargetEvent: triggertype.PullRequest.String(),
 		YAMLFiles: map[string]string{
 			".tekton/pr.yaml":      "testdata/pipelinerun-cel-custom-params-pullrequest.yaml",

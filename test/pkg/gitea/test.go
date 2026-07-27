@@ -33,6 +33,9 @@ import (
 	"knative.dev/pkg/apis"
 )
 
+// SuccessRegexp matches a successful Pipelines as Code CI comment, accounting for possible HTML tags.
+var SuccessRegexp = regexp.MustCompile(`.*Pipelines as Code CI.*has.*successfully.*validated your commit.*`)
+
 type TestOpts struct {
 	TargetRepoName        string
 	StatusOnlyLatest      bool
