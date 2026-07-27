@@ -68,7 +68,7 @@ jobs:
       KOCACHE: /tmp/ko-cache
       KO_DOCKER_REPO: registry.paac-127-0-0-1.nip.io
       KUBECONFIG: /home/runner/.kube/config.local
-      TARGET_TEAM_SLUGS: "pipelines-as-code-maintainers,pipelines-as-code-collaborators"
+      TARGET_TEAM_SLUGS: "pipelines-as-code.maintainers,pipelines-as-code.collaborators"
       TEST_EL_URL: https://paac.paac-127-0-0-1.nip.io
       TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
 
@@ -110,6 +110,7 @@ jobs:
       TEST_BITBUCKET_CLOUD_E2E_REPOSITORY: cboudjna/pac-e2e-tests
       TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
       TEST_BITBUCKET_CLOUD_USER: cboudjna@redhat.com
+      TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_CLOUD_WEBHOOK_SECRET }}
 
       # Bitbucket Data Center
       TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
@@ -291,6 +292,7 @@ jobs:
           TEST_BITBUCKET_CLOUD_E2E_REPOSITORY: cboudjna/pac-e2e-tests
           TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
           TEST_BITBUCKET_CLOUD_USER: cboudjna
+          TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_CLOUD_WEBHOOK_SECRET }}
 
           # Bitbucket Data Center
           TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
@@ -365,6 +367,7 @@ jobs:
         env:
           TEST_PROVIDER: ${{ matrix.provider }}
           TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
+          TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_CLOUD_WEBHOOK_SECRET }}
           TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
           TEST_GITHUB_TOKEN: ${{ secrets.GH_APPS_TOKEN }}

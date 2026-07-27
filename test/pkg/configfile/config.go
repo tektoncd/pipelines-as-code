@@ -67,6 +67,7 @@ type BitbucketCloudConfig struct {
 	APIURL        string `env:"TEST_BITBUCKET_CLOUD_API_URL"        json:"api_url"        yaml:"api_url"`
 	User          string `env:"TEST_BITBUCKET_CLOUD_USER"           json:"user"           yaml:"user"`
 	Token         string `env:"TEST_BITBUCKET_CLOUD_TOKEN"          json:"token"          yaml:"token"`
+	Secret        string `env:"TEST_BITBUCKET_CLOUD_SECRET"         json:"secret"         yaml:"secret"`
 	E2ERepository string `env:"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
 }
 

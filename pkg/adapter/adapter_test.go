@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v85/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -20,6 +23,7 @@ import (
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gotest.tools/v3/assert"
+	"gotest.tools/v3/env"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -253,5 +257,72 @@ func TestWhichProvider(t *testing.T) {
 			}
 			assert.NilError(t, err)
 		})
+	}
+}
+
+func TestStartGracefulShutdown(t *testing.T) {
+	// pick a free port for the listener
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	assert.NilError(t, err)
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	assert.Assert(t, ok, "expected *net.TCPAddr")
+	port := strconv.Itoa(tcpAddr.Port)
+	assert.NilError(t, ln.Close())
+
+	defer env.PatchAll(t, map[string]string{
+		"SYSTEM_NAMESPACE":    "pipelinesascode",
+		"PAC_CONTROLLER_PORT": port,
+	})()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	cs, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	log, _ := logger.GetLogger()
+	l := &listener{
+		logger: log,
+		run: &params.Run{
+			Clients: clients.Clients{Kube: cs.Kube, Log: log},
+			Info: info.Info{
+				Pac:        &info.PacOpts{Settings: settings.Settings{}},
+				Kube:       &info.KubeOpts{Namespace: "pipelinesascode"},
+				Controller: &info.ControllerInfo{Configmap: "pipelines-as-code"},
+			},
+		},
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- l.Start(ctx)
+	}()
+
+	// wait until the http server is up before cancelling the context
+	liveURL := "http://127.0.0.1:" + port + "/live"
+	httpClient := &http.Client{Timeout: 2 * time.Second}
+	up := false
+	for range 50 {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, liveURL, nil)
+		assert.NilError(t, err)
+		resp, err := httpClient.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			up = resp.StatusCode == http.StatusOK
+			if up {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	assert.Assert(t, up, "listener never became ready on %s", liveURL)
+
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.NilError(t, err, "Start should return cleanly on context cancellation")
+	case <-time.After(15 * time.Second):
+		t.Fatal("listener did not shut down after context cancellation")
 	}
 }
