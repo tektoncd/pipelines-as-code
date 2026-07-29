@@ -25,6 +25,10 @@ spec:
     - name: https-webhook
       port: 443
       targetPort: 8443
+    - name: http-metrics
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
   selector:
     app.kubernetes.io/name: webhook
     app.kubernetes.io/component: webhook

@@ -65,6 +65,8 @@ spec:
           ports:
             - name: https-webhook
               containerPort: 8443
+            - name: metrics
+              containerPort: 9090
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
