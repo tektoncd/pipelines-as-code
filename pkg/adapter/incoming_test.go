@@ -23,6 +23,8 @@ import (
 	"gotest.tools/v3/env"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ktesting "k8s.io/client-go/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -1132,6 +1134,216 @@ func TestIncomingGitHubAppScopesTokenThroughClientSetup(t *testing.T) {
 
 	_, hasRepoIDs := capturedBody["repository_ids"]
 	assert.Assert(t, !hasRepoIDs, "repository_ids should not be present for incoming name-scoped token")
+}
+
+func TestDetectIncomingRejectsUnconfiguredGitHubHost(t *testing.T) {
+	const (
+		namespace  = "default"
+		repository = "incoming-repo"
+		secret     = "shared-secret"
+	)
+
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	ctx = info.StoreNS(ctx, "pipelines-as-code")
+
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      info.DefaultPipelinesAscodeSecretName,
+				Namespace: "pipelines-as-code",
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+			},
+		}},
+		Repositories: []*v1alpha1.Repository{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      repository,
+				Namespace: namespace,
+			},
+			Spec: v1alpha1.RepositorySpec{
+				URL: server.URL + "/owner/repo",
+				Incomings: &[]v1alpha1.Incoming{{
+					Targets: []string{"main"},
+					Secret: v1alpha1.Secret{
+						Name: "incoming-secret",
+					},
+				}},
+			},
+		}},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube:           seedData.Kube,
+			PipelineAsCode: seedData.PipelineAsCode,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: info.DefaultPipelinesAscodeSecretName},
+		},
+	}
+	l := &listener{
+		run:    run,
+		logger: zap.NewNop().Sugar(),
+		kint: &kubernetestint.KinterfaceTest{
+			GetSecretResult: map[string]string{"incoming-secret": secret},
+		},
+	}
+	payload := fmt.Sprintf(`{"repository":%q,"namespace":%q,"branch":"main","pipelinerun":"pr","secret":%q}`, repository, namespace, secret)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/incoming", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	_, _, err := l.detectIncoming(ctx, info.NewEvent(), req, []byte(payload))
+	assert.ErrorContains(t, err, "has not been authenticated yet")
+	assert.Equal(t, requests, 0)
+}
+
+func TestDetectIncomingHandlesGitHubAppInstallation(t *testing.T) {
+	const (
+		namespace  = "default"
+		systemNS   = "pipelines-as-code"
+		repository = "incoming-repo"
+		secret     = "shared-secret"
+		token      = "installation-token"
+	)
+
+	tests := []struct {
+		name               string
+		installationID     int64
+		wantErrText        string
+		wantDetected       bool
+		wantInstallationID int64
+		wantToken          string
+	}{
+		{
+			name:               "installed",
+			installationID:     44,
+			wantDetected:       true,
+			wantInstallationID: 44,
+			wantToken:          token,
+		},
+		{
+			name:           "zero installation id",
+			installationID: 0,
+			wantErrText:    "GithubApp is not installed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+			mux.HandleFunc(fmt.Sprintf("/repos/owner/%s/installation", repository), func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"id": %d}`, tt.installationID)
+			})
+			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", tt.installationID), func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"token": %q}`, token)
+			})
+
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx = info.StoreCurrentControllerName(ctx, "default")
+			ctx = info.StoreNS(ctx, systemNS)
+			seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Secret: []*corev1.Secret{{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      info.DefaultPipelinesAscodeSecretName,
+						Namespace: systemNS,
+					},
+					Data: map[string][]byte{
+						"github-application-id": []byte("12345"),
+						"github-private-key":    []byte(fakePrivateKey),
+					},
+				}},
+				Repositories: []*v1alpha1.Repository{{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      repository,
+						Namespace: namespace,
+					},
+					Spec: v1alpha1.RepositorySpec{
+						URL: "https://github.com/owner/" + repository,
+						Incomings: &[]v1alpha1.Incoming{{
+							Targets: []string{"main"},
+							Secret:  v1alpha1.Secret{Name: "incoming-secret"},
+						}},
+					},
+				}},
+			})
+			run := &params.Run{
+				Clients: clients.Clients{
+					Kube:           seedData.Kube,
+					PipelineAsCode: seedData.PipelineAsCode,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{Secret: info.DefaultPipelinesAscodeSecretName},
+				},
+			}
+			l := &listener{
+				run:    run,
+				logger: zap.NewNop().Sugar(),
+				kint: &kubernetestint.KinterfaceTest{
+					GetSecretResult: map[string]string{"incoming-secret": secret},
+				},
+			}
+			payload := fmt.Sprintf(`{"repository":%q,"namespace":%q,"branch":"main","pipelinerun":"pr","secret":%q}`, repository, namespace, secret)
+			req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/incoming", strings.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			event := info.NewEvent()
+
+			got, repo, err := l.detectIncoming(ctx, event, req, []byte(payload))
+			if tt.wantErrText != "" {
+				assert.ErrorContains(t, err, tt.wantErrText)
+				return
+			}
+
+			assert.NilError(t, err)
+			assert.Assert(t, repo != nil)
+			assert.Equal(t, got, tt.wantDetected)
+			assert.Equal(t, event.Provider.Token, tt.wantToken)
+			assert.Equal(t, event.InstallationID, tt.wantInstallationID)
+			assert.Equal(t, event.TargetPipelineRun, "pr")
+			assert.Equal(t, event.URL, "https://github.com/owner/"+repository)
+		})
+	}
+}
+
+func TestDetectIncomingReturnsRepositoryListErrors(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	ctx = info.StoreNS(ctx, "pipelines-as-code")
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	seedData.PipelineAsCode.PrependReactor("list", "repositories", func(_ ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("list failed")
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube:           seedData.Kube,
+			PipelineAsCode: seedData.PipelineAsCode,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: info.DefaultPipelinesAscodeSecretName},
+		},
+	}
+	l := &listener{
+		run:    run,
+		logger: zap.NewNop().Sugar(),
+		kint:   &kubernetestint.KinterfaceTest{},
+	}
+	payload := `{"repository":"incoming-repo","branch":"main","pipelinerun":"pr","secret":"shared-secret"}`
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/incoming", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	got, repo, err := l.detectIncoming(ctx, info.NewEvent(), req, []byte(payload))
+	assert.ErrorContains(t, err, "error getting repo")
+	assert.Assert(t, !got)
+	assert.Assert(t, repo == nil)
 }
 
 func TestApplyIncomingParams(t *testing.T) {

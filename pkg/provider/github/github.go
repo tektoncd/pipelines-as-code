@@ -322,6 +322,22 @@ func (v *Provider) checkWebhookSecretValidity(ctx context.Context, cw clockwork.
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
+	if event.InstallationID <= 0 && event.EventType != "incoming" && event.Request != nil &&
+		event.Request.Header.Get("X-GitHub-Enterprise-Host") != "" {
+		if err := v.Validate(ctx, run, event); err != nil {
+			return err
+		}
+		endpoint, err := githubEndpointFromPayload(
+			event.Request.Header.Get("X-GitHub-Enterprise-Host"),
+			string(event.Request.Payload),
+		)
+		if err != nil {
+			return err
+		}
+		event.Provider.URL = endpoint.BaseURL
+		event.GHEURL = endpoint.BaseURL
+	}
+
 	client, providerName, apiURL := MakeClient(ctx, event.Provider.URL, event.Provider.Token)
 	v.providerName = providerName
 	v.Run = run
@@ -369,7 +385,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 			// look up extra repos from the configmap first.  When no additional repos
 			// are configured, scope the token to only the triggering repo.
 			ns := info.GetNS(ctx)
-			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.GHEURL, event.InstallationID, ns)
 			if err != nil {
 				return fmt.Errorf("failed to scope token to triggering repository: %w", err)
 			}
@@ -793,7 +809,7 @@ func (v *Provider) CreateToken(ctx context.Context, repository []string, event *
 		v.RepositoryIDs = uniqueRepositoryID(v.RepositoryIDs, infoData.GetID())
 	}
 	ns := info.GetNS(ctx)
-	token, err := v.GetAppToken(ctx, v.Run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+	token, err := v.GetAppToken(ctx, v.Run.Clients.Kube, event.GHEURL, event.InstallationID, ns)
 	if err != nil {
 		return "", err
 	}
@@ -1188,12 +1204,24 @@ func (v *Provider) GenerateJWT(ctx context.Context, ns string, kube kubernetes.I
 // Fetch the app slug used for identifying the application.
 func (v *Provider) fetchAppSlug(ctx context.Context, apiURL string) (string, error) {
 	ns := info.GetNS(ctx)
+	endpoint, err := trustedAPIEndpointForHost(ctx, v.Run.Clients.Kube, ns, v.Run.Info.Controller.Secret, apiURL)
+	if err != nil {
+		return "", err
+	}
+	reqTokenURL, err := AppTokenTestAPIURL()
+	if err != nil {
+		return "", err
+	}
 	tokenString, err := v.GenerateJWT(ctx, ns, v.Run.Clients.Kube)
 	if err != nil {
 		return "", err
 	}
 
-	client, _, _ := MakeClient(ctx, apiURL, tokenString)
+	trustedAPIURL := endpoint.BaseURL
+	if reqTokenURL != "" {
+		trustedAPIURL = strings.TrimSuffix(reqTokenURL, "/api/v3")
+	}
+	client, _, _ := MakeClient(ctx, trustedAPIURL, tokenString)
 	app, _, err := client.Apps.Get(ctx, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to get app info: %w", err)

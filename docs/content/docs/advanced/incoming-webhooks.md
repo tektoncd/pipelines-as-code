@@ -283,11 +283,17 @@ Pipelines-as-Code sets the `pull_request_number` parameter to `12345`, so any us
 
 ### Using incoming webhooks with GitHub Enterprise
 
-When using a GitHub App with GitHub Enterprise, you must include the `X-GitHub-Enterprise-Host` header in the incoming webhook
-request. For example:
+Before the first GitHub Enterprise incoming webhook, the controller must have
+processed a signed webhook from that GitHub instance. This records the trusted
+GitHub host in the controller's GitHub App Secret. If discovery has not happened
+yet, the incoming request fails with an initialization error.
+
+The incoming request does not select or override the GitHub API endpoint.
 
 ```shell
-curl -H "X-GitHub-Enterprise-Host: github.example.com" -X POST "https://control.pac.url/incoming?repository=repo&branch=main&secret=very-secure-shared-secret&pipelinerun=target-pipelinerun"
+curl -H "Content-Type: application/json" \
+  -X POST "https://control.pac.url/incoming" \
+  -d '{"repository":"repo","branch":"main","pipelinerun":"target-pipelinerun","secret":"very-secure-shared-secret"}'
 ```
 
 ### Using incoming webhooks with webhook-based providers

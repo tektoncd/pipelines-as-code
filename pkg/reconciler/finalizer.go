@@ -17,11 +17,23 @@ import (
 )
 
 func (r *Reconciler) FinalizeKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
+	finalizeRun := *r.run
+	reconciler := *r
+	reconciler.run = &finalizeRun
+	return reconciler.finalizeKind(ctx, pr)
+}
+
+func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
 	state, exist := pr.GetAnnotations()[keys.State]
 	if !exist || state == kubeinteraction.StateCompleted {
 		return nil
 	}
+	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	if err != nil {
+		return err
+	}
+	r.run.Info.Controller = controllerInfo
 
 	if state == kubeinteraction.StateQueued || state == kubeinteraction.StateStarted {
 		repoName, ok := pr.GetAnnotations()[keys.Repository]

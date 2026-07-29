@@ -477,6 +477,96 @@ func TestUpdatePipelineRunState(t *testing.T) {
 	}
 }
 
+func TestReconcileKindControllerInfoHandling(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		wantErrSub  string
+		wantControl *info.ControllerInfo
+	}{
+		{
+			name:       "invalid controller annotation",
+			annotation: "{",
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:       "null controller annotation",
+			annotation: "null",
+			wantErrSub: "value must not be null",
+		},
+		{
+			name:        "controller annotation does not mutate shared run",
+			annotation:  `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+		{
+			name:        "fallback controller is copied",
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			controller := &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"}
+			annotations := map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+			}
+			if tt.annotation != "" {
+				annotations[keys.ControllerInfo] = tt.annotation
+			}
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pr",
+					Namespace:   "test-ns",
+					Annotations: annotations,
+				},
+			}
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "test-ns",
+				},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{},
+						},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: controller,
+					},
+				},
+			}
+
+			err := r.ReconcileKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			if tt.wantControl != nil {
+				assert.DeepEqual(t, r.run.Info.Controller, tt.wantControl)
+				assert.Assert(t, r.run.Info.Controller == controller, "reconcile must keep the shared controller pointer")
+			}
+		})
+	}
+}
+
 func TestReconcileKindSCMReportingLogic(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
@@ -654,6 +744,7 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 			}
 
 			err := r.ReconcileKind(ctx, tt.pipelineRun)
+			assert.Assert(t, cs.Info.Controller == nil, "reconciliation must not mutate shared controller state")
 
 			// For test cases that should call updatePipelineRunToInProgress,
 			// we expect no error and the state should be updated

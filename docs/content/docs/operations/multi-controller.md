@@ -35,6 +35,10 @@ Each GitHub application requires:
 | `PAC_CONTROLLER_SECRET`      | Secret containing GitHub App credentials           | `gh-enterprise-secret` |
 | `PAC_CONTROLLER_CONFIGMAP`   | ConfigMap with application settings                | `gh-enterprise-config` |
 
+Each controller Secret independently records the GitHub host discovered from
+its first signed webhook. This binds each GitHub App identity to one GitHub
+instance without additional configuration.
+
 {{< callout type="info" >}}
 While each GitHub application requires its own controller, only one
 status reconciler ("watcher") component is needed cluster-wide.

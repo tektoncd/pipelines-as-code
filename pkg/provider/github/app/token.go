@@ -3,11 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
@@ -15,19 +13,14 @@ import (
 )
 
 type Install struct {
-	request   *http.Request
 	run       *params.Run
 	repo      *v1alpha1.Repository
 	ghClient  *github.Provider
 	namespace string
 }
 
-func NewInstallation(req *http.Request, run *params.Run, repo *v1alpha1.Repository, gh *github.Provider, namespace string) *Install {
-	if req == nil {
-		req = &http.Request{}
-	}
+func NewInstallation(run *params.Run, repo *v1alpha1.Repository, gh *github.Provider, namespace string) *Install {
 	return &Install{
-		request:   req,
 		run:       run,
 		repo:      repo,
 		ghClient:  gh,
@@ -41,16 +34,13 @@ func NewInstallation(req *http.Request, run *params.Run, repo *v1alpha1.Reposito
 func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, string, int64, error) {
 	logger := logging.FromContext(ctx)
 
-	// Generate a JWT token for authentication
-	jwtToken, err := ip.ghClient.GenerateJWT(ctx, ip.namespace, ip.run.Clients.Kube)
-	if err != nil {
-		return "", "", 0, err
-	}
-
 	// Get owner and repo from the repository URL
 	repoURL, err := url.Parse(ip.repo.Spec.URL)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to parse repository URL: %w", err)
+	}
+	if repoURL.Scheme != "https" || repoURL.User != nil {
+		return "", "", 0, fmt.Errorf("GitHub repository URL must use https without userinfo")
 	}
 	pathParts := strings.Split(strings.Trim(repoURL.Path, "/"), "/")
 	if len(pathParts) != 2 {
@@ -61,17 +51,25 @@ func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, stri
 	if owner == "" || repoName == "" {
 		return "", "", 0, fmt.Errorf("invalid repository URL: owner or repo name is empty")
 	}
-
-	if ip.ghClient.APIURL == nil {
-		return "", "", 0, fmt.Errorf("github client APIURL is nil")
+	endpoint, err := github.TrustedAPIEndpointForRepository(ctx, ip.run, ip.repo.Spec.URL)
+	if err != nil {
+		return "", "", 0, err
 	}
-	apiURL := *ip.ghClient.APIURL
-	enterpriseHost := ""
-	if repoURL.Host != "" && repoURL.Host != "github.com" {
-		enterpriseHost = repoURL.Host
-		if apiURL == keys.PublicGithubAPIURL {
-			apiURL = fmt.Sprintf("https://%s/api/v3", strings.TrimSuffix(enterpriseHost, "/"))
-		}
+	testAPIURL, err := github.AppTokenTestAPIURL()
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	// Generate a JWT only after the repository has been checked against the
+	// controller-owned GitHub endpoint.
+	jwtToken, err := ip.ghClient.GenerateJWT(ctx, ip.namespace, ip.run.Clients.Kube)
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	apiURL := endpoint.BaseURL
+	if testAPIURL != "" {
+		apiURL = strings.TrimSuffix(testAPIURL, "/api/v3")
 	}
 
 	client, _, _ := github.MakeClient(ctx, apiURL, jwtToken)
@@ -95,13 +93,13 @@ func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, stri
 	}
 
 	installationID := *installation.ID
-	token, err := ip.ghClient.GetAppToken(ctx, ip.run.Clients.Kube, enterpriseHost, installationID, ip.namespace)
+	token, err := ip.ghClient.GetAppToken(ctx, ip.run.Clients.Kube, endpoint.BaseURL, installationID, ip.namespace)
 	if err != nil {
 		logger.Warnf("Could not get a token for installation ID %d: %v", installationID, err)
 		// Return with the installation ID even if token generation fails,
 		// as some operations might only need the ID.
-		return enterpriseHost, "", installationID, nil
+		return endpoint.BaseURL, "", installationID, nil
 	}
 
-	return enterpriseHost, token, installationID, nil
+	return endpoint.BaseURL, token, installationID, nil
 }

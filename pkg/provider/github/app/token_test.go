@@ -11,7 +11,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
@@ -162,9 +161,11 @@ func TestGenerateJWT(t *testing.T) {
 
 // Test_GetAndUpdateInstallationID tests we properly obtain the list of repos for a GitHub App and find a matching repo.
 func TestGetAndUpdateInstallationID(t *testing.T) {
+	enterpriseSecret := validSecret.DeepCopy()
+	enterpriseSecret.Data["github-host"] = []byte("matched")
 	tdata := testclient.Data{
 		Namespaces: []*corev1.Namespace{testNamespace},
-		Secret:     []*corev1.Secret{validSecret},
+		Secret:     []*corev1.Secret{enterpriseSecret},
 	}
 	wantToken := "GOODTOKEN"
 	wantID := 120
@@ -198,9 +199,6 @@ func TestGetAndUpdateInstallationID(t *testing.T) {
 			Kube:           stdata.Kube,
 		},
 		Info: info.Info{
-			Pac: &info.PacOpts{
-				Settings: settings.Settings{},
-			},
 			Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
 		},
 	}
@@ -211,7 +209,6 @@ func TestGetAndUpdateInstallationID(t *testing.T) {
 	gh.Run = run
 	jwtToken, err := gh.GenerateJWT(ctx, testNamespace.GetName(), stdata.Kube)
 	assert.NilError(t, err)
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", strings.NewReader(""))
 	repo := &v1alpha1.Repository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "repo",
@@ -258,7 +255,7 @@ func TestGetAndUpdateInstallationID(t *testing.T) {
 			`{"total_count": 2,"repositories": [{"id":1,"html_url": "https://matched/%s/incoming"},{"id":2,"html_url": "https://anotherrepo/that/would/failit"}]}`,
 			orgName)
 	})
-	ip := NewInstallation(req, run, repo, gprovider, testNamespace.GetName())
+	ip := NewInstallation(run, repo, gprovider, testNamespace.GetName())
 	_, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
 	assert.NilError(t, err)
 	assert.Equal(t, installationID, int64(wantID))
@@ -266,7 +263,7 @@ func TestGetAndUpdateInstallationID(t *testing.T) {
 	assert.Equal(t, token, wantToken)
 }
 
-func TestGetAndUpdateInstallationIDIgnoresEnterpriseHostHeader(t *testing.T) {
+func TestGetAndUpdateInstallationIDUsesConfiguredPublicEndpoint(t *testing.T) {
 	tdata := testclient.Data{
 		Namespaces: []*corev1.Namespace{testNamespace},
 		Secret:     []*corev1.Secret{validSecret},
@@ -289,9 +286,6 @@ func TestGetAndUpdateInstallationIDIgnoresEnterpriseHostHeader(t *testing.T) {
 			Kube:           stdata.Kube,
 		},
 		Info: info.Info{
-			Pac: &info.PacOpts{
-				Settings: settings.Settings{},
-			},
 			Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
 		},
 	}
@@ -326,9 +320,7 @@ func TestGetAndUpdateInstallationIDIgnoresEnterpriseHostHeader(t *testing.T) {
 	gprovider.SetGithubClient(fakeghclient)
 	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
 
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", strings.NewReader(""))
-	req.Header.Set("X-GitHub-Enterprise-Host", "127.0.0.1:1")
-	ip := NewInstallation(req, run, repo, gprovider, testNamespace.GetName())
+	ip := NewInstallation(run, repo, gprovider, testNamespace.GetName())
 	enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
 	assert.NilError(t, err)
 	assert.Equal(t, enterpriseURL, "")
@@ -345,9 +337,11 @@ func testMethod(t *testing.T, r *http.Request) {
 }
 
 func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
+	enterpriseSecret := validSecret.DeepCopy()
+	enterpriseSecret.Data["github-host"] = []byte("matched")
 	tdata := testclient.Data{
 		Namespaces: []*corev1.Namespace{testNamespace},
-		Secret:     []*corev1.Secret{validSecret},
+		Secret:     []*corev1.Secret{enterpriseSecret},
 	}
 	wantToken := "GOODTOKEN"
 	orgName := "org"
@@ -387,7 +381,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			wantErr:            false,
 			wantInstallationID: orgID,
 			wantToken:          wantToken,
-			wantEnterpriseHost: "matched",
+			wantEnterpriseHost: "https://matched",
 		},
 		{
 			name:    "repo and org installation fail, user installation succeeds",
@@ -412,7 +406,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			wantErr:            false,
 			wantInstallationID: userID,
 			wantToken:          wantToken,
-			wantEnterpriseHost: "matched",
+			wantEnterpriseHost: "https://matched",
 		},
 		{
 			name:    "all installations fail",
@@ -459,9 +453,6 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 					Kube:           stdata.Kube,
 				},
 				Info: info.Info{
-					Pac: &info.PacOpts{
-						Settings: settings.Settings{},
-					},
 					Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
 				},
 			}
@@ -488,7 +479,7 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			gprovider.SetGithubClient(fakeghclient)
 			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL)
 
-			ip := NewInstallation(httptest.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", strings.NewReader("")), run, repo, gprovider, testNamespace.GetName())
+			ip := NewInstallation(run, repo, gprovider, testNamespace.GetName())
 			enterpriseHost, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
 
 			if tt.wantErr {
@@ -503,6 +494,258 @@ func TestGetAndUpdateInstallationIDFallbacks(t *testing.T) {
 			assert.Equal(t, installationID, tt.wantInstallationID)
 			assert.Equal(t, token, tt.wantToken)
 			assert.Equal(t, enterpriseHost, tt.wantEnterpriseHost)
+		})
+	}
+}
+
+func TestGetAndUpdateInstallationIDRejectsUnconfiguredRepositoryHost(t *testing.T) {
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, testNamespace.GetName())
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{validSecret},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: seedData.Kube,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
+		},
+	}
+	repo := &v1alpha1.Repository{
+		Spec: v1alpha1.RepositorySpec{
+			URL: server.URL + "/owner/repo",
+		},
+	}
+
+	ip := NewInstallation(run, repo, github.New(), testNamespace.GetName())
+	enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+	assert.ErrorContains(t, err, "has not been authenticated yet")
+	assert.Equal(t, enterpriseURL, "")
+	assert.Equal(t, token, "")
+	assert.Equal(t, installationID, int64(0))
+	assert.Equal(t, requests, 0)
+}
+
+func TestGetAndUpdateInstallationIDRejectsInvalidRepositoryURLs(t *testing.T) {
+	tests := []struct {
+		name        string
+		repoURL     string
+		wantErrText string
+	}{
+		{
+			name:        "parse error",
+			repoURL:     "https://github.com/%zz/repo",
+			wantErrText: "failed to parse repository URL",
+		},
+		{
+			name:        "http scheme",
+			repoURL:     "http://github.com/owner/repo",
+			wantErrText: "must use https without userinfo",
+		},
+		{
+			name:        "userinfo",
+			repoURL:     "https://user@github.com/owner/repo",
+			wantErrText: "must use https without userinfo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx = info.StoreNS(ctx, testNamespace.GetName())
+			seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Secret: []*corev1.Secret{validSecret},
+			})
+			run := &params.Run{
+				Clients: clients.Clients{
+					Kube: seedData.Kube,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
+				},
+			}
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					URL: tt.repoURL,
+				},
+			}
+
+			ip := NewInstallation(run, repo, github.New(), testNamespace.GetName())
+			enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+			assert.ErrorContains(t, err, tt.wantErrText)
+			assert.Equal(t, enterpriseURL, "")
+			assert.Equal(t, token, "")
+			assert.Equal(t, installationID, int64(0))
+		})
+	}
+}
+
+func TestGetAndUpdateInstallationIDReturnsSetupErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		secret      *corev1.Secret
+		envAPIURL   string
+		wantErrText string
+	}{
+		{
+			name: "missing controller secret",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "different-secret",
+					Namespace: testNamespace.GetName(),
+				},
+			},
+			wantErrText: "not found",
+		},
+		{
+			name:        "invalid token api url",
+			secret:      validSecret,
+			envAPIURL:   "https://example.com",
+			wantErrText: "PAC_GIT_PROVIDER_TOKEN_APIURL must target a loopback IP address",
+		},
+		{
+			name: "invalid application id",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      info.DefaultPipelinesAscodeSecretName,
+					Namespace: testNamespace.GetName(),
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("invalid"),
+					"github-private-key":    []byte(fakePrivateKey),
+				},
+			},
+			wantErrText: "could not parse the github application_id number",
+		},
+		{
+			name: "invalid private key",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      info.DefaultPipelinesAscodeSecretName,
+					Namespace: testNamespace.GetName(),
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte("not-a-private-key"),
+				},
+			},
+			wantErrText: "failed to parse private key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envAPIURL != "" {
+				t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", tt.envAPIURL)
+			}
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx = info.StoreNS(ctx, testNamespace.GetName())
+			seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Secret: []*corev1.Secret{tt.secret},
+			})
+			run := &params.Run{
+				Clients: clients.Clients{
+					Kube: seedData.Kube,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{Secret: info.DefaultPipelinesAscodeSecretName},
+				},
+			}
+			gh := github.New()
+			gh.Run = run
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://github.com/owner/repo",
+				},
+			}
+
+			ip := NewInstallation(run, repo, gh, testNamespace.GetName())
+			enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+			assert.ErrorContains(t, err, tt.wantErrText)
+			assert.Equal(t, enterpriseURL, "")
+			assert.Equal(t, token, "")
+			assert.Equal(t, installationID, int64(0))
+		})
+	}
+}
+
+func TestGetAndUpdateInstallationIDHandlesInstallationAndTokenErrors(t *testing.T) {
+	tests := []struct {
+		name               string
+		repoInstallation   string
+		wantErrText        string
+		wantEnterpriseURL  string
+		wantToken          string
+		wantInstallationID int64
+	}{
+		{
+			name:             "installation has no id",
+			repoInstallation: `{}`,
+			wantErrText:      "github App installation found but contained no ID",
+		},
+		{
+			name:               "token request fails",
+			repoInstallation:   `{"id": 99}`,
+			wantEnterpriseURL:  "",
+			wantToken:          "",
+			wantInstallationID: 99,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+			mux.HandleFunc("/repos/owner/repo/installation", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, tt.repoInstallation)
+			})
+			if tt.wantInstallationID != 0 {
+				mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", tt.wantInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+				})
+			}
+
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx = info.StoreNS(ctx, testNamespace.GetName())
+			seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Secret: []*corev1.Secret{validSecret},
+			})
+			logger, _ := logger.GetLogger()
+			run := &params.Run{
+				Clients: clients.Clients{
+					Log:  logger,
+					Kube: seedData.Kube,
+				},
+				Info: info.Info{
+					Controller: &info.ControllerInfo{Secret: validSecret.GetName()},
+				},
+			}
+			gh := github.New()
+			gh.Run = run
+			repo := &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					URL: "https://github.com/owner/repo",
+				},
+			}
+
+			ip := NewInstallation(run, repo, gh, testNamespace.GetName())
+			enterpriseURL, token, installationID, err := ip.GetAndUpdateInstallationID(ctx)
+			if tt.wantErrText != "" {
+				assert.ErrorContains(t, err, tt.wantErrText)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, enterpriseURL, tt.wantEnterpriseURL)
+			assert.Equal(t, token, tt.wantToken)
+			assert.Equal(t, installationID, tt.wantInstallationID)
 		})
 	}
 }
