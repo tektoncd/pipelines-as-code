@@ -55,7 +55,10 @@ func (e *EventEmitter) EmitMessage(repo *v1alpha1.Repository, loggerLevel zapcor
 	}
 }
 
+const componentName = "Pipelines As Code"
+
 func makeEvent(repo *v1alpha1.Repository, loggerLevel zapcore.Level, reason, message string) *v1.Event {
+	now := metav1.Now()
 	event := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: repo.Name + "-",
@@ -79,8 +82,12 @@ func makeEvent(repo *v1alpha1.Repository, loggerLevel zapcore.Level, reason, mes
 			ResourceVersion: repo.ResourceVersion,
 		},
 		Source: v1.EventSource{
-			Component: "Pipelines As Code",
+			Component: componentName,
 		},
+		ReportingController: componentName,
+		FirstTimestamp:      now,
+		LastTimestamp:       now,
+		Count:               1,
 	}
 	if loggerLevel == zap.InfoLevel {
 		event.Type = v1.EventTypeNormal
