@@ -25,6 +25,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,15 +91,21 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 		gheURL = strings.TrimSuffix(reqTokenURL, "/api/v3")
 	}
 
+	// wrap the installation transport with the retry transport when enabled
+	var apiTransport http.RoundTripper = itr
+	if retryOpts := v.retryOptions(); retryOpts != nil {
+		apiTransport = retryhttp.Wrap(itr, *retryOpts)
+	}
+
 	if gheURL != "" {
 		if !strings.HasPrefix(gheURL, "https://") && !strings.HasPrefix(gheURL, "http://") {
 			gheURL = "https://" + gheURL
 		}
 		uploadURL := gheURL + "/api/uploads"
-		v.ghClient, _ = github.NewClient(&http.Client{Transport: itr}).WithEnterpriseURLs(gheURL, uploadURL)
+		v.ghClient, _ = github.NewClient(&http.Client{Transport: apiTransport}).WithEnterpriseURLs(gheURL, uploadURL)
 		itr.BaseURL = strings.TrimSuffix(v.Client().BaseURL.String(), "/")
 	} else {
-		v.ghClient = github.NewClient(&http.Client{Transport: itr})
+		v.ghClient = github.NewClient(&http.Client{Transport: apiTransport})
 	}
 
 	// Get a token ASAP because we need it for setting private repos

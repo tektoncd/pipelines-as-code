@@ -13,7 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/action"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -22,6 +24,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
@@ -77,6 +80,8 @@ type Provider struct {
 	pipelineIDMu       sync.Mutex
 }
 
+type retryMethodContextKey struct{}
+
 var defaultGitlabListOptions = gitlab.ListOptions{
 	PerPage: 100,
 }
@@ -99,6 +104,128 @@ func (v *Provider) SetGitLabClient(client *gitlab.Client) {
 
 func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
 	v.pacInfo = pacInfo
+}
+
+// clientOptions returns the options used to create the gitlab client.
+func (v *Provider) clientOptions(apiURL string) []gitlab.ClientOptionFunc {
+	opts := make([]gitlab.ClientOptionFunc, 0, 6)
+	opts = append(opts, gitlab.WithBaseURL(apiURL))
+	// When the retry setting is off, keep the go-gitlab client defaults, which
+	// already retry, so that existing behaviour is preserved.
+	if v.pacInfo == nil || !v.pacInfo.EnableAPIRetry {
+		return opts
+	}
+
+	maxAttempts := v.pacInfo.APIRetryMaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = settings.DefaultAPIRetryMaxAttempts
+	}
+	maxWait := time.Duration(v.pacInfo.APIRetryMaxWaitSeconds) * time.Second
+	if maxWait <= 0 {
+		maxWait = settings.DefaultAPIRetryMaxWaitSeconds * time.Second
+	}
+	return append(
+		opts,
+		gitlab.WithCustomRetryMax(maxAttempts-1),
+		gitlab.WithCustomRetryWaitMinMax(time.Second, maxWait),
+		gitlab.WithCustomRetry(gitlabRetryPolicy(maxWait)),
+		gitlab.WithCustomBackoff(gitlabRetryBackoff(maxWait)),
+		gitlab.WithRequestOptions(gitlabRetryRequestOption),
+	)
+}
+
+// gitlabRetryRequestOption carries the request method in the request context so
+// that gitlabRetryPolicy can tell idempotent requests apart when a network
+// failure leaves no response to inspect.
+//
+// The value is dropped when a call passes gitlab.WithContext, because the
+// upstream client only copies its own internal context keys. In that case the
+// method is unknown and the request is treated as non-idempotent, so retries
+// are skipped rather than risking a duplicated mutation.
+func gitlabRetryRequestOption(req *retryablehttp.Request) error {
+	ctx := context.WithValue(req.Context(), retryMethodContextKey{}, req.Method)
+	*req = *req.WithContext(ctx)
+	return nil
+}
+
+func gitlabRetryPolicy(maxWait time.Duration) retryablehttp.CheckRetry {
+	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			if wait, ok := gitlabRateLimitWait(resp); ok && wait > maxWait {
+				return false, nil
+			}
+			return true, nil
+		}
+		// Do not retry mutations after network or server errors because the
+		// server may already have applied the request.
+		method, _ := ctx.Value(retryMethodContextKey{}).(string)
+		if resp != nil && resp.Request != nil {
+			method = resp.Request.Method
+		}
+		if !isIdempotentMethod(method) {
+			return false, nil
+		}
+		return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+	}
+}
+
+func isIdempotentMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+func gitlabRetryBackoff(maxWait time.Duration) retryablehttp.Backoff {
+	return func(minWait, _ time.Duration, attempt int, resp *http.Response) time.Duration {
+		// Only trust the rate limit headers on an actual rate limit response,
+		// GitLab sets RateLimit-Reset on ordinary responses too.
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			if wait, ok := gitlabRateLimitWait(resp); ok {
+				return addGitLabJitter(wait, minWait, maxWait)
+			}
+		}
+		// Transient failures use a short linear backoff with jitter, maxWait
+		// only bounds the upper end instead of being drawn from.
+		wait := retryablehttp.LinearJitterBackoff(minWait, 2*minWait, attempt, resp)
+		return min(wait, maxWait)
+	}
+}
+
+func gitlabRateLimitWait(resp *http.Response) (time.Duration, bool) {
+	if resp == nil {
+		return 0, false
+	}
+	if value := resp.Header.Get("Retry-After"); value != "" {
+		if seconds, err := strconv.Atoi(value); err == nil {
+			return time.Duration(seconds) * time.Second, true
+		}
+		if retryAt, err := http.ParseTime(value); err == nil {
+			return max(time.Until(retryAt), 0), true
+		}
+	}
+	if value := resp.Header.Get("RateLimit-Reset"); value != "" {
+		if epoch, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return max(time.Until(time.Unix(epoch, 0)), 0), true
+		}
+	}
+	return 0, false
+}
+
+func addGitLabJitter(wait, maxJitter, maxWait time.Duration) time.Duration {
+	if wait >= maxWait {
+		return maxWait
+	}
+	remaining := maxWait - wait
+	if maxJitter > remaining {
+		maxJitter = remaining
+	}
+	return wait + retryablehttp.LinearJitterBackoff(0, maxJitter, 0, nil)
 }
 
 func (v *Provider) CreateComment(_ context.Context, event *info.Event, commit, updateMarker string) error {
@@ -256,7 +383,7 @@ func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *inf
 	v.apiURL = apiURL
 
 	if v.gitlabClient == nil {
-		v.gitlabClient, err = gitlab.NewClient(runevent.Provider.Token, gitlab.WithBaseURL(apiURL))
+		v.gitlabClient, err = gitlab.NewClient(runevent.Provider.Token, v.clientOptions(apiURL)...)
 		if err != nil {
 			return err
 		}
@@ -292,7 +419,7 @@ func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *inf
 				v.Logger.Warnf("gitlab token auto-rotation check failed: %v", rotateErr)
 			}
 		} else if newToken != "" {
-			v.gitlabClient, err = gitlab.NewClient(newToken, gitlab.WithBaseURL(apiURL))
+			v.gitlabClient, err = gitlab.NewClient(newToken, v.clientOptions(apiURL)...)
 			if err != nil {
 				return fmt.Errorf("failed to create client with rotated token: %w", err)
 			}

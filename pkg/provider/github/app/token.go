@@ -74,7 +74,7 @@ func (ip *Install) GetAndUpdateInstallationID(ctx context.Context) (string, stri
 		}
 	}
 
-	client, _, _, err := github.MakeClient(ctx, apiURL, jwtToken)
+	client, _, _, err := ip.ghClient.MakeClient(ctx, apiURL, jwtToken)
 	if err != nil {
 		return "", "", 0, err
 	}

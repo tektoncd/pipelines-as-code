@@ -25,6 +25,13 @@ const (
 	CustomConsoleNamespaceURLKey = "custom-console-url-namespace"
 
 	SecretGhAppTokenRepoScopedKey = "secret-github-app-token-scoped" //nolint: gosec
+
+	// DefaultAPIRetryMaxAttempts is the fallback number of attempts (initial
+	// request included) used when api-retry-max-attempts is unset or invalid.
+	DefaultAPIRetryMaxAttempts = 4
+	// DefaultAPIRetryMaxWaitSeconds is the fallback cap on the wait between
+	// attempts used when api-retry-max-wait-seconds is unset or invalid.
+	DefaultAPIRetryMaxWaitSeconds = 120
 )
 
 var (
@@ -77,6 +84,12 @@ type Settings struct {
 
 	RememberOKToTest   bool `json:"remember-ok-to-test"`
 	RequireOkToTestSHA bool `json:"require-ok-to-test-sha"`
+
+	// Retry Git provider API requests on rate limits and transient errors.
+	// Disabled by default.
+	EnableAPIRetry         bool `default:"false" json:"enable-api-retry"`
+	APIRetryMaxAttempts    int  `default:"4"     json:"api-retry-max-attempts"`
+	APIRetryMaxWaitSeconds int  `default:"120"   json:"api-retry-max-wait-seconds"`
 
 	// Tracing label names. Defaults in config/302-pac-configmap.yaml.
 	TracingLabelAction      string `json:"tracing-label-action"`
