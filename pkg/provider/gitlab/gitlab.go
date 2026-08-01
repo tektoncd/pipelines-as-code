@@ -570,27 +570,32 @@ func (v *Provider) GetCommitStatuses(_ context.Context, event *info.Event) ([]pr
 	return nil, firstErr
 }
 
+// sourceRevision selects the immutable event SHA when available and preserves
+// the branch fallback for events that do not carry a usable SHA.
+func sourceRevision(event *info.Event) string {
+	if event.SHA != "" && !provider.IsZeroSHA(event.SHA) {
+		return event.SHA
+	}
+	return event.HeadBranch
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	if v.gitlabClient == nil {
 		return "", fmt.Errorf("no gitlab client has been initialized, " +
 			"exiting... (hint: did you forget setting a secret on your repo?)")
 	}
-	branchCreate := isBranchCreationRunEvent(event)
-	// Default to the branch ref for existing event types.
-	revision := event.HeadBranch
+	// Prefer the immutable event revision so later branch updates cannot change
+	// the PipelineRun definitions selected for this event.
+	revision := sourceRevision(event)
 	if provenance == "default_branch" {
 		revision = event.DefaultBranch
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", event.DefaultBranch)
 	} else {
-		if branchCreate {
-			// Pin branch creation to the webhook SHA so a later push cannot change the matched definitions.
-			revision = event.SHA
-		}
 		trigger := event.TriggerTarget.String()
 		if event.TriggerTarget == triggertype.PullRequest {
 			trigger = "merge request"
 		}
-		v.Logger.Infof("Using PipelineRun definition from source %s on commit SHA: %s", trigger, event.SHA)
+		v.Logger.Infof("Using PipelineRun definition from source %s on revision: %s", trigger, revision)
 	}
 	opt := &gitlab.ListTreeOptions{
 		Path:      gitlab.Ptr(path),
@@ -672,11 +677,9 @@ func (v *Provider) getObject(fname, branch string, pid int64) ([]byte, *gitlab.R
 func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, path, targetRevision string) (string, error) {
 	revision := targetRevision
 	if revision == "" {
-		revision = runevent.HeadBranch
-		if isBranchCreationRunEvent(runevent) {
-			// The immutable event SHA is the source revision when no explicit target was selected.
-			revision = runevent.SHA
-		}
+		// Default repository-local resources to the same immutable source revision
+		// as the PipelineRun definitions; an explicit provenance revision wins above.
+		revision = sourceRevision(runevent)
 	}
 	getobj, _, err := v.getObject(path, revision, v.sourceProjectID)
 	if err != nil {

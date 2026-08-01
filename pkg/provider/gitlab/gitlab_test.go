@@ -1582,6 +1582,7 @@ func TestGetTektonDir(t *testing.T) {
 			args: args{
 				path: ".tekton",
 				event: &info.Event{
+					SHA:           "abc123",
 					HeadBranch:    "main",
 					TriggerTarget: triggertype.PullRequest,
 				},
@@ -1591,10 +1592,28 @@ func TestGetTektonDir(t *testing.T) {
 			},
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
-			filterMessageSnippet: `Using PipelineRun definition from source merge request on commit SHA`,
+			filterMessageSnippet: `Using PipelineRun definition from source merge request on revision: abc123`,
 		},
 		{
 			name:      "list tekton dir on push",
+			prcontent: string(samplePR),
+			args: args{
+				path: ".tekton",
+				event: &info.Event{
+					SHA:           "def456",
+					HeadBranch:    "main",
+					TriggerTarget: triggertype.Push,
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+			},
+			wantClient:           true,
+			wantStr:              "kind: PipelineRun",
+			filterMessageSnippet: `Using PipelineRun definition from source push on revision: def456`,
+		},
+		{
+			name:      "list tekton dir with empty SHA uses head branch",
 			prcontent: string(samplePR),
 			args: args{
 				path: ".tekton",
@@ -1608,7 +1627,27 @@ func TestGetTektonDir(t *testing.T) {
 			},
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
-			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
+			wantRevision:         "main",
+			filterMessageSnippet: `Using PipelineRun definition from source push on revision: main`,
+		},
+		{
+			name:      "list tekton dir with zero SHA uses head branch",
+			prcontent: string(samplePR),
+			args: args{
+				path: ".tekton",
+				event: &info.Event{
+					SHA:           "0000000000000000000000000000000000000000",
+					HeadBranch:    "main",
+					TriggerTarget: triggertype.Push,
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+			},
+			wantClient:           true,
+			wantStr:              "kind: PipelineRun",
+			wantRevision:         "main",
+			filterMessageSnippet: `Using PipelineRun definition from source push on revision: main`,
 		},
 		{
 			name:      "list tekton dir for branch creation by event SHA",
@@ -1632,12 +1671,10 @@ func TestGetTektonDir(t *testing.T) {
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
 			wantRevision:         "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
-			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
+			filterMessageSnippet: `Using PipelineRun definition from source push on revision: dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e`,
 		},
 		{
-			// A branch created together with new commits is an ordinary push as far as
-			// definition lookup goes, so it must stay on the branch ref.
-			name:      "list tekton dir for branch creation carrying commits uses head branch",
+			name:      "list tekton dir for branch creation carrying commits uses event SHA",
 			prcontent: string(samplePR),
 			args: args{
 				path: ".tekton",
@@ -1658,8 +1695,8 @@ func TestGetTektonDir(t *testing.T) {
 			},
 			wantClient:           true,
 			wantStr:              "kind: PipelineRun",
-			wantRevision:         "refs/heads/release-0.1",
-			filterMessageSnippet: `Using PipelineRun definition from source push on commit SHA`,
+			wantRevision:         "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
+			filterMessageSnippet: `Using PipelineRun definition from source push on revision: dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e`,
 		},
 		{
 			name:      "list tekton dir for branch creation from default branch",
@@ -1708,6 +1745,7 @@ func TestGetTektonDir(t *testing.T) {
 			args: args{
 				path: ".tekton",
 				event: &info.Event{
+					SHA:        "abc123",
 					HeadBranch: "main",
 				},
 			},
@@ -1723,6 +1761,7 @@ func TestGetTektonDir(t *testing.T) {
 			args: args{
 				path: ".tekton",
 				event: &info.Event{
+					SHA:        "abc123",
 					HeadBranch: "main",
 				},
 			},
@@ -1739,6 +1778,7 @@ func TestGetTektonDir(t *testing.T) {
 			args: args{
 				path: ".tekton",
 				event: &info.Event{
+					SHA:        "abc123",
 					HeadBranch: "main",
 				},
 			},
@@ -1765,7 +1805,7 @@ func TestGetTektonDir(t *testing.T) {
 			if tt.wantClient {
 				client, mux, tearDown := thelp.Setup(t)
 				v.SetGitLabClient(client)
-				muxbranch := tt.args.event.HeadBranch
+				muxbranch := tt.args.event.SHA
 				if tt.args.provenance == "default_branch" {
 					muxbranch = tt.args.event.DefaultBranch
 				} else if tt.wantRevision != "" {
@@ -1794,6 +1834,41 @@ func TestGetTektonDir(t *testing.T) {
 	}
 }
 
+func TestSourceRevision(t *testing.T) {
+	const (
+		branch  = "main"
+		sha     = "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e"
+		zeroSHA = "0000000000000000000000000000000000000000"
+	)
+	tests := []struct {
+		name string
+		sha  string
+		want string
+	}{
+		{
+			name: "valid SHA",
+			sha:  sha,
+			want: sha,
+		},
+		{
+			name: "empty SHA",
+			want: branch,
+		},
+		{
+			name: "zero SHA",
+			sha:  zeroSHA,
+			want: branch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := &info.Event{SHA: tt.sha, HeadBranch: branch}
+			assert.Equal(t, tt.want, sourceRevision(event))
+		})
+	}
+}
+
 func TestGetFileInsideRepo(t *testing.T) {
 	const content = "hello moto"
 	tests := []struct {
@@ -1805,8 +1880,24 @@ func TestGetFileInsideRepo(t *testing.T) {
 		wantErr        bool
 	}{
 		{
-			name: "ordinary event uses head branch",
+			name: "ordinary event uses event SHA",
 			event: &info.Event{
+				SHA:        "1111111111111111111111111111111111111111",
+				HeadBranch: "branch",
+			},
+			wantRevision: "1111111111111111111111111111111111111111",
+		},
+		{
+			name: "empty SHA uses head branch",
+			event: &info.Event{
+				HeadBranch: "branch",
+			},
+			wantRevision: "branch",
+		},
+		{
+			name: "zero SHA uses head branch",
+			event: &info.Event{
+				SHA:        "0000000000000000000000000000000000000000",
 				HeadBranch: "branch",
 			},
 			wantRevision: "branch",
@@ -1814,16 +1905,15 @@ func TestGetFileInsideRepo(t *testing.T) {
 		{
 			name: "missing file returns an error",
 			event: &info.Event{
+				SHA:        "1111111111111111111111111111111111111111",
 				HeadBranch: "branch",
 			},
 			path:         "notfound",
-			wantRevision: "branch",
+			wantRevision: "1111111111111111111111111111111111111111",
 			wantErr:      true,
 		},
 		{
-			// A branch created together with new commits carries a zero before SHA but a
-			// non-empty commits array, so it stays on the ordinary branch ref.
-			name: "push creating a branch with commits keeps using head branch",
+			name: "push creating a branch with commits uses event SHA",
 			event: &info.Event{
 				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 				HeadBranch:    "refs/heads/release-0.1",
@@ -1835,12 +1925,10 @@ func TestGetFileInsideRepo(t *testing.T) {
 					Commits: []*gitlab.PushEventCommit{{ID: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e"}},
 				},
 			},
-			wantRevision: "refs/heads/release-0.1",
+			wantRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 		},
 		{
-			// The event SHA must match the payload after SHA, otherwise the event is not the
-			// immutable branch creation it claims to be.
-			name: "push whose SHA differs from the payload after SHA keeps using head branch",
+			name: "push whose SHA differs from the payload after SHA uses event SHA",
 			event: &info.Event{
 				SHA:           "1111111111111111111111111111111111111111",
 				HeadBranch:    "refs/heads/release-0.1",
@@ -1851,10 +1939,10 @@ func TestGetFileInsideRepo(t *testing.T) {
 					Ref:    "refs/heads/release-0.1",
 				},
 			},
-			wantRevision: "refs/heads/release-0.1",
+			wantRevision: "1111111111111111111111111111111111111111",
 		},
 		{
-			name: "non push trigger target keeps using head branch",
+			name: "non push trigger target uses event SHA",
 			event: &info.Event{
 				SHA:           "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 				HeadBranch:    "refs/heads/release-0.1",
@@ -1865,7 +1953,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 					Ref:    "refs/heads/release-0.1",
 				},
 			},
-			wantRevision: "refs/heads/release-0.1",
+			wantRevision: "dc922f5ea0c57ef5fb1cbc0f3ea550dfe3b5786e",
 		},
 		{
 			name: "branch creation without explicit target uses event SHA",
