@@ -3001,10 +3001,10 @@ func TestGetCommitStatuses(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
-			assert.Equal(t, len(got), len(tt.wantStatuses))
+			assert.Equal(t, len(tt.wantStatuses), len(got))
 			for i, want := range tt.wantStatuses {
-				assert.Equal(t, got[i].Name, want.Name)
-				assert.Equal(t, got[i].Status, want.Status)
+				assert.Equal(t, want.Name, got[i].Name)
+				assert.Equal(t, want.Status, got[i].Status)
 			}
 		})
 	}
