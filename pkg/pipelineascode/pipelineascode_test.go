@@ -51,7 +51,7 @@ func replyString(mux *http.ServeMux, url, body string) {
 	})
 }
 
-func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool) {
+func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText, queuedStatusText string, noReplyOrgPublicMembers bool) {
 	t.Helper()
 	// Take a directory and generate replies as Github for it
 	replyString(mux,
@@ -87,12 +87,22 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 			created := github.CreateCheckRunOptions{}
 			err := json.Unmarshal(body, &created)
 			assert.NilError(t, err)
-			// We created multiple status but the last one should be completed.
-			// TODO: we could maybe refine this test
-			if created.GetStatus() == "completed" {
+			// We create multiple statuses over the life of a testcase (e.g. queued,
+			// in_progress, completed), but "completed" is the only one guaranteed to
+			// be sent for every testcase, so it's asserted unconditionally. PipelineRuns
+			// left pending by an external controller never reach "completed" here, so
+			// testcases that expect that outcome opt into checking the "queued" status
+			// text instead via queuedStatusText.
+			switch created.GetStatus() {
+			case "completed":
 				assert.Equal(t, created.GetConclusion(), finalStatus, "we got the status `%s` but we should have get the status `%s`", created.GetConclusion(), finalStatus)
 				assert.Assert(t, strings.Contains(created.GetOutput().GetText(), finalStatusText),
 					"GetStatus/CheckRun %s != %s", created.GetOutput().GetText(), finalStatusText)
+			case queuedStatus:
+				if queuedStatusText != "" {
+					assert.Assert(t, strings.Contains(created.GetOutput().GetText(), queuedStatusText),
+						"GetStatus/CheckRun queued text %q does not contain %q", created.GetOutput().GetText(), queuedStatusText)
+				}
 			}
 		})
 }
@@ -122,6 +132,7 @@ func TestRun(t *testing.T) {
 		wantErr                      string
 		finalStatus                  string
 		finalStatusText              string
+		queuedStatusText             string
 		repositories                 []*v1alpha1.Repository
 		skipReplyingOrgPublicMembers bool
 		expectedNumberofCleanups     int
@@ -496,7 +507,8 @@ func TestRun(t *testing.T) {
 				PullRequestNumber: 666,
 				InstallationID:    1234,
 			},
-			tektondir: "testdata/pending_pipelinerun",
+			tektondir:        "testdata/pending_pipelinerun",
+			queuedStatusText: "has been queued",
 		},
 		{
 			name: "pull request/pipelinerun created in pending state without installationID (state changed by other controller)",
@@ -517,7 +529,8 @@ func TestRun(t *testing.T) {
 				TriggerTarget:     "pull_request",
 				PullRequestNumber: 666,
 			},
-			tektondir: "testdata/pending_pipelinerun",
+			tektondir:        "testdata/pending_pipelinerun",
+			queuedStatusText: "has been queued",
 		},
 	}
 	for _, tt := range tests {
@@ -579,7 +592,7 @@ func TestRun(t *testing.T) {
 				},
 			}
 
-			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.skipReplyingOrgPublicMembers)
+			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.queuedStatusText, tt.skipReplyingOrgPublicMembers)
 			if tt.tektondir != "" {
 				ghtesthelper.SetupGitTree(t, mux, tt.tektondir, &tt.runevent, false)
 			}
