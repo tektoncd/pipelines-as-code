@@ -2201,6 +2201,26 @@ func TestMatchPipelinerunByAnnotation(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "on-comment-annotation-with-invalid-regexp-match",
+			args: args{
+				runevent: info.Event{TriggerTarget: "push", EventType: "push", BaseBranch: "refs/heads/main"},
+				pruns: []*tektonv1.PipelineRun{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "on-comment-annotation-with-invalid-regexp-match",
+							Annotations: map[string]string{
+								keys.OnComment: "^/(help|rebase",
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+			wantLog: []string{
+				"could not compile regexp ^/(help|rebase from on-comment annotation in pipelineRun on-comment-annotation-with-invalid-regexp-match",
+			},
+		},
+		{
 			name: "ref-heads-*--allow-any-branch",
 			args: args{
 				pruns:    []*tektonv1.PipelineRun{pipelineRefAll},

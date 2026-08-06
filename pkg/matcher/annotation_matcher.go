@@ -276,7 +276,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 		if targetComment, ok := prun.GetObjectMeta().GetAnnotations()[keys.OnComment]; ok {
 			re, err := regexp.Compile(targetComment)
 			if err != nil {
-				logger.Warnf("could not compile regexp %s from pipelineRun %s", targetComment, prName)
+				logger.Warnf("could not compile regexp %s from on-comment annotation in pipelineRun %s", targetComment, prName)
 				continue
 			}
 
