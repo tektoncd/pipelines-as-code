@@ -162,12 +162,9 @@ type PullRequestEvent struct {
 	PullRequest PullRequest   `json:"pullRequest"`
 	EventKey    string        `json:"eventKey"`
 
-	// Comment should be used when event is `pr:comment:added` or `pr:comment:edited`.
-	Comment ActivityComment `json:"comment"`
-
-	// CommentParentID and PreviousComment should be used when event is `pr:comment:edited`.
-	CommentParentID string `json:"commentParentId"`
-	PreviousComment string `json:"previousComment"`
+	Comment         ActivityComment `json:"comment"`
+	CommentParentID string          `json:"commentParentId"`
+	PreviousComment string          `json:"previousComment"`
 }
 
 type PushRequestEventChange struct {
