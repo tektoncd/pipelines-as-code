@@ -72,6 +72,17 @@ func withState(pr *pipelinev1.PipelineRun, state string) *pipelinev1.PipelineRun
 	return pr
 }
 
+// withEventType sets the EventType annotation, as set on PipelineRuns
+// matched from different webhook deliveries (e.g. pull_request vs
+// pull_request_labeled) that can share the same SHA.
+func withEventType(pr *pipelinev1.PipelineRun, eventType string) *pipelinev1.PipelineRun {
+	if pr.Annotations == nil {
+		pr.Annotations = map[string]string{}
+	}
+	pr.Annotations[keys.EventType] = eventType
+	return pr
+}
+
 func seedAndMakeClients(ctx context.Context, t *testing.T, prs []*pipelinev1.PipelineRun) paramsclients.Clients {
 	t.Helper()
 	seeded, _ := testclient.SeedTestData(t, ctx, testclient.Data{
@@ -87,13 +98,14 @@ func seedAndMakeClients(ctx context.Context, t *testing.T, prs []*pipelinev1.Pip
 }
 
 type waitTestCase struct {
-	name         string
-	pipelineRuns []*pipelinev1.PipelineRun
-	targetSHA    []string
-	minStatus    int
-	wantErr      bool
-	wantCount    int
-	wantOrder    []string
+	name            string
+	pipelineRuns    []*pipelinev1.PipelineRun
+	targetSHA       []string
+	targetEventType string
+	minStatus       int
+	wantErr         bool
+	wantCount       int
+	wantOrder       []string
 }
 
 func runWaitTests(t *testing.T, tests []waitTestCase, waitFn func(context.Context, paramsclients.Clients, Opts) ([]pipelinev1.PipelineRun, error)) {
@@ -106,6 +118,7 @@ func runWaitTests(t *testing.T, tests []waitTestCase, waitFn func(context.Contex
 				Namespace:       "test-ns",
 				MinNumberStatus: tt.minStatus,
 				TargetSHA:       tt.targetSHA,
+				TargetEventType: tt.targetEventType,
 				PollTimeout:     10 * time.Millisecond,
 			}
 
@@ -264,6 +277,57 @@ func TestUntilPipelineRunsFinished(t *testing.T) {
 			minStatus: 0,
 			wantCount: 1,
 			wantOrder: []string{"pr-1"},
+		},
+		{
+			// Two PipelineRuns can share the same SHA when different webhook
+			// deliveries both match an annotation (e.g. pull_request and
+			// pull_request_labeled both matching an on-label PipelineRun).
+			// Without TargetEventType, whichever finishes first satisfies
+			// minStatus and the labeled one is never waited for.
+			name: "target event type filters out same-sha pipelinerun with different event type",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				withEventType(withState(makePipelineRunWithStatus("pr-opened", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(2*time.Second)), kubeinteraction.StateCompleted), "pull_request"),
+				withEventType(withState(makePipelineRunWithStatus("pr-labeled", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(5*time.Second)), kubeinteraction.StateCompleted), "pull_request_labeled"),
+			},
+			targetSHA:       []string{"sha-1"},
+			targetEventType: "pull_request_labeled",
+			minStatus:       2,
+			wantCount:       1,
+			wantOrder:       []string{"pr-labeled"},
+		},
+		{
+			// MinNumberStatus counts all finished PipelineRuns cumulatively
+			// (e.g. two prior pull_request runs plus one gitops test-comment
+			// run), not just ones matching TargetEventType; only readiness
+			// additionally requires at least one target-event run to have
+			// finished, and only that subset is returned.
+			name: "target event type counts cumulative finished but returns only matching subset",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				withEventType(withState(makePipelineRunWithStatus("pr-1", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(1*time.Second)), kubeinteraction.StateCompleted), "pull_request"),
+				withEventType(withState(makePipelineRunWithStatus("pr-2", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(2*time.Second)), kubeinteraction.StateCompleted), "pull_request"),
+				withEventType(withState(makePipelineRunWithStatus("pr-3", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(3*time.Second)), kubeinteraction.StateCompleted), "test-comment"),
+			},
+			targetSHA:       []string{"sha-1"},
+			targetEventType: "test-comment",
+			minStatus:       3,
+			wantCount:       1,
+			wantOrder:       []string{"pr-3"},
+		},
+		{
+			// The unfinished PipelineRun already carries the target
+			// EventType annotation (as it would once the PaC controller
+			// matches and creates it, before the watcher marks it
+			// finished), so the wait must recognize it as the awaited run
+			// that hasn't finished yet, not just ignore it.
+			name: "target event type times out when only non matching event finished",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				withEventType(withState(makePipelineRunWithStatus("pr-opened", "sha-1", "Succeeded", corev1.ConditionTrue, now, now.Add(2*time.Second)), kubeinteraction.StateCompleted), "pull_request"),
+				withEventType(makePipelineRun("pr-labeled", "sha-1", ""), "pull_request_labeled"),
+			},
+			targetSHA:       []string{"sha-1"},
+			targetEventType: "pull_request_labeled",
+			minStatus:       1,
+			wantErr:         true,
 		},
 	}, UntilPipelineRunsFinished)
 }
