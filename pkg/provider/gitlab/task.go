@@ -84,7 +84,7 @@ func (v *Provider) GetTaskURI(_ context.Context, event *info.Event, uri string) 
 	if client == nil {
 		baseURL := fmt.Sprintf("%s://%s", extracted.Scheme, extracted.Host)
 		var clientErr error
-		client, clientErr = gl.NewClient(event.Provider.Token, gl.WithBaseURL(baseURL))
+		client, clientErr = gl.NewClient(event.Provider.Token, v.clientOptions(baseURL)...)
 		if clientErr != nil {
 			return false, "", fmt.Errorf("failed to create gitlab client: %w", clientErr)
 		}

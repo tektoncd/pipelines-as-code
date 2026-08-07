@@ -26,6 +26,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"k8s.io/client-go/kubernetes"
@@ -118,6 +119,19 @@ func (v *Provider) SetGithubClient(client *github.Client) {
 
 func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
 	v.pacInfo = pacInfo
+}
+
+// retryOptions returns retry transport options built from the pac settings,
+// or nil when API retries are disabled (the default).
+func (v *Provider) retryOptions() *retryhttp.Options {
+	if v.pacInfo == nil || !v.pacInfo.EnableAPIRetry {
+		return nil
+	}
+	return &retryhttp.Options{
+		MaxAttempts: v.pacInfo.APIRetryMaxAttempts,
+		MaxWait:     time.Duration(v.pacInfo.APIRetryMaxWaitSeconds) * time.Second,
+		Logger:      v.Logger,
+	}
 }
 
 // detectGHERawURL Detect if we have a raw URL in GHE.
@@ -235,13 +249,16 @@ func (v *Provider) GetConfig() *info.ProviderConfig {
 	}
 }
 
-func MakeClient(ctx context.Context, apiURL, token string) (*github.Client, string, *string, error) {
+func MakeClient(ctx context.Context, apiURL, token string, retryOpts ...*retryhttp.Options) (*github.Client, string, *string, error) {
 	var client *github.Client
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
 
 	tc := oauth2.NewClient(ctx, ts)
+	if len(retryOpts) > 0 && retryOpts[0] != nil {
+		tc.Transport = retryhttp.Wrap(tc.Transport, *retryOpts[0])
+	}
 	if apiURL != "" {
 		if !strings.HasPrefix(apiURL, "https") && !strings.HasPrefix(apiURL, "http") {
 			apiURL = "https://" + apiURL
@@ -263,6 +280,11 @@ func MakeClient(ctx context.Context, apiURL, token string) (*github.Client, stri
 	}
 
 	return client, providerName, github.Ptr(apiURL), nil
+}
+
+// MakeClient creates a GitHub API client using the provider retry settings.
+func (v *Provider) MakeClient(ctx context.Context, apiURL, token string) (*github.Client, string, *string, error) {
+	return MakeClient(ctx, apiURL, token, v.retryOptions())
 }
 
 func parseTS(headerTS string) (time.Time, error) {
@@ -326,7 +348,7 @@ func (v *Provider) checkWebhookSecretValidity(ctx context.Context, cw clockwork.
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
-	client, providerName, apiURL, err := MakeClient(ctx, event.Provider.URL, event.Provider.Token)
+	client, providerName, apiURL, err := v.MakeClient(ctx, event.Provider.URL, event.Provider.Token)
 	if err != nil {
 		return err
 	}
@@ -1244,7 +1266,7 @@ func (v *Provider) fetchAppSlug(ctx context.Context, apiURL string) (string, err
 		return "", err
 	}
 
-	client, _, _, err := MakeClient(ctx, apiURL, tokenString)
+	client, _, _, err := v.MakeClient(ctx, apiURL, tokenString)
 	if err != nil {
 		return "", err
 	}

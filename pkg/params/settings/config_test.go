@@ -48,6 +48,8 @@ func TestSyncConfig(t *testing.T) {
 				CustomConsolePRTaskLog:               "",
 				CustomConsoleNamespaceURL:            "",
 				RememberOKToTest:                     false,
+				APIRetryMaxAttempts:                  4,
+				APIRetryMaxWaitSeconds:               120,
 			},
 		},
 		{
@@ -109,6 +111,8 @@ func TestSyncConfig(t *testing.T) {
 				CustomConsoleNamespaceURL:            "https://custom-console-namespace",
 				RememberOKToTest:                     false,
 				RequireOkToTestSHA:                   true,
+				APIRetryMaxAttempts:                  4,
+				APIRetryMaxWaitSeconds:               120,
 			},
 		},
 		{
