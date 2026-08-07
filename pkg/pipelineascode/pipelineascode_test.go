@@ -94,7 +94,7 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 			// testcases that expect that outcome opt into checking the "queued" status
 			// text instead via queuedStatusText.
 			switch created.GetStatus() {
-			case "completed":
+			case CompletedStatus:
 				assert.Equal(t, created.GetConclusion(), finalStatus, "we got the status `%s` but we should have get the status `%s`", created.GetConclusion(), finalStatus)
 				assert.Assert(t, strings.Contains(created.GetOutput().GetText(), finalStatusText),
 					"GetStatus/CheckRun %s != %s", created.GetOutput().GetText(), finalStatusText)
