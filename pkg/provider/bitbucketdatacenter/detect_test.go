@@ -81,7 +81,7 @@ func TestProviderDetect(t *testing.T) {
 			},
 			eventType:  "pr:comment:added",
 			isBS:       true,
-			processReq: false,
+			processReq: true,
 		},
 		{
 			name: "ok-to-test comment",
