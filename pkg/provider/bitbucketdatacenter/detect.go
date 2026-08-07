@@ -42,15 +42,7 @@ func (v *Provider) Detect(req *http.Request, payload string, logger *zap.Sugared
 			return setLoggerAndProceed(true, "", nil)
 		}
 		if provider.Valid(event, []string{"pr:comment:added"}) {
-			if provider.IsTestRetestComment(e.Comment.Text) {
-				return setLoggerAndProceed(true, "", nil)
-			}
-			if provider.IsOkToTestComment(e.Comment.Text) {
-				return setLoggerAndProceed(true, "", nil)
-			}
-			if provider.IsCancelComment(e.Comment.Text) {
-				return setLoggerAndProceed(true, "", nil)
-			}
+			return setLoggerAndProceed(true, "", nil)
 		}
 		return setLoggerAndProceed(false, fmt.Sprintf("not a recognized bitbucket event: \"%s\"", event), nil)
 
