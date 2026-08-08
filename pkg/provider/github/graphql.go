@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
 	"go.uber.org/zap"
@@ -53,7 +53,7 @@ func newGraphQLClient(p *Provider) (*graphQLClient, error) {
 
 // buildGraphQLEndpoint constructs the GraphQL API endpoint URL from the GitHub client's BaseURL.
 func buildGraphQLEndpoint(p *Provider) (string, error) {
-	baseURL := p.Client().BaseURL.String()
+	baseURL := p.Client().BaseURL()
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	// For GitHub.com, use standard GraphQL endpoint
@@ -181,11 +181,10 @@ func (c *graphQLClient) fetchFilesBatch(ctx context.Context, owner, repo, ref st
 		"variables": variables,
 	}
 
-	req, err := c.ghClient.NewRequest(http.MethodPost, c.endpoint, requestBody)
+	req, err := c.ghClient.NewRequest(ctx, http.MethodPost, c.endpoint, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphQL request: %w", err)
 	}
-	req = req.WithContext(ctx)
 
 	// Record metrics for GraphQL API call
 	if c.logger != nil {

@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"gotest.tools/v3/assert"
 )
@@ -54,10 +53,12 @@ func SetupGH() (client *github.Client, mux *http.ServeMux, serverURL string, tea
 
 	// client is the GitHub client being tested and is
 	// configured to use test server.
-	client = github.NewClient(nil)
-	url, _ := url.Parse(server.URL + githubBaseURLPath + "/")
-	client.BaseURL = url
-	client.UploadURL = url
+	testURL := server.URL + githubBaseURLPath + "/"
+	var err error
+	client, err = github.NewClient(github.WithURLs(&testURL, &testURL))
+	if err != nil {
+		panic(err)
+	}
 
 	return client, mux, server.URL, server.Close
 }

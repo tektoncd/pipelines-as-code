@@ -64,7 +64,7 @@ func TestGetGHClient(t *testing.T) {
 			}
 			got, err := getGHClient(opts)
 			assert.NilError(t, err)
-			assert.Equal(t, got.BaseURL.String(), tt.want)
+			assert.Equal(t, got.BaseURL(), tt.want)
 		})
 	}
 }

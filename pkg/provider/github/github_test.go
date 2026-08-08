@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -1241,11 +1241,11 @@ func TestGithubSetClient(t *testing.T) {
 			}
 			assert.NilError(t, err)
 			assert.Equal(t, tt.expectedURL, *v.APIURL)
-			assert.Equal(t, "https", v.Client().BaseURL.Scheme)
+			assert.Assert(t, strings.HasPrefix(v.Client().BaseURL(), "https://"))
 			if tt.isGHE {
-				assert.Equal(t, "/api/v3/", v.Client().BaseURL.Path)
+				assert.Assert(t, strings.HasSuffix(v.Client().BaseURL(), "/api/v3/"))
 			} else {
-				assert.Equal(t, "/", v.Client().BaseURL.Path)
+				assert.Equal(t, keys.PublicGithubAPIURL+"/", v.Client().BaseURL())
 			}
 
 			logs := observer.TakeAll()
@@ -1709,7 +1709,9 @@ func TestProviderCheckWebhookSecretValidity(t *testing.T) {
 					return nil, fmt.Errorf("network down")
 				})
 				httpClient := &http.Client{Transport: errRT}
-				fakeclient = github.NewClient(httpClient)
+				var err error
+				fakeclient, err = github.NewClient(github.WithHTTPClient(httpClient))
+				assert.NilError(t, err)
 			}
 
 			v := &Provider{

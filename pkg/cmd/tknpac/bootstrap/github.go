@@ -5,8 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/go-github/scrape"
-	githubv84 "github.com/google/go-github/v84/github"
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 )
 
@@ -27,13 +26,13 @@ func generateManifest(opts *bootstrapOpts) ([]byte, error) {
 			triggertype.PullRequest.String(),
 			"push",
 		},
-		DefaultPermissions: &githubv84.InstallationPermissions{
-			Checks:       githubv84.Ptr("write"),
-			Contents:     githubv84.Ptr("write"),
-			Issues:       githubv84.Ptr("write"),
-			Members:      githubv84.Ptr("read"),
-			Metadata:     githubv84.Ptr("read"),
-			PullRequests: githubv84.Ptr("write"),
+		DefaultPermissions: &github.InstallationPermissions{
+			Checks:       github.Ptr("write"),
+			Contents:     github.Ptr("write"),
+			Issues:       github.Ptr("write"),
+			Members:      github.Ptr("read"),
+			Metadata:     github.Ptr("read"),
+			PullRequests: github.Ptr("write"),
 		},
 	}
 	return json.Marshal(sc)
@@ -42,10 +41,10 @@ func generateManifest(opts *bootstrapOpts) ([]byte, error) {
 // getGHClient get github client.
 func getGHClient(opts *bootstrapOpts) (*github.Client, error) {
 	if opts.GithubAPIURL == defaultPublicGithub {
-		return github.NewClient(nil), nil
+		return github.NewClient()
 	}
 
-	gprovider, err := github.NewClient(nil).WithEnterpriseURLs(opts.GithubAPIURL, "")
+	gprovider, err := github.NewClient(github.WithEnterpriseURLs(opts.GithubAPIURL, opts.GithubAPIURL))
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -266,17 +266,20 @@ func MakeClient(ctx context.Context, apiURL, token string, retryOpts ...*retryht
 	}
 
 	providerName := "github"
+	var err error
 	if apiURL != "" && apiURL != apiPublicURL {
 		providerName = "github-enterprise"
 		uploadURL := apiURL + "/api/uploads"
-		var err error
-		client, err = github.NewClient(tc).WithEnterpriseURLs(apiURL, uploadURL)
+		client, err = github.NewClient(github.WithHTTPClient(tc), github.WithEnterpriseURLs(apiURL, uploadURL))
 		if err != nil {
 			return nil, providerName, nil, fmt.Errorf("failed to create github enterprise client for %s: %w", apiURL, err)
 		}
 	} else {
-		client = github.NewClient(tc)
-		apiURL = client.BaseURL.String()
+		client, err = github.NewClient(github.WithHTTPClient(tc))
+		if err != nil {
+			return nil, providerName, nil, fmt.Errorf("failed to create github client: %w", err)
+		}
+		apiURL = client.BaseURL()
 	}
 
 	return client, providerName, github.Ptr(apiURL), nil

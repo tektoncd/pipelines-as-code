@@ -11,6 +11,10 @@ updates:
       # (major go-github API changes), update them manually instead
       - dependency-name: "github.com/google/go-github/*"
       - dependency-name: "github.com/bradleyfalzon/ghinstallation/v2"
+      # otel is pinned to v1.44.0 until knative.dev/pkg supports semconv >= 1.43
+      # (its observability/semconv is hardcoded to 1.41.0; otel SDK >= 1.45
+      # defaults to 1.43.0 and resource.Merge panics at startup)
+      - dependency-name: "go.opentelemetry.io/otel*"
     groups:
       go-dependencies:
         patterns:

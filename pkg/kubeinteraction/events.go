@@ -3,7 +3,7 @@ package kubeinteraction
 import (
 	"context"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

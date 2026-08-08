@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
@@ -20,9 +19,10 @@ import (
 )
 
 func newTestProvider(baseURL string) (*Provider, *zapobserver.ObservedLogs) {
-	client := github.NewClient(nil)
-	parsed, _ := url.Parse(baseURL)
-	client.BaseURL = parsed
+	client, err := github.NewClient(github.WithURLs(&baseURL, &baseURL))
+	if err != nil {
+		panic(err)
+	}
 
 	core, observedLogs := zapobserver.New(zap.DebugLevel)
 	logger := zap.New(core).Sugar()
@@ -101,9 +101,8 @@ func TestBuildGraphQLEndpoint(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := github.NewClient(nil)
-			parsed, _ := url.Parse(tc.base)
-			client.BaseURL = parsed
+			client, err := github.NewClient(github.WithURLs(&tc.base, &tc.base))
+			assert.NilError(t, err)
 
 			got, err := buildGraphQLEndpoint(&Provider{ghClient: client})
 			assert.NilError(t, err)

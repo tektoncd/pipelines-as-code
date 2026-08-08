@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	ghprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
@@ -94,10 +94,10 @@ func PushFilesToRef(ctx context.Context, client *github.Client, commitMessage, b
 }
 
 func PRCreate(ctx context.Context, cs *params.Run, ghcnx *ghprovider.Provider, owner, repo, targetRef, defaultBranch, title string) (int, error) {
-	pr, _, err := ghcnx.Client().PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+	pr, _, err := ghcnx.Client().PullRequests.Create(ctx, owner, repo, github.CreatePullRequest{
 		Title: &title,
-		Head:  &targetRef,
-		Base:  &defaultBranch,
+		Head:  targetRef,
+		Base:  defaultBranch,
 		Body:  github.Ptr("Add a new PR for testing"),
 	})
 	if err != nil {

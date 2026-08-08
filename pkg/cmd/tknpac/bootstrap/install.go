@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/random"
@@ -36,7 +36,10 @@ this will let your git platform provider (ie: Github) to reach the controller wi
 
 func getLatestRelease(ctx context.Context, k8release string) (string, string, error) {
 	// Always go to public
-	gh := github.NewClient(nil)
+	gh, err := github.NewClient()
+	if err != nil {
+		return "", "", err
+	}
 	release, _, err := gh.Repositories.GetLatestRelease(ctx, pacGHRepoOwner, pacGHRepoName)
 	if err != nil {
 		return "", "", err

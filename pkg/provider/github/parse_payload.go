@@ -14,8 +14,10 @@ import (
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
-	githubv84 "github.com/google/go-github/v84/github"
-	"github.com/google/go-github/v85/github"
+	// ghinstallation.Transport.InstallationTokenOptions is typed against this
+	// specific go-github major version; keep in sync with its go.mod.
+	githubv88 "github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/gitclient"
@@ -73,7 +75,7 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 	if err != nil {
 		return "", err
 	}
-	opts := &githubv84.InstallationTokenOptions{}
+	opts := &githubv88.InstallationTokenOptions{}
 	switch {
 	case len(v.RepositoryIDs) > 0:
 		opts.RepositoryIDs = v.RepositoryIDs
@@ -102,10 +104,16 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 			gheURL = "https://" + gheURL
 		}
 		uploadURL := gheURL + "/api/uploads"
-		v.ghClient, _ = github.NewClient(&http.Client{Transport: apiTransport}).WithEnterpriseURLs(gheURL, uploadURL)
-		itr.BaseURL = strings.TrimSuffix(v.Client().BaseURL.String(), "/")
+		v.ghClient, err = github.NewClient(github.WithTransport(apiTransport), github.WithEnterpriseURLs(gheURL, uploadURL))
+		if err != nil {
+			return "", fmt.Errorf("failed to create github enterprise client for %s: %w", gheURL, err)
+		}
+		itr.BaseURL = strings.TrimSuffix(v.Client().BaseURL(), "/")
 	} else {
-		v.ghClient = github.NewClient(&http.Client{Transport: apiTransport})
+		v.ghClient, err = github.NewClient(github.WithTransport(apiTransport))
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Get a token ASAP because we need it for setting private repos
