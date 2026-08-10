@@ -608,8 +608,13 @@ func (r *Reconciler) updatePipelineRunState(ctx context.Context, logger *zap.Sug
 		},
 	}
 
-	// if state is started then remove pipelineRun pending status
-	if state == kubeinteraction.StateStarted {
+	// if state is started and the pipelineRun is still pending then clear the
+	// pending status so Tekton can pick it up. If it already isn't pending
+	// (e.g. Tekton already started it before we got a chance to report it),
+	// skip this patch: the field is already cleared, and some Tekton versions'
+	// admission webhook rejects any spec update once a PipelineRun has started,
+	// even a no-op one.
+	if state == kubeinteraction.StateStarted && pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
 		mergePatch["spec"] = map[string]any{
 			"status": "",
 		}

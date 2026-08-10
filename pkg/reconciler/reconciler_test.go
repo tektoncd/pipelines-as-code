@@ -408,9 +408,10 @@ func TestUpdatePipelineRunState(t *testing.T) {
 	fakelogger := zap.New(observer).Sugar()
 
 	tests := []struct {
-		name        string
-		pipelineRun *tektonv1.PipelineRun
-		state       string
+		name          string
+		pipelineRun   *tektonv1.PipelineRun
+		state         string
+		wantSpecPatch bool
 	}{
 		{
 			name: "queued to started",
@@ -427,7 +428,8 @@ func TestUpdatePipelineRunState(t *testing.T) {
 				},
 				Status: tektonv1.PipelineRunStatus{},
 			},
-			state: kubeinteraction.StateStarted,
+			state:         kubeinteraction.StateStarted,
+			wantSpecPatch: true,
 		},
 		{
 			name: "started to completed",
@@ -444,6 +446,26 @@ func TestUpdatePipelineRunState(t *testing.T) {
 			},
 			state: kubeinteraction.StateCompleted,
 		},
+		{
+			name: "already running reported as started should not repatch spec",
+			pipelineRun: &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "test",
+					Annotations: map[string]string{
+						keys.State: kubeinteraction.StateQueued,
+					},
+				},
+				// Tekton already cleared the pending status and started the
+				// PipelineRun before PAC got a chance to report it (see the
+				// "Running reason without SCMReportingPLRStarted" scenario in
+				// TestReconcileKindSCMReportingLogic).
+				Spec:   tektonv1.PipelineRunSpec{},
+				Status: tektonv1.PipelineRunStatus{},
+			},
+			state:         kubeinteraction.StateStarted,
+			wantSpecPatch: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -452,6 +474,15 @@ func TestUpdatePipelineRunState(t *testing.T) {
 				PipelineRuns: []*tektonv1.PipelineRun{tt.pipelineRun},
 			}
 			stdata, _ := testclient.SeedTestData(t, ctx, testData)
+
+			var gotPatch []byte
+			stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if patch, ok := action.(k8stesting.PatchAction); ok {
+					gotPatch = patch.GetPatch()
+				}
+				return false, nil, nil
+			})
+
 			r := &Reconciler{
 				run: &params.Run{
 					Clients: clients.Clients{
@@ -465,6 +496,11 @@ func TestUpdatePipelineRunState(t *testing.T) {
 
 			assert.Equal(t, updatedPR.Annotations[keys.State], tt.state)
 			assert.Equal(t, updatedPR.Spec.Status, tektonv1.PipelineRunSpecStatus(""))
+
+			var patchBody map[string]any
+			assert.NilError(t, json.Unmarshal(gotPatch, &patchBody))
+			_, hasSpec := patchBody["spec"]
+			assert.Equal(t, hasSpec, tt.wantSpecPatch, "unexpected spec field in patch %s", string(gotPatch))
 
 			// Test SCMReportingPLRStarted annotation for started state
 			if tt.state == kubeinteraction.StateStarted {
