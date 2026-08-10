@@ -110,7 +110,7 @@ Create a Kubernetes secret containing your API token in the `target-namespace`
 ```shell
 kubectl -n target-namespace create secret generic bitbucket-cloud-token \
         --from-literal provider.token="BITBUCKET_CLOUD_API_TOKEN" \
-        --from-literal webhook.secret="YOUR_WEBHOOK_SECRET" # required when IP-Based validation is disabled in pipelines-as-code configmap.
+        --from-literal webhook.secret="YOUR_WEBHOOK_SECRET"
 ```
 
 ### Create the Repository CR
