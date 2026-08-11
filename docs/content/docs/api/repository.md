@@ -143,6 +143,9 @@ spec:
             container_logs:
               enabled: true
               max_lines: 100
+    status_checks:
+      enabled: true
+      mode: "per_pipelinerun"
 ```
 
 ## Related resources

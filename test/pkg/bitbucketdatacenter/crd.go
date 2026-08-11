@@ -8,6 +8,7 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
 	pacrepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
 
@@ -16,7 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func CreateCRD(ctx context.Context, t *testing.T, client *scm.Client, run *params.Run, orgAndRepo, targetNS string) *scm.Repository {
+func CreateCRD(ctx context.Context, t *testing.T, client *scm.Client, run *params.Run, opts options.E2E, orgAndRepo, targetNS string) *scm.Repository {
 	repo, resp, err := client.Repositories.Find(ctx, orgAndRepo)
 	assert.NilError(t, err, "error getting repository: http status code: %d: %v", resp.Status, err)
 
@@ -26,7 +27,8 @@ func CreateCRD(ctx context.Context, t *testing.T, client *scm.Client, run *param
 			Name: targetNS,
 		},
 		Spec: v1alpha1.RepositorySpec{
-			URL: url,
+			URL:      url,
+			Settings: opts.Settings,
 		},
 	}
 

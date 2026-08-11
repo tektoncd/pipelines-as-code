@@ -2,6 +2,9 @@ apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   name: no-match
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[non-existent-branch]"
+    pipelinesascode.tekton.dev/on-event: "[push]"
 spec:
   pipelineRef:
     name: pipeline1
