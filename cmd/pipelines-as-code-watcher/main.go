@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/reconciler"
 	"k8s.io/client-go/rest"
 	"knative.dev/pkg/injection"
@@ -29,6 +30,10 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, "ok")
 	})
+
+	// Read-only view of the concurrency queues, so a test or an operator can
+	// tell whether the queue still agrees with the cluster.
+	mux.HandleFunc("/debug/queue", queue.DebugHandler())
 
 	c := make(chan struct{})
 	go func() {

@@ -27,6 +27,10 @@ import (
 
 const pipelineRunFileNamePrefix = "prlongrunnning-"
 
+// globalRepoConcurrencyLimit is the limit trepository.CreateGlobalRepo sets on
+// the global Repository.
+const globalRepoConcurrencyLimit = 2
+
 func TestGithubGHEPullRequestConcurrency1by1(t *testing.T) {
 	ctx := context.Background()
 	label := "Github PullRequest Concurrent, sequentially one by one"
@@ -36,7 +40,7 @@ func TestGithubGHEPullRequestConcurrency1by1(t *testing.T) {
 	yamlFiles := map[string]string{}
 	g := setupGithubConcurrency(ctx, t, maxNumberOfConcurrentPipelineRuns, numberOfPipelineRuns, label, yamlFiles)
 	defer g.TearDown(ctx, t)
-	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, checkOrdering)
+	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, maxNumberOfConcurrentPipelineRuns, checkOrdering)
 }
 
 // TestGithubGHEPullRequestConcurrencyRestartedWhenWatcherIsUp tests that
@@ -85,7 +89,7 @@ func TestGithubGHEPullRequestConcurrencyRestartedWhenWatcherIsUp(t *testing.T) {
 
 	g.Cnx.Clients.Log.Info("All PipelineRuns are Pending")
 	tkubestuff.ScaleDeployment(ctx, t, runCnxS, 1, "pipelines-as-code-watcher", "pipelines-as-code")
-	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, checkOrdering)
+	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, maxNumberOfConcurrentPipelineRuns, checkOrdering)
 }
 
 func TestGithubGHEPullRequestConcurrency3by3(t *testing.T) {
@@ -98,7 +102,7 @@ func TestGithubGHEPullRequestConcurrency3by3(t *testing.T) {
 
 	g := setupGithubConcurrency(ctx, t, maxNumberOfConcurrentPipelineRuns, numberOfPipelineRuns, label, yamlFiles)
 	defer g.TearDown(ctx, t)
-	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, checkOrdering)
+	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, maxNumberOfConcurrentPipelineRuns, checkOrdering)
 }
 
 func TestGithubGHEPullRequestConcurrency1by1WithError(t *testing.T) {
@@ -113,7 +117,7 @@ func TestGithubGHEPullRequestConcurrency1by1WithError(t *testing.T) {
 
 	g := setupGithubConcurrency(ctx, t, maxNumberOfConcurrentPipelineRuns, numberOfPipelineRuns, label, yamlFiles)
 	defer g.TearDown(ctx, t)
-	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, checkOrdering)
+	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, maxNumberOfConcurrentPipelineRuns, checkOrdering)
 }
 
 func TestGithubGlobalRepoConcurrencyLimit(t *testing.T) {
@@ -143,9 +147,15 @@ func testGlobalRepoConcurrency(t *testing.T, label string, localRepoMaxConcurren
 	checkOrdering := false
 	yamlFiles := map[string]string{}
 
+	// the local limit wins when it is set, otherwise the global one applies
+	effectiveLimit := globalRepoConcurrencyLimit
+	if localRepoMaxConcurrentRuns >= 0 {
+		effectiveLimit = localRepoMaxConcurrentRuns
+	}
+
 	g := setupGithubConcurrency(ctx, t, localRepoMaxConcurrentRuns, numberOfPipelineRuns, label, yamlFiles)
 	defer g.TearDown(ctx, t)
-	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, checkOrdering)
+	testGithubConcurrency(ctx, t, g, numberOfPipelineRuns, effectiveLimit, checkOrdering)
 }
 
 func setupGithubConcurrency(ctx context.Context, t *testing.T, maxNumberOfConcurrentPipelineRuns, numberOfPipelineRuns int, label string, yamlFiles map[string]string) tgithub.PRTest {
@@ -201,9 +211,11 @@ func setupGithubConcurrency(ctx context.Context, t *testing.T, maxNumberOfConcur
 	}
 }
 
-func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, numberOfPipelineRuns int, checkOrdering bool) {
+func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, numberOfPipelineRuns, maxConcurrency int, checkOrdering bool) {
 	g.Cnx.Clients.Log.Info("waiting to let controller process the event")
 	time.Sleep(5 * time.Second)
+
+	health := tkubestuff.SnapshotWatcherHealth(ctx, t, g.Cnx)
 
 	waitOpts := wait.Opts{
 		Namespace:       g.TargetNamespace,
@@ -215,13 +227,21 @@ func testGithubConcurrency(ctx context.Context, t *testing.T, g tgithub.PRTest, 
 
 	waitForPipelineRunsHasStarted(ctx, t, g, numberOfPipelineRuns)
 
+	prs, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
+	})
+	assert.NilError(t, err)
+
+	// the limit is the point of the feature, but until now these tests only
+	// checked that everything eventually succeeded, which a queue that ignores
+	// the limit entirely also does.
+	if maxConcurrency > 0 {
+		wait.AssertMaxConcurrency(t, prs.Items, maxConcurrency)
+	}
+	health.Assert(ctx, t)
+
 	// sort all the PR by when they have started
 	if checkOrdering {
-		prs, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, g.SHA),
-		})
-		assert.NilError(t, err)
-
 		// Verify we have the expected number of PipelineRuns
 		assert.Assert(t, len(prs.Items) == numberOfPipelineRuns,
 			"Expected %d PipelineRuns with SHA %s, but found %d",

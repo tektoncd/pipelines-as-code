@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 
@@ -80,24 +81,75 @@ func (r *Reconciler) queuePipelineRun(ctx context.Context, logger *zap.SugaredLo
 			break
 		}
 
+		var errs []error
+		dropped := map[string]bool{}
 		for _, prKeys := range acquired {
-			nsName := strings.Split(prKeys, "/")
 			repoKey := queuepkg.RepoKey(repo)
-			pr, err = r.run.Clients.Tekton.TektonV1().PipelineRuns(nsName[0]).Get(ctx, nsName[1], metav1.GetOptions{})
-			if err != nil {
-				logger.Info("failed to get pr with namespace and name: ", nsName[0], nsName[1])
+			nsName := strings.Split(prKeys, "/")
+			if len(nsName) != 2 {
+				logger.Errorf("invalid pipelineRun key %q queued for repository %s, dropping it", prKeys, repo.GetName())
 				_ = r.qm.RemoveFromQueue(repoKey, prKeys)
-			} else {
-				if err := r.updatePipelineRunToInProgress(ctx, logger, repo, pr); err != nil {
-					logger.Errorf("failed to update pipelineRun to in_progress: %w", err)
-					_ = r.qm.RemoveFromQueue(repoKey, prKeys)
-				} else {
-					processed = true
-				}
+				dropped[prKeys] = true
+				continue
 			}
+			acquiredPR, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(nsName[0]).Get(ctx, nsName[1], metav1.GetOptions{})
+			if err != nil {
+				// Nothing has been written to the cluster yet, so this PipelineRun
+				// is still pending and cannot be running. Hand the slot back: if we
+				// kept it, the retry would find this PipelineRun already in the
+				// running set, never re-acquire it, and never free the slot, since
+				// only a completed PipelineRun releases one.
+				_ = r.qm.RemoveFromQueue(repoKey, prKeys)
+				if errors.IsNotFound(err) {
+					// This key came straight from the ordered list built at the top
+					// of this call. Drop it there too, or the next iteration of this
+					// loop would re-add and re-acquire the same gone PipelineRun,
+					// wasting a Get and possibly tripping maxIterations below even
+					// though there is nothing left to do.
+					logger.Infof("pipelineRun %s does not exist anymore, releasing its queue slot for repository %s", prKeys, repo.GetName())
+					dropped[prKeys] = true
+					continue
+				}
+				// Keep going rather than return: the other acquired PipelineRuns
+				// are already holding slots, and abandoning them here would strand
+				// those slots until the watcher restarts.
+				errs = append(errs, fmt.Errorf("failed to get pipelineRun %s: %w", prKeys, err))
+				continue
+			}
+			if err := r.updatePipelineRunToInProgress(ctx, logger, repo, acquiredPR); err != nil {
+				if stderrors.Is(err, ErrPipelineRunNotStarted) {
+					// The state patch never landed, so the PipelineRun is still
+					// pending. Release the slot so the retry can pick it up again.
+					logger.Infof("pipelineRun %s could not be started, releasing its queue slot for repository %s", prKeys, repo.GetName())
+					_ = r.qm.RemoveFromQueue(repoKey, prKeys)
+				}
+				// Otherwise the state patch landed before this failed, so the
+				// PipelineRun is already running in the cluster. Keep the slot:
+				// releasing it would let the queue admit past the concurrency
+				// limit and leave the in-memory queue permanently out of sync.
+				// The slot is freed when the PipelineRun completes.
+				//
+				// Either way, keep processing the remaining acquired PipelineRuns
+				// so their slots are not stranded, and report the error at the end.
+				errs = append(errs, fmt.Errorf("failed to update pipelineRun %s to in_progress: %w", prKeys, err))
+				continue
+			}
+			processed = true
+		}
+		if len(errs) > 0 {
+			return stderrors.Join(errs...)
 		}
 		if processed {
 			break
+		}
+		if len(dropped) > 0 {
+			filtered := orderedList[:0]
+			for _, key := range orderedList {
+				if !dropped[key] {
+					filtered = append(filtered, key)
+				}
+			}
+			orderedList = filtered
 		}
 		if itered >= maxIterations {
 			return fmt.Errorf("max iterations reached of %d times trying to get a pipelinerun started for %s", maxIterations, repo.GetName())

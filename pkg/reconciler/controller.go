@@ -8,6 +8,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/informer/transform"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
@@ -19,6 +20,9 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	tektonPipelineRunInformerv1 "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1/pipelinerun"
 	tektonPipelineRunReconcilerv1 "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/pipelinerun"
+	tektonv1lister "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
+	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
@@ -72,12 +76,15 @@ func NewController() func(context.Context, configmap.Watcher) *controller.Impl {
 			log.Fatalf("Failed to create pipeline as code metrics recorder %v", err)
 		}
 
+		qm := queuepkg.NewManager(run.Clients.Log)
+		queuepkg.RegisterForDebug(qm)
+
 		r := &Reconciler{
 			run:               run,
 			kinteract:         kinteract,
 			pipelineRunLister: pipelineRunInformer.Lister(),
 			repoLister:        repoInformer.Lister(),
-			qm:                queuepkg.NewManager(run.Clients.Log),
+			qm:                qm,
 			metrics:           metrics,
 			eventEmitter:      events.NewEventEmitter(run.Clients.Kube, run.Clients.Log),
 		}
@@ -88,7 +95,11 @@ func NewController() func(context.Context, configmap.Watcher) *controller.Impl {
 		}
 
 		if _, err := pipelineRunInformer.Informer().AddEventHandler(controller.HandleAll(checkStateAndEnqueue(impl))); err != nil {
-			logging.FromContext(ctx).Panicf("Couldn't register PipelineRun informer event handler: %w", err)
+			logging.FromContext(ctx).Panicf("Couldn't register PipelineRun informer event handler: %v", err)
+		}
+
+		if _, err := repoInformer.Informer().AddEventHandler(controller.HandleAll(enqueueQueuedPipelineRuns(impl, pipelineRunInformer.Lister(), log))); err != nil {
+			logging.FromContext(ctx).Panicf("Couldn't register Repository informer event handler: %v", err)
 		}
 
 		return impl
@@ -105,6 +116,35 @@ func checkStateAndEnqueue(impl *controller.Impl) func(obj any) {
 			if exist {
 				impl.EnqueueKey(types.NamespacedName{Namespace: object.GetNamespace(), Name: object.GetName()})
 			}
+		}
+	}
+}
+
+// enqueueQueuedPipelineRuns re-enqueues every queued PipelineRun of a Repository
+// whenever that Repository changes. Without this, a concurrency limit that is
+// raised, lowered, zeroed or removed only takes effect the next time some
+// unrelated PipelineRun event happens to wake the repository up.
+//
+// Note this only covers the Repository the PipelineRuns belong to. Changing the
+// concurrency limit on a *global* Repository does not wake the repositories that
+// merge from it, since that would require fanning out across every namespace.
+func enqueueQueuedPipelineRuns(impl *controller.Impl, lister tektonv1lister.PipelineRunLister, log *zap.SugaredLogger) func(obj any) {
+	return func(obj any) {
+		object, err := kmeta.DeletionHandlingAccessor(obj)
+		if err != nil {
+			return
+		}
+		selector := labels.SelectorFromSet(labels.Set{
+			keys.Repository: formatting.CleanValueKubernetes(object.GetName()),
+			keys.State:      kubeinteraction.StateQueued,
+		})
+		prs, err := lister.PipelineRuns(object.GetNamespace()).List(selector)
+		if err != nil {
+			log.Errorf("failed to list queued pipelineRuns for repository %s/%s: %v", object.GetNamespace(), object.GetName(), err)
+			return
+		}
+		for _, pr := range prs {
+			impl.EnqueueKey(types.NamespacedName{Namespace: pr.GetNamespace(), Name: pr.GetName()})
 		}
 	}
 }

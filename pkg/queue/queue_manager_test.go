@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -325,4 +326,113 @@ func TestFilterPipelineRunByInProgress(t *testing.T) {
 	filtered := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
 	expected := []string{"test-ns/pr1"}
 	assert.DeepEqual(t, filtered, expected)
+}
+
+// TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder asserts that a
+// PipelineRun without an execution-order annotation is skipped rather than
+// aborting the whole initialization. The order-less runs are deliberately the
+// oldest ones so they sort first and would short-circuit everything after them.
+func TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+	cw := clockwork.NewFakeClock()
+
+	startedLabel := map[string]string{keys.State: kubeinteraction.StateStarted}
+	queuedLabel := map[string]string{keys.State: kubeinteraction.StateQueued}
+
+	repo := newTestRepo(1)
+
+	// oldest started run, no execution-order annotation
+	noOrderStarted := newTestPR("no-order-started", cw.Now(), startedLabel,
+		map[string]string{keys.State: kubeinteraction.StateStarted}, tektonv1.PipelineRunSpec{})
+	started := newTestPR("started", cw.Now().Add(1*time.Second), startedLabel, map[string]string{
+		keys.ExecutionOrder: "test-ns/started",
+		keys.State:          kubeinteraction.StateStarted,
+	}, tektonv1.PipelineRunSpec{})
+
+	// oldest queued run, no execution-order annotation
+	noOrderQueued := newTestPR("no-order-queued", cw.Now().Add(2*time.Second), queuedLabel,
+		map[string]string{keys.State: kubeinteraction.StateQueued},
+		tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusPending})
+	queued := newTestPR("queued", cw.Now().Add(3*time.Second), queuedLabel, map[string]string{
+		keys.ExecutionOrder: "test-ns/queued",
+		keys.State:          kubeinteraction.StateQueued,
+	}, tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusPending})
+
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo},
+		PipelineRuns: []*tektonv1.PipelineRun{noOrderStarted, started, noOrderQueued, queued},
+	})
+
+	qm := NewManager(logger)
+	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
+
+	sema, found := qm.queueMap[RepoKey(repo)]
+	assert.Assert(t, found, "queue was not built for the repository")
+	assert.Equal(t, len(sema.getCurrentRunning()), 1)
+	assert.Equal(t, sema.getCurrentRunning()[0], PrKey(started))
+	assert.Equal(t, len(sema.getCurrentPending()), 1)
+	assert.Equal(t, sema.getCurrentPending()[0], PrKey(queued))
+}
+
+// TestQueueManagerConcurrentRepositoryAccess exercises the manager from several
+// goroutines at once, the way the reconciler does when knative runs it with a
+// concurrency above one. Without a lock around every access to queueMap this
+// aborts the process with "fatal error: concurrent map read and map write".
+func TestQueueManagerConcurrentRepositoryAccess(t *testing.T) {
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+
+	const repos = 100
+	var wg sync.WaitGroup
+	for i := range repos {
+		repo := newTestRepo(1)
+		repo.Name = fmt.Sprintf("repo-%d", i)
+		pr := newTestPR(fmt.Sprintf("pr-%d", i), time.Now(), nil, nil, tektonv1.PipelineRunSpec{})
+		pr.Namespace = repo.Namespace
+
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			_, _ = qm.AddListToRunningQueue(repo, []string{PrKey(pr)})
+		}()
+		go func() {
+			defer wg.Done()
+			qm.RemoveAndTakeItemFromQueue(repo, pr)
+		}()
+		go func() {
+			defer wg.Done()
+			qm.RemoveRepository(repo)
+		}()
+	}
+	wg.Wait()
+
+	// the manager must still be usable afterwards
+	survivor := newTestRepo(1)
+	survivor.Name = "survivor"
+	acquired, err := qm.AddListToRunningQueue(survivor, []string{"test-ns/survivor-pr"})
+	assert.NilError(t, err)
+	assert.DeepEqual(t, acquired, []string{"test-ns/survivor-pr"})
+}
+
+// TestCheckAndUpdateSemaphoreSizeHandlesRemovedLimit is a regression test for
+// a nil-pointer dereference: checkAndUpdateSemaphoreSize only runs once a
+// semaphore already exists for a repository, so a test that sets
+// ConcurrencyLimit to nil before the semaphore is first created (as the other
+// tests in this file do) never exercises this guard. Here the semaphore is
+// created with a limit first, and only then is the limit removed, which is
+// what actually reaches checkAndUpdateSemaphoreSize's nil check.
+func TestCheckAndUpdateSemaphoreSizeHandlesRemovedLimit(t *testing.T) {
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+
+	repo := newTestRepo(1)
+	_, err := qm.getSemaphore(repo)
+	assert.NilError(t, err)
+
+	repo.Spec.ConcurrencyLimit = nil
+	sema, err := qm.getSemaphore(repo)
+	assert.NilError(t, err)
+	assert.Equal(t, sema.getLimit(), 0, "a removed limit must be treated as unlimited")
 }

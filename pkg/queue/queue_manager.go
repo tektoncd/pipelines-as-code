@@ -62,7 +62,12 @@ func (qm *Manager) getSemaphore(repo *v1alpha1.Repository) (Semaphore, error) {
 }
 
 func (qm *Manager) checkAndUpdateSemaphoreSize(repo *v1alpha1.Repository, semaphore Semaphore) error {
-	limit := *repo.Spec.ConcurrencyLimit
+	// a repository whose concurrency limit has been removed is treated as unlimited,
+	// which the semaphore models as a limit of zero.
+	limit := 0
+	if repo.Spec.ConcurrencyLimit != nil {
+		limit = *repo.Spec.ConcurrencyLimit
+	}
 	if limit != semaphore.getLimit() {
 		if semaphore.resize(limit) {
 			return nil
@@ -131,6 +136,11 @@ func (qm *Manager) RemoveFromQueue(repoKey, prKey string) bool {
 	qm.lock.Lock()
 	defer qm.lock.Unlock()
 
+	return qm.removeFromQueue(repoKey, prKey)
+}
+
+// removeFromQueue must be called with qm.lock held.
+func (qm *Manager) removeFromQueue(repoKey, prKey string) bool {
 	sema, found := qm.queueMap[repoKey]
 	if !found {
 		return false
@@ -143,9 +153,12 @@ func (qm *Manager) RemoveFromQueue(repoKey, prKey string) bool {
 }
 
 func (qm *Manager) RemoveAndTakeItemFromQueue(repo *v1alpha1.Repository, run *tektonv1.PipelineRun) string {
+	qm.lock.Lock()
+	defer qm.lock.Unlock()
+
 	repoKey := RepoKey(repo)
 	prKey := PrKey(run)
-	if !qm.RemoveFromQueue(repoKey, prKey) {
+	if !qm.removeFromQueue(repoKey, prKey) {
 		return ""
 	}
 	sema, found := qm.queueMap[repoKey]
@@ -220,8 +233,10 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		for _, pr := range sortedPRs {
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
-				// if the pipelineRun doesn't have order label then wait
-				return nil
+				// if the pipelineRun doesn't have an execution order annotation
+				// then skip it, but keep initializing the remaining pipelineRuns
+				// and repositories.
+				continue
 			}
 			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), "", kubeinteraction.StateStarted)
 
@@ -246,8 +261,10 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		for _, pr := range sortedPRs {
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
-				// if the pipelineRun doesn't have order label then wait
-				return nil
+				// if the pipelineRun doesn't have an execution order annotation
+				// then skip it, but keep initializing the remaining pipelineRuns
+				// and repositories.
+				continue
 			}
 			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
 			if err := qm.AddToPendingQueue(&repo, orderedList); err != nil {

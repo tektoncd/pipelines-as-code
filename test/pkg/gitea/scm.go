@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"testing"
+	"time"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/google/go-github/v85/github"
@@ -114,9 +115,18 @@ func CreateGiteaRepo(giteaClient *forgejo.Client, user, name, defaultBranch, hoo
 		logger.Infof("Creating org %s", name)
 		adminUser := user
 		user = "org-" + name
-		_, _, err := giteaClient.CreateOrg(forgejo.CreateOrgOption{
-			Name: user,
-		})
+		_, err := retryOnAPIError(
+			logger, "Creating org", 5, 5*time.Second,
+			func() (*forgejo.Organization, error) {
+				org, _, err := giteaClient.CreateOrg(forgejo.CreateOrgOption{
+					Name: user,
+				})
+				return org, err
+			},
+			func() (*forgejo.Organization, bool, error) {
+				return lookup(giteaClient.GetOrg(user))
+			},
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create org: %w", err)
 		}
@@ -139,40 +149,76 @@ func CreateGiteaRepo(giteaClient *forgejo.Client, user, name, defaultBranch, hoo
 			}
 		}
 		logger.Infof("Creating gitea repository on org %s", name)
-		repo, _, err = giteaClient.CreateOrgRepo(user, forgejo.CreateRepoOption{
-			Name:        name,
-			Description: "This is a repo it's a wonderful thing",
-			AutoInit:    true,
-		})
+		repo, err = retryOnAPIError(
+			logger, "Creating gitea repository", 5, 5*time.Second,
+			func() (*forgejo.Repository, error) {
+				repo, _, err := giteaClient.CreateOrgRepo(user, forgejo.CreateRepoOption{
+					Name:        name,
+					Description: "This is a repo it's a wonderful thing",
+					AutoInit:    true,
+				})
+				return repo, err
+			},
+			func() (*forgejo.Repository, bool, error) {
+				return lookup(giteaClient.GetRepo(user, name))
+			},
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create repo: %w", err)
 		}
 	} else {
 		logger.Infof("Creating gitea repository %s for user %s", name, user)
-		repo, _, err = giteaClient.AdminCreateRepo(user, forgejo.CreateRepoOption{
-			Name:          name,
-			Description:   "This is a repo it's a wonderful thing",
-			AutoInit:      true,
-			IssueLabels:   "Default",
-			DefaultBranch: defaultBranch,
-		})
+		repo, err = retryOnAPIError(
+			logger, "Creating gitea repository", 5, 5*time.Second,
+			func() (*forgejo.Repository, error) {
+				repo, _, err := giteaClient.AdminCreateRepo(user, forgejo.CreateRepoOption{
+					Name:          name,
+					Description:   "This is a repo it's a wonderful thing",
+					AutoInit:      true,
+					IssueLabels:   "Default",
+					DefaultBranch: defaultBranch,
+				})
+				return repo, err
+			},
+			func() (*forgejo.Repository, bool, error) {
+				return lookup(giteaClient.GetRepo(user, name))
+			},
+		)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repo: %w", err)
 	}
 	logger.Infof("Creating webhook to smee url on gitea repository %s", name)
-	_, _, err = giteaClient.CreateRepoHook(user, repo.Name, forgejo.CreateHookOption{
-		// Forgejo still uses the "gitea" hook type for webhooks.
-		Type:   "gitea",
-		Active: true,
-		Config: map[string]string{
-			"name":         "hook to smee url",
-			"url":          hookURL,
-			"content_type": "json",
-			"secret":       webhookSecret,
+	_, err = retryOnAPIError(
+		logger, "Creating repo webhook", 5, 5*time.Second,
+		func() (*forgejo.Hook, error) {
+			hook, _, err := giteaClient.CreateRepoHook(user, repo.Name, forgejo.CreateHookOption{
+				// Forgejo still uses the "gitea" hook type for webhooks.
+				Type:   "gitea",
+				Active: true,
+				Config: map[string]string{
+					"name":         "hook to smee url",
+					"url":          hookURL,
+					"content_type": "json",
+					"secret":       webhookSecret,
+				},
+				Events: []string{"push", "issue_comments", "pull_request"},
+			})
+			return hook, err
 		},
-		Events: []string{"push", "issue_comments", "pull_request"},
-	})
+		func() (*forgejo.Hook, bool, error) {
+			hooks, _, listErr := giteaClient.ListRepoHooks(user, repo.Name, forgejo.ListHooksOptions{})
+			if listErr != nil {
+				return nil, false, listErr
+			}
+			for _, h := range hooks {
+				if h.Config["url"] == hookURL {
+					return h, true, nil
+				}
+			}
+			return nil, false, nil
+		},
+	)
 	return repo, err
 }
 

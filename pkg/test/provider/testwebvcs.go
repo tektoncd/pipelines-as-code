@@ -35,6 +35,7 @@ type TestProviderImp struct {
 	CommitInfoErrorMsg     string
 	pacInfo                *info.PacOpts
 	CommitStatuses         []provider.CommitStatusInfo
+	ProviderName           string
 }
 
 func (v *TestProviderImp) SetPacInfo(pacInfo *info.PacOpts) {
@@ -72,7 +73,7 @@ func (v *TestProviderImp) ParsePayload(_ context.Context, _ *params.Run, _ *http
 }
 
 func (v *TestProviderImp) GetConfig() *info.ProviderConfig {
-	return &info.ProviderConfig{}
+	return &info.ProviderConfig{Name: v.ProviderName}
 }
 
 func (v *TestProviderImp) GetCommitInfo(_ context.Context, event *info.Event) error {
