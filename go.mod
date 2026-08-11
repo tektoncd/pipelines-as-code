@@ -10,7 +10,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/fvbommel/sortorder v1.1.0
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.28.1
+	github.com/google/cel-go v0.29.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260403152401-96a365122246
 	github.com/google/go-github/v84 v84.0.0
