@@ -273,6 +273,9 @@ spec:
       filter: "event == 'push'"
   settings:
     pipelinerun_provenance: "source"
+    github_app_token_scope_repos:
+      - "organization/other-repo"
+    gitops_command_prefix: "/my-prefix"
     policy:
       ok_to_test:
         - "maintainer-user"
@@ -281,4 +284,27 @@ spec:
         - "external-contributor"
     github:
       comment_strategy: "update"
+    gitlab:
+      comment_strategy: "update"
+      token_auto_rotation: true
+    forgejo:
+      user_agent: "my-custom-agent"
+      comment_strategy: "update"
+    ai:
+      enabled: true
+      provider: openai
+      secret_ref:
+        name: llm-api-token
+        key: token
+      roles:
+        - name: failure-analysis
+          prompt: "Analyze the CI/CD pipeline failure"
+          model: "gpt-5.4-mini"
+          on_cel: "pipelinerun_status == 'Failed'"
+          output: pr-comment
+          context_items:
+            error_content: true
+            container_logs:
+              enabled: true
+              max_lines: 100
 ```
