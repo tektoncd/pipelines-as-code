@@ -18,6 +18,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
@@ -345,6 +346,22 @@ func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *inf
 	return nil
 }
 
+// isResolvableTargetURL reports whether detailsURL is a usable commit status
+// target_url. It excludes the pipelines-as-code placeholder URLs (e.g.
+// https://dashboard.is.not.configured) used when no console/dashboard has
+// been configured, since GitLab's URL blocker rejects hosts that don't
+// resolve and would otherwise fail the whole status update.
+func isResolvableTargetURL(detailsURL string) bool {
+	if detailsURL == "" {
+		return false
+	}
+	u, err := url.Parse(detailsURL)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	return !strings.HasSuffix(u.Hostname(), consoleui.NotConfiguredURLSuffix)
+}
+
 //nolint:misspell
 func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOpts providerstatus.StatusOpts,
 ) error {
@@ -399,9 +416,15 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	opt := &gitlab.SetCommitStatusOptions{
 		State:       state,
 		Name:        gitlab.Ptr(contextName),
-		TargetURL:   gitlab.Ptr(detailsURL),
 		Description: gitlab.Ptr(statusOpts.Title),
 		Context:     gitlab.Ptr(contextName),
+	}
+	// GitLab validates target_url and rejects hosts that don't resolve, which
+	// includes the "*.is.not.configured" placeholders pipelines-as-code falls
+	// back to when no console/dashboard URL has been configured. Only send it
+	// when it looks like a real URL, otherwise leave it unset.
+	if isResolvableTargetURL(detailsURL) {
+		opt.TargetURL = gitlab.Ptr(detailsURL)
 	}
 
 	// Reuse a previously discovered pipeline ID so that all commit statuses

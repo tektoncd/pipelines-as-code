@@ -33,7 +33,7 @@ func (t *TektonDashboard) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *te
 func (t *TektonDashboard) URL() string {
 	// if BaseURL is not provided, return fake URL
 	if t.BaseURL == "" || t.BaseURL == "http://" || t.BaseURL == "https://" {
-		return "https://dashboard.url.is.not.configured"
+		return "https://dashboard.url." + NotConfiguredURLSuffix
 	}
 	return t.BaseURL
 }

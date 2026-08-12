@@ -35,7 +35,7 @@ func (o *OpenshiftConsole) GetName() string {
 
 func (o *OpenshiftConsole) URL() string {
 	if o.host == "" {
-		return "https://openshift.url.is.not.configured"
+		return "https://openshift.url." + NotConfiguredURLSuffix
 	}
 	return "https://" + o.host
 }

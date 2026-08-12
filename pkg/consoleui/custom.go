@@ -29,14 +29,14 @@ func NewCustomConsole(pacInfo *info.PacOpts) *CustomConsole {
 
 func (o *CustomConsole) GetName() string {
 	if o.pacInfo.CustomConsoleName == "" {
-		return fmt.Sprintf("https://url.setting.%s.is.not.configured", settings.CustomConsoleNameKey)
+		return fmt.Sprintf("https://url.setting.%s.%s", settings.CustomConsoleNameKey, NotConfiguredURLSuffix)
 	}
 	return o.pacInfo.CustomConsoleName
 }
 
 func (o *CustomConsole) URL() string {
 	if o.pacInfo.CustomConsoleURL == "" {
-		return fmt.Sprintf("https://url.setting.%s.is.not.configured", settings.CustomConsoleURLKey)
+		return fmt.Sprintf("https://url.setting.%s.%s", settings.CustomConsoleURLKey, NotConfiguredURLSuffix)
 	}
 	return o.pacInfo.CustomConsoleURL
 }
@@ -78,7 +78,7 @@ func (o *CustomConsole) generateURL(urlTmpl string) string {
 
 func (o *CustomConsole) DetailURL(pr *tektonv1.PipelineRun) string {
 	if o.pacInfo.CustomConsolePRdetail == "" {
-		return fmt.Sprintf("https://detailurl.setting.%s.is.not.configured", settings.CustomConsolePRDetailKey)
+		return fmt.Sprintf("https://detailurl.setting.%s.%s", settings.CustomConsolePRDetailKey, NotConfiguredURLSuffix)
 	}
 	o.namespace = pr.GetNamespace()
 	o.pr = pr.GetName()
@@ -87,7 +87,7 @@ func (o *CustomConsole) DetailURL(pr *tektonv1.PipelineRun) string {
 
 func (o *CustomConsole) NamespaceURL(pr *tektonv1.PipelineRun) string {
 	if o.pacInfo.CustomConsoleNamespaceURL == "" {
-		return fmt.Sprintf("https://detailurl.setting.%s.is.not.configured", settings.CustomConsoleNamespaceURLKey)
+		return fmt.Sprintf("https://detailurl.setting.%s.%s", settings.CustomConsoleNamespaceURLKey, NotConfiguredURLSuffix)
 	}
 	o.namespace = pr.GetNamespace()
 	return o.generateURL(o.pacInfo.CustomConsoleNamespaceURL)
@@ -95,7 +95,7 @@ func (o *CustomConsole) NamespaceURL(pr *tektonv1.PipelineRun) string {
 
 func (o *CustomConsole) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus) string {
 	if o.pacInfo.CustomConsolePRTaskLog == "" {
-		return fmt.Sprintf("https://tasklogurl.setting.%s.is.not.configured", settings.CustomConsolePRTaskLogKey)
+		return fmt.Sprintf("https://tasklogurl.setting.%s.%s", settings.CustomConsolePRTaskLogKey, NotConfiguredURLSuffix)
 	}
 	firstFailedStep := ""
 	// search for the first failed steps in taskrunstatus

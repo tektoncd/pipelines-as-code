@@ -216,6 +216,69 @@ func TestCreateStatus(t *testing.T) {
 			},
 		},
 		{
+			name:       "placeholder details url is omitted from target_url",
+			wantClient: true,
+			wantErr:    false,
+			fields:     fields{targetProjectID: 700},
+			args: args{
+				statusOpts: providerstatus.StatusOpts{
+					Conclusion: "success",
+					DetailsURL: "https://dashboard.is.not.configured",
+				},
+				event: &info.Event{
+					TriggerTarget:   "pull_request",
+					SourceProjectID: 700,
+					TargetProjectID: 700,
+					SHA:             "notconfigured01",
+				},
+			},
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/projects/700/statuses/notconfigured01", func(rw http.ResponseWriter, r *http.Request) {
+					var reqBody map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+						t.Fatalf("failed to decode request body: %v", err)
+					}
+					_, hasTargetURL := reqBody["target_url"]
+					assert.Assert(t, !hasTargetURL, "request should not have target_url for a placeholder details url")
+					rw.WriteHeader(http.StatusCreated)
+					fmt.Fprint(rw, `{"id": 1}`)
+				})
+			},
+		},
+		{
+			name:       "real details url is sent as target_url",
+			wantClient: true,
+			wantErr:    false,
+			fields:     fields{targetProjectID: 701},
+			args: args{
+				statusOpts: providerstatus.StatusOpts{
+					Conclusion: "success",
+					DetailsURL: "https://dashboard.example.com/run/1",
+				},
+				event: &info.Event{
+					TriggerTarget:   "pull_request",
+					SourceProjectID: 701,
+					TargetProjectID: 701,
+					SHA:             "realurl01",
+				},
+			},
+			setup: func(t *testing.T, mux *http.ServeMux) {
+				t.Helper()
+				mux.HandleFunc("/projects/701/statuses/realurl01", func(rw http.ResponseWriter, r *http.Request) {
+					var reqBody map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+						t.Fatalf("failed to decode request body: %v", err)
+					}
+					targetURL, hasTargetURL := reqBody["target_url"]
+					assert.Assert(t, hasTargetURL, "request should have target_url for a real details url")
+					assert.Equal(t, targetURL, "https://dashboard.example.com/run/1")
+					rw.WriteHeader(http.StatusCreated)
+					fmt.Fprint(rw, `{"id": 1}`)
+				})
+			},
+		},
+		{
 			name:       "pending conclusion for gitops command on pushed commit",
 			wantClient: true,
 			wantErr:    false,

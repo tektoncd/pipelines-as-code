@@ -8,7 +8,13 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-const consoleIsnotConfiguredURL = "https://dashboard.is.not.configured"
+// NotConfiguredURLSuffix is the hostname suffix used by every placeholder
+// URL returned by this package when a console/dashboard has not been
+// configured (e.g. https://dashboard.is.not.configured). Providers can use
+// it to detect and skip sending these placeholders as real URLs.
+const NotConfiguredURLSuffix = "is.not.configured"
+
+const consoleIsnotConfiguredURL = "https://dashboard." + NotConfiguredURLSuffix
 
 type Interface interface {
 	DetailURL(pr *tektonv1.PipelineRun) string
