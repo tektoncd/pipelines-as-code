@@ -3,7 +3,7 @@ title: PipelineRun status
 weight: 7
 ---
 
-This page describes how Pipelines-as-Code reports PipelineRun status across different Git providers, including log snippets, error annotations, and notification options.
+This page describes how Pipelines-as-Code reports PipelineRun statuses across different Git providers, including log snippets, error annotations, and notification options.
 
 ## GitHub Apps
 

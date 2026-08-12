@@ -7,10 +7,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "2"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && (
-        (target_branch == "main" && "docs/***".pathChanged()) ||
-        target_branch.startsWith("refs/tags/")
-      ) ||
+      (event == "push" && ((target_branch == "main" && "docs/***".pathChanged()) || target_branch.startsWith("refs/tags/")))
+      ||
       (event == "pull_request" && "docs/***".pathChanged())
 spec:
   params:
