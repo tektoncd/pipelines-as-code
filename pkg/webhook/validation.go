@@ -2,13 +2,17 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	pac "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "k8s.io/api/admission/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -26,7 +30,7 @@ func (ac *reconciler) Path() string {
 }
 
 // Admit implements AdmissionController.
-func (ac *reconciler) Admit(_ context.Context, request *v1.AdmissionRequest) *v1.AdmissionResponse {
+func (ac *reconciler) Admit(ctx context.Context, request *v1.AdmissionRequest) *v1.AdmissionResponse {
 	raw := request.Object.Raw
 	repo := v1alpha1.Repository{}
 	if _, _, err := universalDeserializer.Decode(raw, nil, &repo); err != nil {
@@ -46,6 +50,14 @@ func (ac *reconciler) Admit(_ context.Context, request *v1.AdmissionRequest) *v1
 
 		if parsed.Scheme != "http" && parsed.Scheme != "https" {
 			return webhook.MakeErrorStatus("URL scheme must be http or https")
+		}
+
+		allowed, err := ac.canCreatePipelineRuns(ctx, request)
+		if err != nil {
+			return webhook.MakeErrorStatus("validation failed: %v", err)
+		}
+		if !allowed {
+			return webhook.MakeErrorStatus("user %s does not have permission to create PipelineRuns in namespace %s", request.UserInfo.Username, request.Namespace)
 		}
 	}
 
@@ -69,6 +81,25 @@ func (ac *reconciler) Admit(_ context.Context, request *v1.AdmissionRequest) *v1
 	}
 
 	return &v1.AdmissionResponse{Allowed: true}
+}
+
+func (ac *reconciler) canCreatePipelineRuns(ctx context.Context, request *v1.AdmissionRequest) (bool, error) {
+	sar, err := ac.client.AuthorizationV1().SubjectAccessReviews().Create(ctx, &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			User:   request.UserInfo.Username,
+			Groups: request.UserInfo.Groups,
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace: request.Namespace,
+				Verb:      "create",
+				Group:     pipeline.PipelineRunResource.Group,
+				Resource:  pipeline.PipelineRunResource.Resource,
+			},
+		},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		return false, fmt.Errorf("failed to check PipelineRun permissions: %w", err)
+	}
+	return sar.Status.Allowed, nil
 }
 
 func checkIfRepoExist(pac pac.RepositoryLister, repo *v1alpha1.Repository, ns string) (bool, error) {
