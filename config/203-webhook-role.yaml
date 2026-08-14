@@ -37,17 +37,17 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["list", "watch"]
+    # The webhook daemon makes a reconciliation loop on webhook-certs. Whenever
+    # the secret changes it updates the webhook configurations with the certificates
+    # stored in the secret.
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "update"]
     resourceNames: ["pipelines-as-code-webhook-certs"]
-    # The webhook daemon makes a reconciliation loop on webhook-certs. Whenever
-    # the secret changes it updates the webhook configurations with the certificates
-    # stored in the secret.
+    # webhook uses leases for leader election
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "create", "update", "delete", "patch", "watch"]
-    # webhook uses leases for leader election
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -90,6 +90,10 @@ rules:
     resources: ["validatingwebhookconfigurations"]
     verbs: ["get", "update", "delete"]
     resourceNames: ["validation.pipelinesascode.tekton.dev"]
+    # The webhook makes a SubjectAccessReview request to the API server to check if the user has permission to create a PipelineRun.
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
