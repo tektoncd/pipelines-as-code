@@ -111,6 +111,17 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--trusted-provider-hostnames",
+        help=(
+            "comma separated hostnames of the git providers this controller is "
+            "allowed to send credentials to, e.g. ghe.example.com. Once set, the "
+            "list is authoritative and the public instances are trusted only if "
+            "they are listed too"
+        ),
+        default=os.environ.get("PAC_TRUSTED_PROVIDER_HOSTNAMES", ""),
+    )
+
+    parser.add_argument(
         "--openshift-route",
         help="add an openshift route to the controller",
         action="store_true",
@@ -166,9 +177,54 @@ with open("config/302-pac-configmap.yaml", "r", encoding="utf-8") as f:
     configmap = yaml.load(f, Loader=yaml.FullLoader)
     configmap["metadata"]["name"] = args.configmap
     configmap["metadata"]["namespace"] = args.namespace
+    if args.trusted_provider_hostnames:
+        configmap.setdefault("data", {})["trusted-provider-hostnames"] = (
+            args.trusted_provider_hostnames
+        )
+
+# The controller Role in config/201-controller-role.yaml scopes ConfigMap writes
+# to the default ConfigMap name, so a second controller needs its own Role to be
+# able to record a trusted provider hostname in its own ConfigMap.
+role = {
+    "apiVersion": "rbac.authorization.k8s.io/v1",
+    "kind": "Role",
+    "metadata": {
+        "name": f"{args.label}-controller-role",
+        "namespace": args.namespace,
+    },
+    "rules": [
+        {
+            "apiGroups": [""],
+            "resources": ["configmaps"],
+            "resourceNames": [args.configmap],
+            "verbs": ["update", "patch"],
+        }
+    ],
+}
+
+rolebinding = {
+    "apiVersion": "rbac.authorization.k8s.io/v1",
+    "kind": "RoleBinding",
+    "metadata": {
+        "name": f"{args.label}-controller-binding",
+        "namespace": args.namespace,
+    },
+    "subjects": [
+        {
+            "kind": "ServiceAccount",
+            "name": "pipelines-as-code-controller",
+            "namespace": args.namespace,
+        }
+    ],
+    "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": f"{args.label}-controller-role",
+    },
+}
 
 # re-encode as YAML to stdout
-for obj in [controller, service, configmap]:
+for obj in [controller, service, configmap, role, rolebinding]:
     print("---")
     yaml.dump(obj, sys.stdout, default_flow_style=False)
 

@@ -22,6 +22,42 @@ and their default values.
 For instructions on viewing and applying changes, see
 [Configuration]({{< relref "configuration" >}}).
 
+### Trusted provider hostnames
+
+Pipelines-as-Code only sends Git provider credentials to hostnames it trusts,
+listed in the `trusted-provider-hostnames` key:
+
+```bash
+kubectl -n pipelines-as-code patch configmap pipelines-as-code \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+While the key is empty, the public hostnames (`github.com`, `gitlab.com`,
+`bitbucket.org`, `gitea.com`, `codeberg.org`) stay trusted and every request the
+provider itself authenticated adds its hostname to the
+`pipelinesascode.tekton.dev/auto-trusted-provider-hostnames` annotation. A
+default installation needs no configuration, and a controller serving several
+instances learns all of them.
+
+A non-empty list is authoritative for every hostname, public ones included, and
+the controller stops learning hosts. Listing only your own instance is how you
+say "this controller must never talk to a public SaaS instance".
+
+That automatic trust only covers requests the provider signed:
+[incoming webhooks]({{< relref "/docs/advanced/incoming-webhooks.md" >}}) carry
+no provider signature and fail until the hostname is trusted. Set the key
+explicitly on any self-hosted instance.
+
+Emptying the list returns to controller-managed mode and makes previously
+learned hosts effective again. Delete the auto-trusted annotation as well when
+you want the controller to forget them.
+
+Today the allowlist gates the GitHub provider; the other providers are being
+moved onto it.
+
+See the [ConfigMap Reference]({{< relref "/docs/api/configmap#param-trusted-provider-hostnames" >}})
+for details.
+
 ## Per-repository configuration
 
 Each `Repository` CR can include a `spec.settings` block that overrides selected

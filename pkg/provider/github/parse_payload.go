@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +63,18 @@ func (v *Provider) GetAppIDAndPrivateKey(ctx context.Context, ns string, kube ku
 }
 
 func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, gheURL string, installationID int64, ns string) (string, error) {
+	endpoint, err := trustedAPIEndpointForHost(ctx, v.Run, gheURL)
+	if err != nil {
+		return "", err
+	}
+	gheURL, err = endpoint.BaseURLForClient()
+	if err != nil {
+		return "", err
+	}
+	reqTokenURL, err := AppTokenTestAPIURL()
+	if err != nil {
+		return "", err
+	}
 	applicationID, privateKey, err := v.GetAppIDAndPrivateKey(ctx, ns, kube)
 	if err != nil {
 		return "", err
@@ -86,11 +97,9 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 
 	// This is a hack when we have auth and api disassociated like in our
 	// unittests since we are using a custom http server with httptest
-	reqTokenURL := os.Getenv("PAC_GIT_PROVIDER_TOKEN_APIURL")
 	if reqTokenURL != "" {
 		itr.BaseURL = reqTokenURL
 		v.APIURL = &reqTokenURL
-		gheURL = strings.TrimSuffix(reqTokenURL, "/api/v3")
 	}
 
 	// wrap the installation transport with the retry transport when enabled
@@ -164,8 +173,6 @@ func (v *Provider) parseEventType(request *http.Request, event *info.Event) erro
 		return fmt.Errorf("failed to find event type in request header")
 	}
 
-	event.Provider.URL = request.Header.Get("X-GitHub-Enterprise-Host")
-
 	if event.EventType == "push" {
 		event.TriggerTarget = triggertype.Push
 	} else {
@@ -202,33 +209,59 @@ func getInstallationAndRepoIDFromPayload(payload string) (int64, int64, error) {
 	return installationID, repoID, nil
 }
 
-func validateEnterpriseHostMatchesPayload(gheURL, payload string) error {
-	if gheURL == "" {
-		return nil
-	}
-	if !strings.HasPrefix(gheURL, "https://") && !strings.HasPrefix(gheURL, "http://") {
-		gheURL = "https://" + gheURL
-	}
-	enterpriseURL, err := url.Parse(gheURL)
-	if err != nil || enterpriseURL.Host == "" {
-		return fmt.Errorf("invalid X-GitHub-Enterprise-Host header")
-	}
+// errNoRepositoryInPayload marks a payload that names no repository at all.
+// GitHub App level deliveries (ping, installation, installation_repositories,
+// marketplace_purchase) are legitimately shaped that way, so this is a normal
+// condition and not an attempt at redirecting the controller.
+var errNoRepositoryInPayload = errors.New("payload carries no repository, so it names no host")
 
+func githubEndpointFromPayload(enterpriseHeader, payload string) (APIEndpoint, error) {
 	var data Payload
 	if err := json.Unmarshal([]byte(payload), &data); err != nil {
-		return err
+		return APIEndpoint{}, err
 	}
 	if data.Repository.HTMLURL == "" {
-		return fmt.Errorf("repository HTML URL is missing in payload, cannot validate enterprise host")
+		return APIEndpoint{}, errNoRepositoryInPayload
 	}
 	repoURL, err := url.Parse(data.Repository.HTMLURL)
-	if err != nil || repoURL.Host == "" {
-		return fmt.Errorf("invalid repository URL in GitHub payload")
+	if err != nil || repoURL.Scheme != "https" || repoURL.Host == "" || repoURL.User != nil {
+		return APIEndpoint{}, fmt.Errorf("invalid repository URL in GitHub payload")
 	}
-	if !strings.EqualFold(enterpriseURL.Host, repoURL.Host) {
-		return fmt.Errorf("github enterprise host %q does not match repository host %q", enterpriseURL.Host, repoURL.Host)
+	endpoint, err := resolveUntrustedAPIEndpoint(repoURL.Host)
+	if err != nil {
+		return APIEndpoint{}, err
 	}
-	return nil
+	if enterpriseHeader != "" {
+		headerEndpoint, err := resolveUntrustedAPIEndpoint(enterpriseHeader)
+		if err != nil {
+			return APIEndpoint{}, fmt.Errorf("invalid X-GitHub-Enterprise-Host header: %w", err)
+		}
+		if endpoint.RepositoryHost != headerEndpoint.RepositoryHost {
+			return APIEndpoint{}, fmt.Errorf("GitHub enterprise header host %q does not match signed repository host %q", headerEndpoint.RepositoryHost, endpoint.RepositoryHost)
+		}
+	}
+	return endpoint, nil
+}
+
+func authenticatedGitHubEndpoint(ctx context.Context, run *params.Run, enterpriseHeader, payload string) (APIEndpoint, error) {
+	endpoint, err := githubEndpointFromPayload(enterpriseHeader, payload)
+	if err != nil {
+		return APIEndpoint{}, err
+	}
+	return authenticatedAPIEndpoint(ctx, run, endpoint.RepositoryHost)
+}
+
+// trustedGitHubEndpointFromPayload resolves the endpoint of a webhook whose
+// signature was verified against a per Repository secret. That secret belongs to
+// the tenant, not to the controller, so the host is only checked against the
+// allowlist and never recorded: otherwise any namespace owner could rewrite the
+// controller wide policy.
+func trustedGitHubEndpointFromPayload(ctx context.Context, run *params.Run, enterpriseHeader, payload string) (APIEndpoint, error) {
+	endpoint, err := githubEndpointFromPayload(enterpriseHeader, payload)
+	if err != nil {
+		return APIEndpoint{}, err
+	}
+	return trustedAPIEndpointForHost(ctx, run, endpoint.RepositoryHost)
 }
 
 func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *info.Event, installationID int64, reason string, err error) {
@@ -288,10 +321,24 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 	if err := v.parseEventType(request, event); err != nil {
 		return nil, err
 	}
-
 	installationIDFrompayload, repoIDFromPayload, err := getInstallationAndRepoIDFromPayload(payload)
 	if err != nil {
 		return nil, err
+	}
+	if isRepositorylessAppEvent(event.EventType) {
+		if _, endpointErr := githubEndpointFromPayload("", payload); errors.Is(endpointErr, errNoRepositoryInPayload) {
+			// These deliveries carry no repository and therefore need neither a
+			// provider endpoint nor an installation token. When an installation ID
+			// identifies this as an App delivery, authenticate it before skipping.
+			if installationIDFrompayload != -1 {
+				if err := validateAppWebhookSignature(ctx, run, event); err != nil {
+					v.logGitHubAppTokenMintValidationFailure(request, event, installationIDFrompayload, "webhook-signature-validation-failed", err)
+					return nil, err
+				}
+			}
+			v.Logger.Debugf("skipping GitHub App %s delivery without a repository", event.EventType)
+			return nil, nil
+		}
 	}
 	if installationIDFrompayload != -1 {
 		var err error
@@ -299,14 +346,17 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 			v.logGitHubAppTokenMintValidationFailure(request, event, installationIDFrompayload, "webhook-signature-validation-failed", err)
 			return nil, err
 		}
-		if err := validateEnterpriseHostMatchesPayload(event.Provider.URL, payload); err != nil {
+		endpoint, err := authenticatedGitHubEndpoint(ctx, run, request.Header.Get("X-GitHub-Enterprise-Host"), payload)
+		if err != nil {
 			v.logBlockedGitHubAppTokenMint(request, event, installationIDFrompayload, "enterprise-host-validation-failed", err)
 			return nil, err
 		}
 		// TODO: move this out of here when we move al config inside context
-		if event.Provider.Token, err = v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, installationIDFrompayload, systemNS); err != nil {
+		if event.Provider.Token, err = v.GetAppToken(ctx, run.Clients.Kube, endpoint.BaseURL, installationIDFrompayload, systemNS); err != nil {
 			return nil, err
 		}
+		event.Provider.URL = endpoint.BaseURL
+		event.GHEURL = endpoint.BaseURL
 	}
 
 	if repoIDFromPayload > 0 {
@@ -332,10 +382,19 @@ func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *h
 
 	processedEvent.Event = eventInt
 	processedEvent.InstallationID = installationIDFrompayload
-	processedEvent.GHEURL = event.Provider.URL
+	processedEvent.GHEURL = event.GHEURL
 	processedEvent.Provider.URL = event.Provider.URL
 
 	return processedEvent, nil
+}
+
+func isRepositorylessAppEvent(eventType string) bool {
+	switch eventType {
+	case "ping", "installation", "installation_repositories", "marketplace_purchase":
+		return true
+	default:
+		return false
+	}
 }
 
 // getPullRequestsWithCommit lists the all pull requests associated with given commit.

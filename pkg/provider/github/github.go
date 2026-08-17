@@ -75,6 +75,10 @@ type Provider struct {
 	clock              clockwork.Clock
 	graphQLClient      *graphQLClient
 	checkRunsCache     checkRunsCache
+	// clientFromCaller records that the client was built by the caller from a
+	// credential the caller owns, which exempts it from the trusted hostname
+	// gate in SetClient. See UsePreauthenticatedClient.
+	clientFromCaller bool
 }
 
 type skippedRun struct {
@@ -115,6 +119,22 @@ func (v *Provider) Client() *github.Client {
 
 func (v *Provider) SetGithubClient(client *github.Client) {
 	v.ghClient = client
+}
+
+// UsePreauthenticatedClient installs a client the caller built itself and opts
+// the provider out of the trusted hostname gate in SetClient.
+//
+// The gate exists to stop a credential the controller owns from being sent to a
+// host that a payload, or a Repository CR sharing a token from another
+// namespace, asked for. It is the origin of the host that matters: a caller that
+// picked the URL itself, the end to end harness taking it from its own
+// configuration, has already made that decision and there is nothing left here
+// to protect, whether the token is its own or one it minted from the App. It
+// follows that the URL must never come from a payload. Nothing in the controller
+// may use this.
+func (v *Provider) UsePreauthenticatedClient(client *github.Client) {
+	v.ghClient = client
+	v.clientFromCaller = true
 }
 
 func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
@@ -267,12 +287,16 @@ func MakeClient(ctx context.Context, apiURL, token string, retryOpts ...*retryht
 
 	providerName := "github"
 	var err error
-	if apiURL != "" && apiURL != apiPublicURL {
+	// keys.PublicGithubAPIURL carries no trailing slash while apiPublicURL does,
+	// and both reach here: comparing them literally would build an enterprise
+	// client for the public instance and append /api/v3 to api.github.com.
+	if apiURL != "" && strings.TrimSuffix(apiURL, "/") != strings.TrimSuffix(apiPublicURL, "/") {
 		providerName = "github-enterprise"
-		uploadURL := apiURL + "/api/uploads"
+		uploadBaseURL := strings.TrimSuffix(strings.TrimSuffix(apiURL, "/"), "/api/v3")
+		uploadURL := uploadBaseURL + "/api/uploads"
 		client, err = github.NewClient(github.WithHTTPClient(tc), github.WithEnterpriseURLs(apiURL, uploadURL))
 		if err != nil {
-			return nil, providerName, nil, fmt.Errorf("failed to create github enterprise client for %s: %w", apiURL, err)
+			return nil, "", nil, fmt.Errorf("failed to configure GitHub Enterprise client: %w", err)
 		}
 	} else {
 		client, err = github.NewClient(github.WithHTTPClient(tc))
@@ -351,6 +375,46 @@ func (v *Provider) checkWebhookSecretValidity(ctx context.Context, cw clockwork.
 }
 
 func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter) error {
+	if event.InstallationID <= 0 && event.EventType != "incoming" && event.Request != nil &&
+		event.Request.Header.Get("X-GitHub-Enterprise-Host") != "" {
+		if err := v.Validate(ctx, run, event); err != nil {
+			return err
+		}
+		endpoint, err := trustedGitHubEndpointFromPayload(
+			ctx,
+			run,
+			event.Request.Header.Get("X-GitHub-Enterprise-Host"),
+			string(event.Request.Payload),
+		)
+		if err != nil {
+			return err
+		}
+		event.Provider.URL = endpoint.BaseURL
+		event.GHEURL = endpoint.BaseURL
+	} else if v.ghClient == nil && !v.clientFromCaller {
+		// event.Provider.URL comes from the Repository CR, which is not enough
+		// to trust it: with a global Repository sharing a token from the
+		// controller namespace, the CR and the credential do not have the same
+		// owner, so a tenant could point an administrator's token at a host of
+		// their choosing. Resolve it through the allowlist and rebuild the
+		// endpoint from the hostname the allowlist approved.
+		//
+		// An empty URL is gated too: it means github.com, which an authoritative
+		// allowlist is entitled to refuse.
+		//
+		// The gate applies exactly when the client built below is the one that
+		// will carry the token. A client that is already installed, which is how
+		// the unit tests inject their fake, is left alone: the URL then reaches
+		// nothing. A caller that installed its own client through
+		// UsePreauthenticatedClient is skipped for a different reason: it owns
+		// the credential, so there is nothing here to protect.
+		endpoint, err := trustedAPIEndpointForProviderURL(ctx, run, event.Provider.URL)
+		if err != nil {
+			return err
+		}
+		event.Provider.URL = endpoint.BaseURL
+	}
+
 	client, providerName, apiURL, err := v.MakeClient(ctx, event.Provider.URL, event.Provider.Token)
 	if err != nil {
 		return err
@@ -401,7 +465,7 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 			// look up extra repos from the configmap first.  When no additional repos
 			// are configured, scope the token to only the triggering repo.
 			ns := info.GetNS(ctx)
-			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+			scopedToken, err := v.GetAppToken(ctx, run.Clients.Kube, event.GHEURL, event.InstallationID, ns)
 			if err != nil {
 				return fmt.Errorf("failed to scope token to triggering repository: %w", err)
 			}
@@ -868,7 +932,7 @@ func (v *Provider) CreateToken(ctx context.Context, repository []string, event *
 		v.RepositoryIDs = uniqueRepositoryID(v.RepositoryIDs, infoData.GetID())
 	}
 	ns := info.GetNS(ctx)
-	token, err := v.GetAppToken(ctx, v.Run.Clients.Kube, event.Provider.URL, event.InstallationID, ns)
+	token, err := v.GetAppToken(ctx, v.Run.Clients.Kube, event.GHEURL, event.InstallationID, ns)
 	if err != nil {
 		return "", err
 	}
@@ -1264,12 +1328,21 @@ func (v *Provider) GenerateJWT(ctx context.Context, ns string, kube kubernetes.I
 // Fetch the app slug used for identifying the application.
 func (v *Provider) fetchAppSlug(ctx context.Context, apiURL string) (string, error) {
 	ns := info.GetNS(ctx)
+	// apiURL is whatever SetClient settled on, which is an API URL rather than a
+	// bare hostname on a self hosted instance, so it needs the URL aware gate.
+	endpoint, err := trustedAPIEndpointForProviderURL(ctx, v.Run, apiURL)
+	if err != nil {
+		return "", err
+	}
+	trustedAPIURL, err := endpoint.BaseURLForClient()
+	if err != nil {
+		return "", err
+	}
 	tokenString, err := v.GenerateJWT(ctx, ns, v.Run.Clients.Kube)
 	if err != nil {
 		return "", err
 	}
-
-	client, _, _, err := v.MakeClient(ctx, apiURL, tokenString)
+	client, _, _, err := v.MakeClient(ctx, trustedAPIURL, tokenString)
 	if err != nil {
 		return "", err
 	}

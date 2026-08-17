@@ -8,20 +8,39 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/logging"
 	pkgreconciler "knative.dev/pkg/reconciler"
+	"knative.dev/pkg/system"
 )
 
 func (r *Reconciler) FinalizeKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
+	finalizeRun := *r.run
+	reconciler := *r
+	reconciler.run = &finalizeRun
+	return reconciler.finalizeKind(ctx, pr)
+}
+
+func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
+	// Knative hands the reconciler a bare context, and reporting a cancellation
+	// needs a provider client, which reads the trust policy from the controller
+	// ConfigMap. Without the namespace that read targets "" and every deletion
+	// of a running PipelineRun would silently stop reporting.
+	ctx = info.StoreNS(ctx, system.Namespace())
 	state, exist := pr.GetAnnotations()[keys.State]
 	if !exist || state == kubeinteraction.StateCompleted {
 		return nil
 	}
+	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	if err != nil {
+		return err
+	}
+	r.run.Info.Controller = controllerInfo
 
 	if state == kubeinteraction.StateQueued || state == kubeinteraction.StateStarted {
 		repoName, ok := pr.GetAnnotations()[keys.Repository]

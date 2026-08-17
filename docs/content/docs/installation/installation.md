@@ -68,6 +68,62 @@ echo https://$(oc get route -n pipelines-as-code pipelines-as-code-controller -o
 
 Kubernetes installation requires additional ingress setup. See the [Kubernetes installation guide]({{< relref "kubernetes" >}}) for details.
 
+## Self-hosted Git providers
+
+Pipelines-as-Code only sends Git provider credentials to hostnames it trusts.
+Until you configure the `trusted-provider-hostnames` key the public hostnames
+(`github.com`, `gitlab.com`, `bitbucket.org`, `gitea.com`, `codeberg.org`) are
+trusted, so a public-SaaS installation needs nothing here.
+
+If your provider is self-hosted (GitHub Enterprise Server, a self-managed
+GitLab, Gitea, Bitbucket Data Center, ...), add its hostname to the
+`trusted-provider-hostnames` key of the `pipelines-as-code` ConfigMap. The
+allowlist gates the GitHub provider today and the other providers are being
+moved onto it, so set it for all of them:
+
+```shell
+kubectl -n pipelines-as-code patch configmap pipelines-as-code \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+The value is a comma-separated list, so a controller serving several self-hosted
+instances can trust them all. Adding a hostname of your own makes the list
+authoritative for every hostname, public ones included, and the controller stops
+learning hosts. Removing a hostname from a non-empty list narrows the policy.
+Emptying the key gives the policy back to the controller and makes previously
+learned hosts effective again.
+
+Until you do, the controller records the hostname of every webhook whose
+signature it verified in the
+`pipelinesascode.tekton.dev/auto-trusted-provider-hostnames` ConfigMap
+annotation, which keeps a zero-configuration install working. That only applies
+to signed webhooks:
+[incoming webhooks]({{< relref "/docs/advanced/incoming-webhooks.md" >}}) carry
+no signature and fail until the hostname is trusted.
+
+Setting the key during installation is therefore recommended, and required if
+you deploy the ConfigMap through GitOps tooling that prunes controller-owned
+annotations. Otherwise the controller must relearn the hostname on every signed
+webhook.
+
+### Upgrading an existing self-hosted installation
+
+Only requests the provider itself authenticated can teach the controller a
+hostname, which in practice means a GitHub App webhook. If your installation
+uses per-repository webhooks rather than a GitHub App, or uses incoming
+webhooks, nothing will ever record your hostname for you and the controller
+refuses it. Set the key before upgrading:
+
+```shell
+kubectl -n pipelines-as-code patch configmap pipelines-as-code \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+The controller logs the exact command to run when it refuses a hostname, so a
+missed instance is visible in the controller log rather than silent.
+
+See [Trusted provider hostnames]({{< relref "/docs/operations/settings.md#trusted-provider-hostnames" >}}).
+
 ## RBAC
 
 RBAC (Role-Based Access Control) governs which users can perform actions in a Kubernetes cluster. Non-`system:admin` users must be explicitly granted permission to create Repository

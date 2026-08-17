@@ -20,6 +20,28 @@ data:
   # The application name, you can customize this label. If using the Github App you will need to customize the label on the github app setting as well.
   application-name: "Pipelines as Code CI"
 
+  # Comma separated list of the hosted VCS hostnames this controller is allowed
+  # to send its Git provider credentials to, for example:
+  #
+  #   trusted-provider-hostnames: "ghe.example.com,gitlab.example.com"
+  #
+  # While this key is empty, the controller manages the policy: the public SaaS
+  # instances (github.com, gitlab.com, bitbucket.org, gitea.com, codeberg.org)
+  # stay trusted and the hostname of every webhook whose signature was verified
+  # is recorded in the auto-trusted-provider-hostnames ConfigMap annotation.
+  #
+  # A non-empty list is authoritative for every hostname, the public ones
+  # included, and the controller stops learning hosts. Listing only your own
+  # instance is how you forbid this controller from talking to public SaaS.
+  #
+  # The allowlist gates the GitHub provider today; the other providers are being
+  # moved onto it.
+  #
+  # Set it explicitly when using incoming webhooks, they carry no signature and
+  # can't be used to establish that trust, and when this ConfigMap is managed by
+  # GitOps tooling that prunes controller-owned annotations.
+  trusted-provider-hostnames: ""
+
   # Whether to automatically create a secret with the token to be use by git-clone
   secret-auto-create: "true"
 

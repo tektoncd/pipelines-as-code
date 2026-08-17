@@ -1403,6 +1403,7 @@ func TestSetClientDetectAPIURL(t *testing.T) {
 		repoURL           string // input: v.repoURL
 		pathWithNamespace string // input: v.pathWithNamespace (needed if repoURL is used)
 		eventURL          string // input: event.URL
+		inheritedSecret   bool   // input: event.Provider.GitProviderSecretFromGlobalRepo
 		// Define expected outcomes
 		expectedAPIURL string
 		expectedError  string // Substring expected in the error message, "" for no error
@@ -1461,6 +1462,24 @@ func TestSetClientDetectAPIURL(t *testing.T) {
 			expectedError:     "",
 		},
 		{
+			// The token belongs to the controller namespace, so the API host must
+			// not come from a payload anyone can send.
+			name:              "Error: inherited credential with a payload derived host",
+			providerToken:     "token",
+			providerURL:       "",
+			repoURL:           "https://attacker.example/my/repo",
+			pathWithNamespace: "my/repo",
+			inheritedSecret:   true,
+			expectedError:     "refusing to send the credentials inherited from the global repository",
+		},
+		{
+			name:            "Success: inherited credential with an explicit provider url",
+			providerToken:   "token",
+			providerURL:     "https://gitlab.example.com",
+			inheritedSecret: true,
+			expectedAPIURL:  "https://gitlab.example.com",
+		},
+		{
 			name:          "Error: Invalid URL from event.URL",
 			providerToken: "token",
 			providerURL:   "",
@@ -1501,6 +1520,7 @@ func TestSetClientDetectAPIURL(t *testing.T) {
 			event := info.NewEvent()
 			event.Provider.Token = tc.providerToken
 			event.Provider.URL = tc.providerURL
+			event.Provider.GitProviderSecretFromGlobalRepo = tc.inheritedSecret
 			event.URL = tc.eventURL
 			// Set some default IDs to avoid potential nil pointer issues or side effects
 			// if the GetProject part of SetClient is reached unexpectedly.

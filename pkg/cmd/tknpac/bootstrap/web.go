@@ -73,6 +73,10 @@ func startWebServer(ctx context.Context, opts *bootstrapOpts, run *params.Run, j
 		return err
 	}
 
+	if err := trustProviderHostname(ctx, run, opts); err != nil {
+		return err
+	}
+
 	if err := info.UpdateInfoConfigMap(ctx, run, &info.Options{
 		TargetNamespace: opts.targetNamespace,
 		ControllerURL:   opts.RouteName,

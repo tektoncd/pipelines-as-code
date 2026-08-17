@@ -150,6 +150,13 @@ func TestSyncConfig(t *testing.T) {
 			},
 			expectedError: "custom validation failed for field CustomConsolePRTaskLog: invalid value, must start with http:// or https://",
 		},
+		{
+			name: "invalid value trusted provider hostnames",
+			configMap: map[string]string{
+				"trusted-provider-hostnames": "ghe.example.com, https://user@bad.example.com",
+			},
+			expectedError: "custom validation failed for field TrustedProviderHostnames: invalid value for trusted-provider-hostnames",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -171,6 +178,47 @@ func TestSyncConfig(t *testing.T) {
 			if !reflect.DeepEqual(test, tc.expectedStruct) {
 				t.Errorf("failure, actual and expected struct:\nActual: %#v\nExpected: %#v", test, tc.expectedStruct)
 			}
+		})
+	}
+}
+
+func TestIsValidTrustedProviderHostnames(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{
+			name:  "empty value means not configured",
+			value: "  ",
+		},
+		{
+			name:  "valid comma separated hostnames",
+			value: "ghe.example.com, gitlab.example.com",
+		},
+		{
+			name:  "https url spelling of a hostname",
+			value: "https://ghe.example.com",
+		},
+		{
+			name:    "hostname with a path is refused",
+			value:   "ghe.example.com/api/v3",
+			wantErr: "invalid value for trusted-provider-hostnames",
+		},
+		{
+			name:    "hostname with credentials is refused",
+			value:   "https://user@ghe.example.com",
+			wantErr: "invalid value for trusted-provider-hostnames",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := isValidTrustedProviderHostnames(tt.value)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			assert.NilError(t, err)
 		})
 	}
 }

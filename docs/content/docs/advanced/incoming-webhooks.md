@@ -281,13 +281,33 @@ curl -H "Content-Type: application/json" -X POST "https://control.pac.url/incomi
 Pipelines-as-Code sets the `pull_request_number` parameter to `12345`, so any use of
 `{{pull_request_number}}` in your PipelineRun resolves to that value.
 
-### Using incoming webhooks with GitHub Enterprise
+### Using incoming webhooks with a self-hosted provider
 
-When using a GitHub App with GitHub Enterprise, you must include the `X-GitHub-Enterprise-Host` header in the incoming webhook
-request. For example:
+An incoming webhook carries no provider signature, so the controller cannot
+verify where the request really comes from and will not learn a new provider
+hostname from it. On a self-hosted instance (GitHub Enterprise Server, a
+self-managed GitLab, ...) the hostname must therefore already be trusted, either
+because the controller processed a signed webhook from it earlier, or because an
+administrator listed it in the `trusted-provider-hostnames` key of the
+controller ConfigMap:
+
+```bash
+kubectl -n pipelines-as-code patch configmap pipelines-as-code \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+Setting the key explicitly is the recommended setup: it makes incoming webhooks
+work from the start instead of depending on a previous signed webhook. See
+[Trusted provider hostnames]({{< relref "/docs/operations/settings.md#trusted-provider-hostnames" >}}).
+
+Until then the request is refused with an error naming the host and the exact
+command to run. The incoming request itself can never select or override the
+provider API endpoint.
 
 ```shell
-curl -H "X-GitHub-Enterprise-Host: github.example.com" -X POST "https://control.pac.url/incoming?repository=repo&branch=main&secret=very-secure-shared-secret&pipelinerun=target-pipelinerun"
+curl -H "Content-Type: application/json" \
+  -X POST "https://control.pac.url/incoming" \
+  -d '{"repository":"repo","branch":"main","pipelinerun":"target-pipelinerun","secret":"very-secure-shared-secret"}'
 ```
 
 ### Using incoming webhooks with webhook-based providers

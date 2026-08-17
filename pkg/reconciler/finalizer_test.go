@@ -3,6 +3,8 @@ package reconciler
 import (
 	"fmt"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -12,6 +14,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	queuepkg "github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
@@ -20,9 +23,11 @@ import (
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/logging"
 	rtesting "knative.dev/pkg/reconciler/testing"
+	"knative.dev/pkg/system"
 )
 
 var (
@@ -68,6 +73,140 @@ func getTestPR(name, state string) *tektonv1.PipelineRun {
 	}
 }
 
+func TestControllerInfoForPipelineRun(t *testing.T) {
+	fallback := &info.ControllerInfo{Name: "default", Secret: "default-secret"}
+	tests := []struct {
+		name       string
+		annotation string
+		fallback   *info.ControllerInfo
+		want       *info.ControllerInfo
+		wantErrSub string
+	}{
+		{
+			name:       "controller annotation",
+			annotation: `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			fallback:   fallback,
+			want: &info.ControllerInfo{
+				Name:             "secondary",
+				Configmap:        "secondary-config",
+				Secret:           "secondary-secret",
+				GlobalRepository: "secondary-global",
+			},
+		},
+		{
+			name:     "fallback controller",
+			fallback: fallback,
+			want:     fallback,
+		},
+		{
+			name:     "default controller without fallback",
+			fallback: nil,
+			want: &info.ControllerInfo{
+				Name:             "default",
+				Configmap:        info.DefaultPipelinesAscodeConfigmapName,
+				Secret:           info.DefaultPipelinesAscodeSecretName,
+				GlobalRepository: info.DefaultGlobalRepoName,
+			},
+		},
+		{
+			name:       "invalid annotation",
+			annotation: "{",
+			fallback:   fallback,
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:       "null annotation",
+			annotation: "null",
+			fallback:   fallback,
+			wantErrSub: "value must not be null",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PAC_CONTROLLER_LABEL", "default")
+			t.Setenv("PAC_CONTROLLER_SECRET", info.DefaultPipelinesAscodeSecretName)
+			t.Setenv("PAC_CONTROLLER_CONFIGMAP", info.DefaultPipelinesAscodeConfigmapName)
+			t.Setenv("PAC_CONTROLLER_GLOBAL_REPOSITORY", info.DefaultGlobalRepoName)
+
+			pr := &tektonv1.PipelineRun{}
+			if tt.annotation != "" {
+				pr.Annotations = map[string]string{keys.ControllerInfo: tt.annotation}
+			}
+			got, err := controllerInfoForPipelineRun(pr, tt.fallback)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.want)
+			if tt.fallback != nil {
+				assert.Assert(t, got != tt.fallback, "controller info must be copied per reconciliation")
+			}
+		})
+	}
+}
+
+func TestFinalizeKindControllerInfoHandling(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		wantErrSub  string
+		wantControl *info.ControllerInfo
+	}{
+		{
+			name:       "invalid controller annotation",
+			annotation: "{",
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:        "controller annotation does not mutate shared run",
+			annotation:  `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			controller := &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"}
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:          kubeinteraction.StateStarted,
+						keys.ControllerInfo: tt.annotation,
+					},
+				},
+			}
+			r := &Reconciler{
+				run: &params.Run{
+					Clients: clients.Clients{Log: logger},
+					Info: info.Info{
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: controller,
+						Pac:        info.NewPacOpts(),
+					},
+				},
+			}
+
+			err := r.FinalizeKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			if tt.wantControl != nil {
+				assert.DeepEqual(t, r.run.Info.Controller, tt.wantControl)
+				assert.Assert(t, r.run.Info.Controller == controller, "finalize must keep the shared controller pointer")
+			}
+		})
+	}
+}
+
 func TestReconcilerFinalizeKind(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	fakelogger := zap.New(observer).Sugar()
@@ -77,8 +216,12 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 
 	finalizeTestRepo.Spec.GitProvider.URL = mockServerURL
 
-	// Mock status endpoint
+	// Mock status endpoint. Cancelling a running PipelineRun has to reach the
+	// provider, and the failure to do so is swallowed by the finalizer, so the
+	// call itself is what the test has to observe.
+	var statusesReported atomic.Int32
 	mux.HandleFunc("/repos/org/repo/statuses/123afc", func(rw http.ResponseWriter, _ *http.Request) {
+		statusesReported.Add(1)
 		fmt.Fprint(rw, `{"state":"pending"}`)
 	})
 
@@ -144,8 +287,17 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			ctx = logging.WithLogger(ctx, fakelogger)
+			// The controller only sends credentials to hostnames its ConfigMap
+			// trusts, so the mock server has to be listed like any self hosted
+			// instance would be.
 			testData := testclient.Data{
 				Repositories: []*v1alpha1.Repository{finalizeTestRepo},
+				ConfigMap: []*corev1.ConfigMap{{
+					ObjectMeta: metav1.ObjectMeta{Name: "pipelines-as-code", Namespace: system.Namespace()},
+					Data: map[string]string{
+						settings.TrustedProviderHostnamesKey: strings.TrimPrefix(mockServerURL, "http://"),
+					},
+				}},
 			}
 			if tt.globalRepo != nil {
 				testData.Repositories = append(testData.Repositories, tt.globalRepo)
@@ -154,6 +306,9 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 				testData.Repositories = []*v1alpha1.Repository{}
 			}
 			stdata, informers := testclient.SeedTestData(t, ctx, testData)
+			// finalizeKind establishes the controller namespace itself, exactly
+			// as knative hands it a bare context in production. Injecting one
+			// here would hide a regression in that.
 			kinterfaceTest := &testkubernetestint.KinterfaceTest{
 				GetSecretResult: map[string]string{
 					"pac-git-basic-auth-owner-repo": "https://whateveryousayboss",
@@ -163,6 +318,7 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 			cs := &params.Run{
 				Clients: clients.Clients{
 					PipelineAsCode: stdata.PipelineAsCode,
+					Kube:           stdata.Kube,
 					Log:            fakelogger,
 				},
 				Info: info.Info{
@@ -185,8 +341,14 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 					assert.NilError(t, err)
 				}
 			}
+			before := statusesReported.Load()
 			err := r.FinalizeKind(ctx, tt.pipelinerun)
 			assert.NilError(t, err)
+			state := tt.pipelinerun.GetAnnotations()[keys.State]
+			if !tt.skipAddingRepo && (state == kubeinteraction.StateQueued || state == kubeinteraction.StateStarted) {
+				assert.Assert(t, statusesReported.Load() > before,
+					"cancelling a running PipelineRun must report to the provider")
+			}
 
 			// if repo was deleted then no queue will be there
 			if tt.skipAddingRepo {

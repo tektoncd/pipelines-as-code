@@ -80,6 +80,8 @@ In this example, the `repo` Repository CR keeps its concurrency limit of 2 becau
 
 Because the local Repository CR sets `git_provider.type` to `gitlab`, matching the global Repository CR, Pipelines-as-Code uses the Git provider settings (secret, webhook secret) from the global repository. It fetches the referenced secrets from the namespace where the global repository lives.
 
+A namespace-level Repository that inherits `git_provider.secret` cannot set a different `git_provider.url`. Otherwise, someone who controls that Repository could redirect a credential owned by the controller namespace. To use another provider endpoint, configure `git_provider.secret` on the namespace-level Repository as well. This restriction applies to webhook-based providers; GitHub Apps use the controller's GitHub App credentials instead of inheriting this secret.
+
 ## Webhook-Based Provider Global Settings
 
 The `spec.git_provider.type` field identifies which Git provider handles incoming webhooks. You can set it to any of the following values for webhook-based providers (everything except GitHub Apps):

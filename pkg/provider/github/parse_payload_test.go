@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -1976,10 +1978,12 @@ func TestAppTokenGeneration(t *testing.T) {
 	ctxNoSecret, _ := rtesting.SetupFakeContext(t)
 	noSecret, _ := testclient.SeedTestData(t, ctxNoSecret, testclient.Data{})
 	secretName := "pipelines-as-code-secret"
+	configMapName := "pipelines-as-code"
 
 	ctx, _ := rtesting.SetupFakeContext(t)
 	webhookSecret := "webhook-secret"
 	vaildSecret, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
 		Secret: []*corev1.Secret{
 			{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1997,6 +2001,7 @@ func TestAppTokenGeneration(t *testing.T) {
 
 	ctxInvalidAppID, _ := rtesting.SetupFakeContext(t)
 	invalidAppID, _ := testclient.SeedTestData(t, ctxInvalidAppID, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
 		Secret: []*corev1.Secret{
 			{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2014,6 +2019,7 @@ func TestAppTokenGeneration(t *testing.T) {
 
 	ctxInvalidPrivateKey, _ := rtesting.SetupFakeContext(t)
 	invalidPrivateKey, _ := testclient.SeedTestData(t, ctxInvalidPrivateKey, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
 		Secret: []*corev1.Secret{
 			{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2029,17 +2035,83 @@ func TestAppTokenGeneration(t *testing.T) {
 		},
 	})
 
+	ctxPinnedHost, _ := rtesting.SetupFakeContext(t)
+	pinnedHost, _ := testclient.SeedTestData(t, ctxPinnedHost, testclient.Data{
+		ConfigMap: []*corev1.ConfigMap{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: testNamespace,
+				},
+				Data: map[string]string{
+					settings.TrustedProviderHostnamesKey: "other.example.com",
+				},
+			},
+		},
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
+				},
+			},
+		},
+	})
+	ctxGHE, _ := rtesting.SetupFakeContext(t)
+	gheSecret, _ := testclient.SeedTestData(t, ctxGHE, testclient.Data{
+		ConfigMap: []*corev1.ConfigMap{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: testNamespace,
+				},
+				Data: map[string]string{},
+			},
+		},
+		Secret: []*corev1.Secret{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: testNamespace,
+				},
+				Data: map[string][]byte{
+					"github-application-id": []byte("12345"),
+					"github-private-key":    []byte(fakePrivateKey),
+					"webhook.secret":        []byte(webhookSecret),
+				},
+			},
+		},
+	})
+	ghePayloadEvent := samplePRevent
+	ghePayloadEvent.Installation = &github.Installation{ID: &testInstallationID}
+	gheRepository := *sampleRepo
+	gheRepository.HTMLURL = github.Ptr("https://github.example.com/owner/repo")
+	ghePayloadEvent.Repo = &gheRepository
+	ghePayload, err := json.Marshal(ghePayloadEvent)
+	assert.NilError(t, err)
+
 	tests := []struct {
-		ctx            context.Context
-		ctxNS          string
-		name           string
-		wantErrSubst   string
-		nilClient      bool
-		seedData       testclient.Clients
-		omitSignature  bool
-		enterpriseHost string
-		payload        string
-		wantLogMessage string
+		ctx             context.Context
+		ctxNS           string
+		name            string
+		wantErrSubst    string
+		nilClient       bool
+		seedData        testclient.Clients
+		omitSignature   bool
+		enterpriseHost  string
+		payload         string
+		wantLogMessage  string
+		wantLearnedHost string
+		wantTokenCalls  int
+		wantProviderURL string
+		wantGHEURL      string
+		wantNilEvent    bool
+		eventType       string
 	}{
 		{
 			name:           "secret not found",
@@ -2064,25 +2136,67 @@ func TestAppTokenGeneration(t *testing.T) {
 			ctxNS:          testNamespace,
 			seedData:       vaildSecret,
 			enterpriseHost: "127.0.0.1:1",
-			wantErrSubst:   `github enterprise host "127.0.0.1:1" does not match repository host "github.com"`,
+			wantErrSubst:   `GitHub enterprise header host "127.0.0.1:1" does not match signed repository host "github.com"`,
 			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
 		},
 		{
-			ctx:            ctx,
-			name:           "enterprise host with missing repository HTML URL",
+			ctx: ctx,
+			// App-level deliveries do not need a provider client and must not use
+			// their unsigned enterprise header to select one.
+			name:           "installation delivery without repository is skipped",
 			ctxNS:          testNamespace,
 			seedData:       vaildSecret,
 			enterpriseHost: "127.0.0.1:1",
 			payload:        fmt.Sprintf(`{"installation":{"id":%d},"repository":{}}`, testInstallationID),
-			wantErrSubst:   "repository HTML URL is missing in payload, cannot validate enterprise host",
+			eventType:      "installation",
+			wantNilEvent:   true,
+		},
+		{
+			ctx:          ctx,
+			name:         "ping delivery without repository is skipped",
+			ctxNS:        testNamespace,
+			seedData:     vaildSecret,
+			payload:      `{"zen":"Keep it logically awesome.","hook_id":1}`,
+			eventType:    "ping",
+			wantNilEvent: true,
+		},
+		{
+			ctx:            ctx,
+			name:           "repository delivery without repository is refused",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			payload:        fmt.Sprintf(`{"installation":{"id":%d},"repository":{}}`, testInstallationID),
+			wantErrSubst:   "payload carries no repository",
 			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
 		},
 		{
-			ctx:       ctx,
-			name:      "secret found",
-			ctxNS:     testNamespace,
-			seedData:  vaildSecret,
-			nilClient: false,
+			ctx:            ctxPinnedHost,
+			name:           "signed payload host outside the configured allowlist",
+			ctxNS:          testNamespace,
+			seedData:       pinnedHost,
+			payload:        string(ghePayload),
+			wantErrSubst:   "is not listed in",
+			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+		},
+		{
+			ctx:            ctx,
+			name:           "secret found",
+			ctxNS:          testNamespace,
+			seedData:       vaildSecret,
+			nilClient:      false,
+			wantTokenCalls: 1,
+		},
+		{
+			ctx:             ctxGHE,
+			name:            "authenticated enterprise payload configures event endpoints",
+			ctxNS:           testNamespace,
+			seedData:        gheSecret,
+			enterpriseHost:  "github.example.com",
+			payload:         string(ghePayload),
+			wantLearnedHost: "github.example.com",
+			wantTokenCalls:  1,
+			wantProviderURL: "https://github.example.com",
+			wantGHEURL:      "https://github.example.com",
 		},
 		{
 			ctx:          ctxInvalidAppID,
@@ -2103,7 +2217,13 @@ func TestAppTokenGeneration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeghclient, mux, serverURL, teardown := ghtesthelper.SetupGH()
 			defer teardown()
+			tokenCalls := 0
 			mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+				tokenCalls++
+				_, _ = fmt.Fprint(w, "{}")
+			})
+			mux.HandleFunc(fmt.Sprintf("/api/v3/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+				tokenCalls++
 				_, _ = fmt.Fprint(w, "{}")
 			})
 
@@ -2132,12 +2252,16 @@ func TestAppTokenGeneration(t *testing.T) {
 				},
 
 				Info: info.Info{
-					Controller: &info.ControllerInfo{Secret: secretName},
+					Controller: &info.ControllerInfo{Secret: secretName, Configmap: configMapName},
 				},
 			}
 
 			request := &http.Request{Header: map[string][]string{}}
-			request.Header.Set("X-GitHub-Event", "pull_request")
+			eventType := tt.eventType
+			if eventType == "" {
+				eventType = "pull_request"
+			}
+			request.Header.Set("X-GitHub-Event", eventType)
 			if !tt.omitSignature {
 				request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature(webhookSecret, jeez))
 			}
@@ -2149,10 +2273,11 @@ func TestAppTokenGeneration(t *testing.T) {
 			tt.ctx = info.StoreCurrentControllerName(tt.ctx, "default")
 			tt.ctx = info.StoreNS(tt.ctx, tt.ctxNS)
 
-			_, err := gprovider.ParsePayload(tt.ctx, run, request, string(jeez))
+			event, err := gprovider.ParsePayload(tt.ctx, run, request, string(jeez))
 			if tt.wantErrSubst != "" {
 				assert.Assert(t, err != nil)
 				assert.ErrorContains(t, err, tt.wantErrSubst)
+				assert.Equal(t, tokenCalls, tt.wantTokenCalls)
 				if tt.wantLogMessage != "" {
 					found := false
 					for _, entry := range observedLogs.All() {
@@ -2166,6 +2291,15 @@ func TestAppTokenGeneration(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+			assert.Equal(t, tokenCalls, tt.wantTokenCalls)
+			if tt.wantNilEvent {
+				assert.Assert(t, event == nil)
+				return
+			}
+			if tt.wantProviderURL != "" {
+				assert.Equal(t, tt.wantProviderURL, event.Provider.URL)
+				assert.Equal(t, tt.wantGHEURL, event.GHEURL)
+			}
 			if tt.nilClient {
 				assert.Assert(t, gprovider.Client() == nil)
 				return
@@ -2173,8 +2307,206 @@ func TestAppTokenGeneration(t *testing.T) {
 
 			// Verify client was created successfully for GitHub App
 			assert.Assert(t, gprovider.Client() != nil)
+			if tt.wantLearnedHost != "" {
+				configMap, err := tt.seedData.Kube.CoreV1().ConfigMaps(tt.ctxNS).Get(tt.ctx, configMapName, metav1.GetOptions{})
+				assert.NilError(t, err)
+				assert.Equal(t, configMap.Data[settings.TrustedProviderHostnamesKey], "")
+				assert.Equal(t, configMap.Annotations[keys.AutoTrustedProviderHostnames], tt.wantLearnedHost)
+			}
 		})
 	}
+}
+
+func TestGithubEndpointFromPayload(t *testing.T) {
+	tests := []struct {
+		name           string
+		enterpriseHost string
+		payload        string
+		wantErrSubstr  string
+		wantBaseURL    string
+		wantAPIURL     string
+		wantRepoHost   string
+	}{
+		{
+			name:           "enterprise payload with matching header",
+			enterpriseHost: "ghe.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantBaseURL:    "https://ghe.example.com",
+			wantAPIURL:     "https://ghe.example.com/api/v3",
+			wantRepoHost:   "ghe.example.com",
+		},
+		{
+			name:         "public github payload without enterprise header",
+			payload:      `{"repository":{"html_url":"https://github.com/owner/repo"}}`,
+			wantAPIURL:   "https://api.github.com",
+			wantRepoHost: "github.com",
+		},
+		{
+			name:          "invalid json",
+			payload:       `{`,
+			wantErrSubstr: "unexpected end of JSON input",
+		},
+		{
+			name:          "missing repository URL",
+			payload:       `{"repository":{}}`,
+			wantErrSubstr: "payload carries no repository",
+		},
+		{
+			name:          "rejects insecure repository URL",
+			payload:       `{"repository":{"html_url":"http://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr: "invalid repository URL in GitHub payload",
+		},
+		{
+			name:          "rejects repository URL with userinfo",
+			payload:       `{"repository":{"html_url":"https://user@ghe.example.com/owner/repo"}}`,
+			wantErrSubstr: "invalid repository URL in GitHub payload",
+		},
+		{
+			name:           "rejects invalid enterprise header",
+			enterpriseHost: "http://ghe.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr:  "invalid X-GitHub-Enterprise-Host header",
+		},
+		{
+			name:           "rejects mismatched enterprise header",
+			enterpriseHost: "other.example.com",
+			payload:        `{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`,
+			wantErrSubstr:  `does not match signed repository host "ghe.example.com"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			endpoint, err := githubEndpointFromPayload(tt.enterpriseHost, tt.payload)
+			if tt.wantErrSubstr != "" {
+				assert.ErrorContains(t, err, tt.wantErrSubstr)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantBaseURL, endpoint.BaseURL)
+			assert.Equal(t, tt.wantAPIURL, endpoint.APIURL)
+			assert.Equal(t, tt.wantRepoHost, endpoint.RepositoryHost)
+		})
+	}
+}
+
+func TestParseEventTypeMissingHeader(t *testing.T) {
+	provider := &Provider{}
+	err := provider.parseEventType(&http.Request{Header: http.Header{}}, info.NewEvent())
+	assert.ErrorContains(t, err, "failed to find event type in request header")
+}
+
+func TestValidateAppWebhookSignatureRequiresControllerSecret(t *testing.T) {
+	const (
+		namespace  = "pipelinesascode"
+		secretName = "pipelines-as-code-secret"
+	)
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{},
+		}},
+	})
+	payload := []byte(`{"repository":{"html_url":"https://github.com/owner/repo"}}`)
+	event := info.NewEvent()
+	event.Request = &info.Request{
+		Header:  http.Header{},
+		Payload: payload,
+	}
+	event.Request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature("webhook-secret", payload))
+	run := &params.Run{
+		Clients: clients.Clients{Kube: seedData.Kube},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+		},
+	}
+
+	err := validateAppWebhookSignature(ctx, run, event)
+	assert.ErrorContains(t, err, "no webhook secret has been set in controller secret")
+}
+
+func TestGetAppTokenRejectsUntrustedHost(t *testing.T) {
+	const (
+		namespace     = "pipelinesascode"
+		secretName    = "pipelines-as-code-secret"
+		configMapName = "pipelines-as-code"
+	)
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests++
+	}))
+	defer server.Close()
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", server.URL+"/api/v3")
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		ConfigMap: []*corev1.ConfigMap{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				settings.TrustedProviderHostnamesKey: "github.com",
+			},
+		}},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: seedData.Kube,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName, Configmap: configMapName},
+		},
+	}
+	gprovider := Provider{Run: run}
+
+	// The test server host is not in the allowlist: no JWT must ever reach it.
+	_, err := gprovider.GetAppToken(ctx, seedData.Kube, server.URL, 1, namespace)
+	assert.ErrorContains(t, err, "is not listed in")
+	assert.Equal(t, requests, 0)
+}
+
+func TestGetAppTokenRejectsInvalidTokenAPIURL(t *testing.T) {
+	const (
+		namespace  = "pipelinesascode"
+		secretName = "pipelines-as-code-secret"
+	)
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", "https://example.com/api/v3")
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+			},
+		}},
+	})
+	run := &params.Run{
+		Clients: clients.Clients{
+			Kube: seedData.Kube,
+		},
+		Info: info.Info{
+			Controller: &info.ControllerInfo{Secret: secretName},
+		},
+	}
+	gprovider := Provider{Run: run}
+
+	_, err := gprovider.GetAppToken(ctx, seedData.Kube, "", 1, namespace)
+	assert.ErrorContains(t, err, "PAC_GIT_PROVIDER_TOKEN_APIURL must target a loopback IP address")
 }
 
 func TestGetAppTokenScopesRepositoryNames(t *testing.T) {
@@ -2183,6 +2515,7 @@ func TestGetAppTokenScopesRepositoryNames(t *testing.T) {
 
 	ctx, _ := rtesting.SetupFakeContext(t)
 	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		ConfigMap: emptyAllowlistConfigMap(),
 		Secret: []*corev1.Secret{
 			{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2239,6 +2572,7 @@ func TestGetAppTokenScopesRepositoryNames(t *testing.T) {
 				RepositoryIDs:   tt.repositoryIDs,
 				RepositoryNames: tt.repositoryNames,
 				Run: &params.Run{
+					Clients: clients.Clients{Kube: seedData.Kube},
 					Info: info.Info{
 						Controller: &info.ControllerInfo{Secret: secretName},
 					},

@@ -183,6 +183,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 			},
 			repository: &v1alpha1.Repository{
 				TypeMeta: metav1.TypeMeta{},
@@ -204,6 +205,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData, repoData1,
 				},
@@ -219,6 +221,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData,
 				},
@@ -233,6 +236,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData, repoData1,
 				},
@@ -248,6 +252,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData, repoData1,
 				},
@@ -263,6 +268,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData, repoData1,
 				},
@@ -279,6 +285,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoDataGlobAndExact, repoData1, repoData2, repoData3,
 				},
@@ -294,6 +301,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoDataInvalidGlob, repoData1,
 				},
@@ -308,6 +316,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoDataGlobNoMatch, repoData1,
 				},
@@ -322,6 +331,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 			},
 			repository: &v1alpha1.Repository{
 				TypeMeta: metav1.TypeMeta{},
@@ -342,6 +352,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoData, repoDataMalformed,
 				},
@@ -368,6 +379,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 				Repositories: []*v1alpha1.Repository{
 					repoDataMalformedPattern, repoData1,
 				},
@@ -382,6 +394,7 @@ func TestScopeTokenToListOfRepos(t *testing.T) {
 			tData: testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{validSecret},
+				ConfigMap:  emptyAllowlistConfigMap(),
 			},
 			repository: &v1alpha1.Repository{
 				TypeMeta: metav1.TypeMeta{},

@@ -116,6 +116,31 @@ func copyRepositoryForMerge(repo *v1alpha1.Repository) *v1alpha1.Repository {
 
 // ReconcileKind is the main entry point for reconciling PipelineRun resources.
 func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
+	reconcileRun := *r.run
+	reconciler := *r
+	reconciler.run = &reconcileRun
+	return reconciler.reconcileKind(ctx, pr)
+}
+
+func controllerInfoForPipelineRun(pr *tektonv1.PipelineRun, fallback *info.ControllerInfo) (*info.ControllerInfo, error) {
+	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
+		var parsedControllerInfo *info.ControllerInfo
+		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: %w", err)
+		}
+		if parsedControllerInfo == nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: value must not be null")
+		}
+		return parsedControllerInfo, nil
+	}
+	if fallback != nil {
+		controllerInfo := *fallback
+		return &controllerInfo, nil
+	}
+	return info.GetControllerInfoFromEnvOrDefault(), nil
+}
+
+func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	ctx = info.StoreNS(ctx, system.Namespace())
 	logger := logging.FromContext(ctx).With("namespace", pr.GetNamespace())
 
@@ -155,15 +180,11 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	//
 	// We always assume the controller is in the same namespace as the original
 	// controller but that may changes
-	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
-		var parsedControllerInfo *info.ControllerInfo
-		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
-			return fmt.Errorf("failed to parse controllerInfo: %w", err)
-		}
-		r.run.Info.Controller = parsedControllerInfo
-	} else {
-		r.run.Info.Controller = info.GetControllerInfoFromEnvOrDefault()
+	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	if err != nil {
+		return err
 	}
+	r.run.Info.Controller = controllerInfo
 
 	if secretCreated, ok := pr.GetAnnotations()[keys.SecretCreated]; ok && secretCreated == "false" && pacInfo.SecretAutoCreation {
 		// if secret creation is true then return anyway from createSecretForPipelineRun function
@@ -329,10 +350,11 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 
 	secretNS := repo.GetNamespace()
 	inheritedGlobalSecret := false
-	if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
-		if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
-			secretNS = globalRepo.GetNamespace()
-			inheritedGlobalSecret = true
+	if globalRepo, gerr := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); gerr == nil && globalRepo != nil {
+		if event.InstallationID <= 0 {
+			if secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo); err != nil {
+				return nil, err
+			}
 		}
 		if merged := copyRepositoryForMerge(repo); merged != nil {
 			repo = merged
@@ -555,10 +577,10 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 		// secretNS is needed when git provider is other than Github App.
 		secretNS := repo.GetNamespace()
 		inheritedGlobalSecret := false
-		if globalRepo, err := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); err == nil && globalRepo != nil {
-			if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
-				secretNS = globalRepo.GetNamespace()
-				inheritedGlobalSecret = true
+		if globalRepo, gerr := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); gerr == nil && globalRepo != nil {
+			secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo)
+			if err != nil {
+				return nil, nil, err
 			}
 			if merged := copyRepositoryForMerge(repo); merged != nil {
 				repo = merged

@@ -312,6 +312,42 @@ auto-configure-repo-repository-template: "{{repo_owner}}-{{repo_name}}-repo-cr"
 
 ### Security and Authorization
 
+{{< param name="trusted-provider-hostnames" type="string" default="" id="param-trusted-provider-hostnames" >}}
+Comma-separated list of Git provider hostnames that Pipelines-as-Code is allowed to send credentials to.
+
+Pipelines-as-Code derives the provider API host it talks to from webhook data. This allowlist makes sure a crafted payload cannot redirect the controller, and its credentials, to a host an attacker controls.
+
+The key has two states:
+
+- **Controller managed** (the key is empty): the public hostnames `github.com`, `gitlab.com`, `bitbucket.org`, `gitea.com` and `codeberg.org` stay trusted, any other host is refused, and every request the provider itself authenticated adds its hostname to the `pipelinesascode.tekton.dev/auto-trusted-provider-hostnames` annotation. A default installation therefore needs no configuration, and a controller serving several instances learns all of them.
+- **Administrator configured** (the key is non-empty): the list is authoritative for every hostname, public ones included, and the controller stops learning hosts. Listing only `ghe.example.com` is how an administrator says "this controller must never talk to a public SaaS instance".
+
+The configuration key belongs only to administrators; the annotation belongs only to the controller. Keeping them separate makes the policy mode unambiguous even when both contain the same hostname.
+
+A hostname that is not routable on the public internet (loopback, link-local, a private range, or an in-cluster `.svc` name) is never recorded automatically, since a payload must not be able to point the controller at the cloud metadata endpoint or an internal service. List it explicitly to trust it.
+
+Paths that carry no provider signature, such as [incoming webhooks]({{< relref "/docs/advanced/incoming-webhooks.md" >}}), never record a hostname, so set this key explicitly on any self-hosted instance.
+
+A value holding only whitespace or separators counts as unset, so use a real
+hostname rather than a placeholder when you mean to configure the policy.
+
+Removing a hostname from a non-empty list immediately narrows the policy.
+Emptying the key returns to controller-managed mode, where previously learned
+hosts become effective again. To return to a clean managed policy, empty the key
+and delete the `pipelinesascode.tekton.dev/auto-trusted-provider-hostnames`
+annotation.
+
+Today the allowlist gates the GitHub provider; the other providers are being
+moved onto it.
+
+Each controller has its own ConfigMap and therefore its own allowlist.
+
+```yaml
+trusted-provider-hostnames: "ghe.example.com, gitlab.example.com"
+```
+
+{{< /param >}}
+
 {{< param name="remember-ok-to-test" type="boolean" default="false" id="param-remember-ok-to-test" >}}
 Controls whether Pipelines-as-Code remembers a previous `/ok-to-test` approval when new commits are pushed to a pull request. By default, users must issue `/ok-to-test` on each push. Set to `true` to persist the approval across push events.
 

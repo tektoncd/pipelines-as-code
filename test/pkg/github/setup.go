@@ -58,7 +58,17 @@ func Setup(ctx context.Context, onGHE, viaDirectWebhook bool) (context.Context, 
 		URL:   config.url,
 	}
 	gprovider.Token = &config.token
-	// TODO: before PR
+	// The harness is not a controller: the API URL comes from its own
+	// configuration rather than from a payload or a Repository CR, so the
+	// trusted hostname policy, which exists to stop a credential the controller
+	// owns from reaching a host a tenant picked, has nothing to protect here.
+	// Build the client from that URL and hand it over, so that SetClient leaves
+	// it alone instead of asking the policy of a controller we are not.
+	client, _, _, err := gprovider.MakeClient(ctx, config.url, config.token)
+	if err != nil {
+		return ctx, nil, options.E2E{}, github.New(), err
+	}
+	gprovider.UsePreauthenticatedClient(client)
 	if err := gprovider.SetClient(ctx, run, event, nil, nil); err != nil {
 		return ctx, nil, options.E2E{}, github.New(), err
 	}
@@ -71,6 +81,23 @@ type envConfig struct {
 	url           string
 	repoOwner     string
 	controllerURL string
+}
+
+// ControllerConfigMapName returns the ConfigMap the controller under test reads
+// its settings from.
+//
+// The GHE tests talk to the second controller, which hack/second-controller.py
+// deploys with a ConfigMap of its own, so a test tuning a controller wide
+// setting has to target that one: patching the default ConfigMap would tune the
+// controller the test is not talking to.
+func ControllerConfigMapName(onGHE bool) string {
+	if !onGHE {
+		return info.DefaultPipelinesAscodeConfigmapName
+	}
+	if name := os.Getenv("TEST_GITHUB_SECOND_CONFIGMAP"); name != "" {
+		return name
+	}
+	return "ghe-configmap"
 }
 
 // setupEnvVars validates and retrieves environment variables based on the test scenario.

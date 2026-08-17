@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1182,10 +1183,11 @@ func TestGithubSetClient(t *testing.T) {
 	tests := []struct {
 		name           string
 		event          *info.Event
+		allowlist      string
 		expectedURL    string
 		isGHE          bool
 		installationID int64
-		wantErr        string
+		wantErrSub     string
 	}{
 		{
 			name: "api url set",
@@ -1194,9 +1196,19 @@ func TestGithubSetClient(t *testing.T) {
 					URL: "foo.com",
 				},
 			},
+			allowlist:      "foo.com",
 			expectedURL:    "https://foo.com",
 			isGHE:          true,
 			installationID: 0,
+		},
+		{
+			name: "a repository url that is not trusted is refused",
+			event: &info.Event{
+				Provider: &info.Provider{
+					URL: "attacker.example",
+				},
+			},
+			wantErrSub: "refusing to use credentials",
 		},
 		{
 			name:           "default to public github",
@@ -1211,7 +1223,7 @@ func TestGithubSetClient(t *testing.T) {
 					URL: "%",
 				},
 			},
-			wantErr: "failed to create github enterprise client",
+			wantErrSub: "invalid provider URL",
 		},
 	}
 	for _, tt := range tests {
@@ -1220,11 +1232,9 @@ func TestGithubSetClient(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			core, observer := zapobserver.New(zap.InfoLevel)
 			testLog := zap.New(core).Sugar()
-			fakeRun := &params.Run{
-				Clients: clients.Clients{
-					Log: testLog,
-				},
-			}
+			ctx = info.StoreNS(ctx, "pipelines-as-code")
+			fakeRun := newTestRun(t, tt.allowlist)
+			fakeRun.Clients.Log = testLog
 			v := Provider{
 				Logger:  testLog,
 				pacInfo: &info.PacOpts{},
@@ -1235,8 +1245,8 @@ func TestGithubSetClient(t *testing.T) {
 				},
 			}
 			err := v.SetClient(ctx, fakeRun, tt.event, repo, nil)
-			if tt.wantErr != "" {
-				assert.ErrorContains(t, err, tt.wantErr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
 				return
 			}
 			assert.NilError(t, err)
@@ -1244,6 +1254,7 @@ func TestGithubSetClient(t *testing.T) {
 			assert.Assert(t, strings.HasPrefix(v.Client().BaseURL(), "https://"))
 			if tt.isGHE {
 				assert.Assert(t, strings.HasSuffix(v.Client().BaseURL(), "/api/v3/"))
+				assert.Equal(t, "https://foo.com/api/uploads/", v.Client().UploadURL())
 			} else {
 				assert.Equal(t, keys.PublicGithubAPIURL+"/", v.Client().BaseURL())
 			}
@@ -1278,9 +1289,181 @@ func TestGithubSetClient(t *testing.T) {
 	}
 }
 
+func TestMakeClientEnterpriseURLs(t *testing.T) {
+	tests := []struct {
+		name   string
+		apiURL string
+	}{
+		{name: "enterprise base URL", apiURL: "https://ghe.example.com"},
+		{name: "enterprise API URL", apiURL: "https://ghe.example.com/api/v3"},
+		{name: "enterprise API URL with trailing slash", apiURL: "https://ghe.example.com/api/v3/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, providerName, _, err := MakeClient(t.Context(), tt.apiURL, "token")
+			assert.NilError(t, err)
+			assert.Equal(t, providerName, "github-enterprise")
+			assert.Equal(t, client.BaseURL(), "https://ghe.example.com/api/v3/")
+			assert.Equal(t, client.UploadURL(), "https://ghe.example.com/api/uploads/")
+		})
+	}
+}
+
+// TestGithubSetClientPreauthenticatedClient checks that a caller which picked
+// the host itself, the end to end harness being the one that does, keeps the URL
+// it asked for instead of being sent through the allowlist of a controller it is
+// not.
+func TestGithubSetClientPreauthenticatedClient(t *testing.T) {
+	const untrustedHost = "ghe.example.com"
+
+	tests := []struct {
+		name             string
+		preauthenticated bool
+		wantErrSub       string
+	}{
+		{
+			name:       "an untrusted host is refused when the provider builds the client",
+			wantErrSub: "refusing to use credentials",
+		},
+		{
+			name:             "an untrusted host is kept when the caller built the client",
+			preauthenticated: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx = info.StoreNS(ctx, "pipelines-as-code")
+			core, _ := zapobserver.New(zap.InfoLevel)
+			testLog := zap.New(core).Sugar()
+			fakeRun := newTestRun(t, "")
+			fakeRun.Clients.Log = testLog
+
+			v := Provider{Logger: testLog, pacInfo: &info.PacOpts{}}
+			event := &info.Event{Provider: &info.Provider{URL: untrustedHost, Token: "token"}}
+
+			if tt.preauthenticated {
+				client, _, _, err := v.MakeClient(ctx, untrustedHost, "token")
+				assert.NilError(t, err)
+				v.UsePreauthenticatedClient(client)
+			}
+
+			err := v.SetClient(ctx, fakeRun, event, nil, nil)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, untrustedHost, event.Provider.URL)
+			assert.Equal(t, "https://"+untrustedHost, *v.APIURL)
+			assert.Equal(t, "https://"+untrustedHost+"/api/v3/", v.Client().BaseURL())
+		})
+	}
+}
+
+func TestGithubSetClientUsesSignedEnterpriseEndpoint(t *testing.T) {
+	const webhookSecret = "webhook-secret"
+	payload := []byte(`{"repository":{"html_url":"https://ghe.example.com/owner/repo"}}`)
+
+	tests := []struct {
+		name           string
+		allowlist      string
+		enterpriseHost string
+		webhookSecret  string
+		signingSecret  string
+		wantErrSub     string
+	}{
+		{
+			name:           "matching signed enterprise host",
+			allowlist:      "ghe.example.com",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+		},
+		{
+			// The signature here is checked against a secret the tenant owns, so
+			// it must not be enough on its own to reach an arbitrary host.
+			name:           "signed enterprise host outside the controller allowlist",
+			allowlist:      "other.example.com",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+			wantErrSub:     "refusing to use credentials",
+		},
+		{
+			name:           "signed enterprise host with an unconfigured allowlist",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+			wantErrSub:     "no authenticated request has made it known yet",
+		},
+		{
+			name:           "forged enterprise host",
+			enterpriseHost: "attacker.example",
+			webhookSecret:  webhookSecret,
+			signingSecret:  webhookSecret,
+			wantErrSub:     `does not match signed repository host "ghe.example.com"`,
+		},
+		{
+			name:           "signature validation fails before endpoint derivation",
+			enterpriseHost: "ghe.example.com",
+			webhookSecret:  webhookSecret,
+			signingSecret:  "wrong-secret",
+			wantErrSub:     "payload signature check failed",
+		},
+		{
+			name:           "missing webhook secret fails before endpoint derivation",
+			enterpriseHost: "ghe.example.com",
+			signingSecret:  webhookSecret,
+			wantErrSub:     "no webhook secret has been set",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := info.NewEvent()
+			event.EventType = "pull_request"
+			event.Provider.Token = "pat"
+			event.Provider.WebhookSecret = tt.webhookSecret
+			event.Request = &info.Request{
+				Header:  http.Header{},
+				Payload: payload,
+			}
+			event.Request.Header.Set(github.SHA256SignatureHeader, githubSHA256Signature(tt.signingSecret, payload))
+			event.Request.Header.Set("X-GitHub-Enterprise-Host", tt.enterpriseHost)
+
+			testLogger, _ := logger.GetLogger()
+			run := newTestRun(t, tt.allowlist)
+			run.Clients.Log = testLogger
+			ctx := info.StoreNS(context.Background(), "pipelines-as-code")
+			provider := &Provider{
+				Logger:  testLogger,
+				pacInfo: &info.PacOpts{},
+			}
+			err := provider.SetClient(
+				ctx,
+				run,
+				event,
+				&v1alpha1.Repository{Spec: v1alpha1.RepositorySpec{Settings: &v1alpha1.Settings{}}},
+				nil,
+			)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.Equal(t, "https://ghe.example.com", event.Provider.URL)
+			assert.Equal(t, "https://ghe.example.com", event.GHEURL)
+			assert.Equal(t, "https://ghe.example.com/api/v3/", provider.Client().BaseURL())
+		})
+	}
+}
+
 func TestSetClientFallbackScopesToken(t *testing.T) {
 	testNamespace := "pipelinesascode"
 	secretName := "pipelines-as-code-secret"
+	configMapName := "pipelines-as-code"
 
 	ctx, _ := rtesting.SetupFakeContext(t)
 	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
@@ -1293,6 +1476,17 @@ func TestSetClientFallbackScopesToken(t *testing.T) {
 				Data: map[string][]byte{
 					"github-application-id": []byte("12345"),
 					"github-private-key":    []byte(fakePrivateKey),
+				},
+			},
+		},
+		ConfigMap: []*corev1.ConfigMap{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: testNamespace,
+				},
+				Data: map[string]string{
+					settings.TrustedProviderHostnamesKey: "github.example.com",
 				},
 			},
 		},
@@ -1336,6 +1530,8 @@ func TestSetClientFallbackScopesToken(t *testing.T) {
 			event := info.NewEvent()
 			event.InstallationID = testInstallationID
 			event.Provider.Token = initialToken
+			event.GHEURL = "https://github.example.com"
+			event.Provider.URL = "https://github.example.com"
 
 			testLog, _ := logger.GetLogger()
 			v := Provider{
@@ -1351,7 +1547,7 @@ func TestSetClientFallbackScopesToken(t *testing.T) {
 					Kube: seedData.Kube,
 				},
 				Info: info.Info{
-					Controller: &info.ControllerInfo{Secret: secretName},
+					Controller: &info.ControllerInfo{Secret: secretName, Configmap: configMapName},
 				},
 			}
 
@@ -1848,6 +2044,7 @@ func TestCreateToken(t *testing.T) {
 	tdata := testclient.Data{
 		Namespaces: []*corev1.Namespace{testNamespace},
 		Secret:     []*corev1.Secret{validSecret},
+		ConfigMap:  emptyAllowlistConfigMap(),
 	}
 
 	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
@@ -1897,6 +2094,72 @@ func TestCreateToken(t *testing.T) {
 	if err != nil {
 		assert.ErrorContains(t, err, "could not refresh installation id 1234567's token")
 	}
+}
+
+func TestCreateTokenUsesEventGHEURLForAppToken(t *testing.T) {
+	const (
+		namespace      = "pipelinesascode"
+		secretName     = "pipelines-as-code-secret"
+		configMapName  = "pipelines-as-code"
+		scopedToken    = "ghs_scoped_token"
+		enterpriseHost = "github.example.com"
+	)
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = info.StoreNS(ctx, namespace)
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	logger, _ := logger.GetLogger()
+	seedData, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Secret: []*corev1.Secret{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+			Data: map[string][]byte{
+				"github-application-id": []byte("12345"),
+				"github-private-key":    []byte(fakePrivateKey),
+			},
+		}},
+		ConfigMap: []*corev1.ConfigMap{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      configMapName,
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				settings.TrustedProviderHostnamesKey: enterpriseHost,
+			},
+		}},
+	})
+	fakeclient, mux, serverURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	tokenRequests := 0
+	mux.HandleFunc(fmt.Sprintf("/app/installations/%d/access_tokens", testInstallationID), func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequests++
+		_, _ = fmt.Fprintf(w, `{"token":%q,"expires_at":"2099-01-01T00:00:00Z"}`, scopedToken)
+	})
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", serverURL+"/api/v3")
+
+	provider := &Provider{
+		Logger:   logger,
+		ghClient: fakeclient,
+		Run: &params.Run{
+			Clients: clients.Clients{
+				Kube: seedData.Kube,
+				Log:  logger,
+			},
+			Info: info.Info{
+				Controller: &info.ControllerInfo{Secret: secretName, Configmap: configMapName},
+			},
+		},
+	}
+	event := info.NewEvent()
+	event.Provider.URL = "https://github.com"
+	event.GHEURL = "https://" + enterpriseHost
+	event.InstallationID = testInstallationID
+
+	token, err := provider.CreateToken(ctx, []string{"owner/missing"}, event)
+	assert.NilError(t, err)
+	assert.Equal(t, scopedToken, token)
+	assert.Equal(t, 1, tokenRequests)
 }
 
 func TestExpandGlobAndAddRepoIDsInvalidPattern(t *testing.T) {
@@ -2648,68 +2911,106 @@ func TestFetchAppSlug(t *testing.T) {
 		privateKey       []byte
 		applicationID    int64
 		apiURL           string
-		setupMux         func(mux *http.ServeMux)
+		pinnedHost       string
+		tokenAPIURL      string
+		setupMux         func(mux *http.ServeMux, requests *atomic.Int32)
 		wantSlug         string
 		wantErrSubstring string
+		wantRequests     int32
 	}{
 		{
 			name:          "success fetch app slug",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprintf(w, `{"slug": "%s", "name": "My GitHub App"}`, validSlug)
 				})
 			},
-			wantSlug: validSlug,
+			wantSlug:     validSlug,
+			wantRequests: 1,
 		},
 		{
 			name:          "app endpoint returns 404",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					w.WriteHeader(http.StatusNotFound)
 					_, _ = fmt.Fprint(w, `{"message": "Not Found"}`)
 				})
 			},
 			wantErrSubstring: "failed to get app info",
+			wantRequests:     1,
 		},
 		{
 			name:             "invalid private key",
 			privateKey:       []byte("invalid-key"),
 			applicationID:    testAppID,
-			setupMux:         func(_ *http.ServeMux) {},
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
 			wantErrSubstring: "failed to parse private key",
 		},
 		{
 			name:          "app returns empty slug",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprint(w, `{"slug": "", "name": "My GitHub App"}`)
 				})
 			},
-			wantSlug: "",
+			wantSlug:     "",
+			wantRequests: 1,
 		},
 		{
 			name:          "app endpoint returns malformed JSON",
 			privateKey:    []byte(fakePrivateKey),
 			applicationID: testAppID,
-			setupMux: func(mux *http.ServeMux) {
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
 				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
 					_, _ = fmt.Fprint(w, `{invalid json`)
 				})
 			},
 			wantErrSubstring: "failed to get app info",
+			wantRequests:     1,
 		},
 		{
-			name:             "invalid enterprise API URL",
+			name:             "rejects untrusted app URL before sending JWT",
 			privateKey:       []byte(fakePrivateKey),
 			applicationID:    testAppID,
-			apiURL:           "%",
-			wantErrSubstring: "failed to create github enterprise client",
+			apiURL:           "https://attacker.example",
+			pinnedHost:       "ghe.example.com",
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
+			wantErrSubstring: "is not listed in",
+		},
+		{
+			// SetClient hands fetchAppSlug the API URL it settled on, which on a
+			// self hosted instance carries the /api/v3 path.
+			name:          "accepts the api url SetClient produces",
+			privateKey:    []byte(fakePrivateKey),
+			applicationID: testAppID,
+			apiURL:        "https://ghe.example.com/api/v3",
+			pinnedHost:    "ghe.example.com",
+			setupMux: func(mux *http.ServeMux, requests *atomic.Int32) {
+				mux.HandleFunc("/app", func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
+					_, _ = fmt.Fprintf(w, `{"slug": "%s", "name": "My GitHub App"}`, validSlug)
+				})
+			},
+			wantSlug:     validSlug,
+			wantRequests: 1,
+		},
+		{
+			name:             "rejects invalid app token test URL",
+			privateKey:       []byte(fakePrivateKey),
+			applicationID:    testAppID,
+			tokenAPIURL:      "https://example.com/api/v3",
+			setupMux:         func(_ *http.ServeMux, _ *atomic.Int32) {},
+			wantErrSubstring: "PAC_GIT_PROVIDER_TOKEN_APIURL must target a loopback IP address",
 		},
 	}
 
@@ -2718,8 +3019,9 @@ func TestFetchAppSlug(t *testing.T) {
 			_, mux, serverURL, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 
+			var requests atomic.Int32
 			if tt.setupMux != nil {
-				tt.setupMux(mux)
+				tt.setupMux(mux, &requests)
 			}
 
 			// Set up context with namespace
@@ -2744,11 +3046,22 @@ func TestFetchAppSlug(t *testing.T) {
 					"github-private-key":    tt.privateKey,
 				},
 			}
+			testConfigMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pac-configmap",
+					Namespace: testNamespace.GetName(),
+				},
+				Data: map[string]string{},
+			}
+			if tt.pinnedHost != "" {
+				testConfigMap.Data[settings.TrustedProviderHostnamesKey] = tt.pinnedHost
+			}
 
 			// Set up test data with kubernetes client
 			tdata := testclient.Data{
 				Namespaces: []*corev1.Namespace{testNamespace},
 				Secret:     []*corev1.Secret{testSecret},
+				ConfigMap:  []*corev1.ConfigMap{testConfigMap},
 			}
 			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
 
@@ -2761,25 +3074,29 @@ func TestFetchAppSlug(t *testing.T) {
 				},
 				Info: info.Info{
 					Controller: &info.ControllerInfo{
-						Secret: testSecret.GetName(),
+						Secret:    testSecret.GetName(),
+						Configmap: testConfigMap.GetName(),
 					},
 				},
 			}
-
-			apiURL := serverURL
-			if tt.apiURL != "" {
-				apiURL = tt.apiURL
+			tokenAPIURL := tt.tokenAPIURL
+			if tokenAPIURL == "" {
+				tokenAPIURL = serverURL + "/api/v3"
 			}
-			slug, err := provider.fetchAppSlug(ctx, apiURL)
+			t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", tokenAPIURL)
+
+			slug, err := provider.fetchAppSlug(ctx, tt.apiURL)
 
 			if tt.wantErrSubstring != "" {
 				assert.Assert(t, err != nil, "expected error but got none")
 				assert.ErrorContains(t, err, tt.wantErrSubstring)
+				assert.Equal(t, tt.wantRequests, requests.Load())
 				return
 			}
 
 			assert.NilError(t, err)
 			assert.Equal(t, slug, tt.wantSlug)
+			assert.Equal(t, tt.wantRequests, requests.Load())
 		})
 	}
 }

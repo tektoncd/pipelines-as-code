@@ -219,9 +219,8 @@ func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*in
 		ctx, v.run.Info.Controller.GlobalRepository, metav1.GetOptions{},
 	)
 	if err == nil && globalRepo != nil {
-		if repo.Spec.GitProvider != nil && repo.Spec.GitProvider.Secret == nil && globalRepo.Spec.GitProvider != nil && globalRepo.Spec.GitProvider.Secret != nil {
-			secretNS = globalRepo.GetNamespace()
-			inheritedGlobalSecret = true
+		if secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo); err != nil {
+			return event, err
 		}
 		repo.Spec.Merge(globalRepo.Spec)
 	}

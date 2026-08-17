@@ -35,6 +35,22 @@ Each GitHub application requires:
 | `PAC_CONTROLLER_SECRET`      | Secret containing GitHub App credentials           | `gh-enterprise-secret` |
 | `PAC_CONTROLLER_CONFIGMAP`   | ConfigMap with application settings                | `gh-enterprise-config` |
 
+Each controller has its own ConfigMap and therefore its own
+`trusted-provider-hostnames` allowlist, which binds a controller and its
+credentials to the provider instances it is meant to talk to. Set it in the
+ConfigMap named by `PAC_CONTROLLER_CONFIGMAP` when the controller serves a
+self-hosted instance:
+
+```bash
+kubectl -n pipelines-as-code patch configmap gh-enterprise-config \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+If the key is left empty, the controller records authenticated provider
+hostnames in its ConfigMap's
+`pipelinesascode.tekton.dev/auto-trusted-provider-hostnames` annotation. See
+[Trusted provider hostnames]({{< relref "settings.md#trusted-provider-hostnames" >}}).
+
 {{< callout type="info" >}}
 While each GitHub application requires its own controller, only one
 status reconciler ("watcher") component is needed cluster-wide.
@@ -110,21 +126,23 @@ Usage: second-controller.py [-h] [--configmap CONFIGMAP]
                             [--controller-image CONTROLLER_IMAGE]
                             [--gosmee-image GOSMEE_IMAGE]
                             [--smee-url SMEE_URL] [--namespace NAMESPACE]
+                            [--trusted-provider-hostnames TRUSTED_PROVIDER_HOSTNAMES]
                             [--openshift-route]
                             LABEL
 ```
 
 #### Key Options
 
-| Option                     | Description                                                                   |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| `--configmap`              | ConfigMap name (default: `<LABEL>-configmap`)                                 |
-| `--secret`                 | Secret name (default: `<LABEL>-secret`)                                       |
-| `--ingress-domain`         | Create Ingress with specified domain (Kubernetes)                             |
-| `--openshift-route`        | Create OpenShift Route instead of Ingress                                     |
-| `--controller-image`       | Custom controller image (use `ko` for local builds)                           |
-| `--smee-url`               | Deploy Gosmee sidecar for webhook tunneling                                   |
-| `--namespace`              | Target namespace (default: `pipelines-as-code`)                               |
+| Option                         | Description                                                            |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `--configmap`                  | ConfigMap name (default: `<LABEL>-configmap`)                          |
+| `--secret`                     | Secret name (default: `<LABEL>-secret`)                                |
+| `--ingress-domain`             | Create Ingress with specified domain (Kubernetes)                      |
+| `--openshift-route`            | Create OpenShift Route instead of Ingress                              |
+| `--controller-image`           | Custom controller image (use `ko` for local builds)                    |
+| `--smee-url`                   | Deploy Gosmee sidecar for webhook tunneling                            |
+| `--namespace`                  | Target namespace (default: `pipelines-as-code`)                        |
+| `--trusted-provider-hostnames` | Self-hosted provider hostnames this controller may send credentials to |
 
 ### Example Scenarios
 
@@ -136,6 +154,7 @@ The following examples show common deployment patterns.
 # Generate and apply configuration for GitHub Enterprise
 python3 hack/second-controller.py ghe \
   --ingress-domain "ghe.example.com" \
+  --trusted-provider-hostnames "ghe.example.com" \
   --namespace pipelines-as-code | kubectl apply -f -
 ```
 

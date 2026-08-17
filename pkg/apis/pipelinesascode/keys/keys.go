@@ -64,7 +64,11 @@ const (
 	SCMReportingPLRStarted = pipelinesascode.GroupName + "/scm-reporting-plr-started"
 	SecretCreated          = pipelinesascode.GroupName + "/secret-created"
 	CloneURL               = pipelinesascode.GroupName + "/clone-url"
-	// PublicGithubAPIURL default is "https://api.github.com" but it can be overridden by X-GitHub-Enterprise-Host header.
+	// AutoTrustedProviderHostnames annotates the controller ConfigMap with the
+	// hostnames the controller learnt on its own, so that it can tell them apart
+	// from the ones an administrator configured deliberately.
+	AutoTrustedProviderHostnames = pipelinesascode.GroupName + "/auto-trusted-provider-hostnames"
+	// PublicGithubAPIURL is the API URL of the public github.com instance.
 	PublicGithubAPIURL   = "https://api.github.com"
 	GithubApplicationID  = "github-application-id"
 	GithubPrivateKey     = "github-private-key"

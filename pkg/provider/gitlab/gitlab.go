@@ -347,6 +347,24 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, runevent *inf
 	return v.setClient(ctx, run, runevent, repo, eventsEmitter, true)
 }
 
+// refuseInheritedCredentialForPayloadHost stops a token that belongs to the
+// controller namespace from being sent to an API host the payload chose.
+//
+// A Repository that omits git_provider.secret inherits the one of the global
+// Repository. If the global Repository also omits git_provider.url, the endpoint
+// falls back to the project URL carried in the webhook, which is unauthenticated
+// at this point: anyone able to create a Repository CR in any namespace could
+// then have the shared token delivered to a host of their choosing.
+func refuseInheritedCredentialForPayloadHost(runevent *info.Event) error {
+	if runevent.Provider == nil || !runevent.Provider.GitProviderSecretFromGlobalRepo {
+		return nil
+	}
+	return fmt.Errorf(
+		"refusing to send the credentials inherited from the global repository to an API host derived from the payload: " +
+			"set git_provider.url on the global repository, or give the repository its own git_provider.secret",
+	)
+}
+
 func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *info.Event, repo *v1alpha1.Repository, eventsEmitter *events.EventEmitter, rotateToken bool) error {
 	var err error
 	if runevent.Provider.Token == "" {
@@ -365,8 +383,14 @@ func (v *Provider) setClient(ctx context.Context, run *params.Run, runevent *inf
 	case runevent.Provider.URL != "":
 		apiURL = runevent.Provider.URL
 	case v.repoURL != "" && !strings.HasPrefix(v.repoURL, apiPublicURL):
+		if err := refuseInheritedCredentialForPayloadHost(runevent); err != nil {
+			return err
+		}
 		apiURL = strings.ReplaceAll(v.repoURL, v.pathWithNamespace, "")
 	case runevent.URL != "":
+		if err := refuseInheritedCredentialForPayloadHost(runevent); err != nil {
+			return err
+		}
 		burl, err := url.Parse(runevent.URL)
 		if err != nil {
 			return err

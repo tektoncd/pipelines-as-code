@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/configmap"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	repository "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
@@ -192,6 +192,11 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 	logmsg := fmt.Sprintf("Testing %s with Github APPS integration on %s with targets %v", label, randomedString, targets)
 	runcnx.Clients.Log.Info(logmsg)
 
+	// An incoming webhook carries no provider signature, so the controller can
+	// never learn this host on its own: it has to be trusted explicitly.
+	defer configmap.TrustProviderHostname(ctx, t, runcnx,
+		tgithub.ControllerConfigMapName(onGHE), *ghprovider.APIURL)()
+
 	var repoinfo *github.Repository
 	var dynamicRepoName string
 
@@ -278,10 +283,6 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 		assert.NilError(t, err)
 		req.Header.Add("Content-Type", "application/json")
 	}
-	if onGHE {
-		urlParse, _ := url.Parse(*ghprovider.APIURL)
-		req.Header.Add("X-GitHub-Enterprise-Host", urlParse.Host)
-	}
 	assert.NilError(t, err)
 	httpResp, err := client.Do(req)
 	assert.NilError(t, err)
@@ -356,6 +357,11 @@ func TestGithubGHEAppIncomingDefaultBranchProvenance(t *testing.T) {
 	targetBranch := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("incoming-branch")
 
 	runcnx.Clients.Log.Infof("Testing incoming webhook with default_branch provenance on %s", randomedString)
+
+	// An incoming webhook carries no provider signature, so the controller can
+	// never learn this host on its own: it has to be trusted explicitly.
+	defer configmap.TrustProviderHostname(ctx, t, runcnx,
+		tgithub.ControllerConfigMapName(onGHE), *ghprovider.APIURL)()
 
 	repoinfo, resp, err := ghprovider.Client().Repositories.Get(ctx, opts.Organization, opts.Repo)
 	assert.NilError(t, err)
@@ -449,10 +455,6 @@ func TestGithubGHEAppIncomingDefaultBranchProvenance(t *testing.T) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, incomingURL, strings.NewReader(string(jsonData)))
 	assert.NilError(t, err)
 	req.Header.Add("Content-Type", "application/json")
-	if onGHE {
-		urlParse, _ := url.Parse(*ghprovider.APIURL)
-		req.Header.Add("X-GitHub-Enterprise-Host", urlParse.Host)
-	}
 
 	client := &http.Client{}
 	httpResp, err := client.Do(req)

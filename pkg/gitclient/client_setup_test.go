@@ -218,6 +218,32 @@ func TestSetupAuthenticatedClientGitHubApp(t *testing.T) {
 	}
 }
 
+func TestSetupAuthenticatedClientGitHubAppIgnoresInheritedProviderSecret(t *testing.T) {
+	t.Parallel()
+
+	ctx, log := setupTestContext(t)
+	repo := createTestRepository(true)
+	repo.Spec.GitProvider.URL = "https://another.example.com"
+	repo.Spec.GitProvider.Secret = nil
+	globalRepo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+		Name:             "global-repo",
+		URL:              "https://github.com/global/repo",
+		InstallNamespace: "default",
+	})
+	globalRepo.Spec.GitProvider = &v1alpha1.GitProvider{
+		URL:    "https://github.com",
+		Secret: &v1alpha1.Secret{Name: "global-secret", Key: "token"},
+	}
+	run := seedTestData(ctx, t, []*v1alpha1.Repository{repo, globalRepo})
+	kint := createTestKintMock(map[string]string{
+		"pipelines-as-code-secret": "github-app-webhook-secret",
+	})
+
+	err := SetupAuthenticatedClient(ctx, createTestProvider(log), kint, run,
+		createTestEvent("pull_request", 12345, "test-secret"), repo, globalRepo, createTestPacInfo(), log)
+	assert.NilError(t, err)
+}
+
 // TestSetupAuthenticatedClient_NonGitHubApp tests non-GitHub App authentication path.
 func TestSetupAuthenticatedClientNonGitHubApp(t *testing.T) {
 	t.Parallel()
@@ -893,6 +919,101 @@ func TestSetupAuthenticatedClientCommentEventTypes(t *testing.T) {
 			} else {
 				assert.NilError(t, err, "%s: %v", tt.description, err)
 			}
+		})
+	}
+}
+
+// A Repository that inherits the shared credential of the global Repository must
+// not also get to choose the host that credential is sent to: the two together
+// let anyone who can create a Repository in any namespace redirect a token owned
+// by the controller namespace.
+func TestSetupAuthenticatedClientRefusesInheritedSecretWithOwnProviderURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		localURL          string
+		globalURL         string
+		localHasOwnSecret bool
+		wantErrSub        string
+	}{
+		{
+			name:       "inheriting the global secret while pointing elsewhere is refused",
+			localURL:   "https://attacker.example",
+			globalURL:  "https://github.com",
+			wantErrSub: "must not be sent to an endpoint chosen by another namespace",
+		},
+		{
+			name:      "inheriting the global secret for the same host is allowed",
+			localURL:  "github.com",
+			globalURL: "https://github.com/",
+		},
+		{
+			name:      "inheriting the global secret without an own url is allowed",
+			localURL:  "",
+			globalURL: "https://github.com",
+		},
+		{
+			name:       "downgrading the inherited credential to cleartext is refused",
+			localURL:   "http://github.com",
+			globalURL:  "https://github.com",
+			wantErrSub: "must not be sent to an endpoint chosen by another namespace",
+		},
+		{
+			name:       "another path on the same shared host is refused",
+			localURL:   "https://git.example.com/other",
+			globalURL:  "https://git.example.com/gitlab",
+			wantErrSub: "must not be sent to an endpoint chosen by another namespace",
+		},
+		{
+			name:      "the api entry point of the same deployment is allowed",
+			localURL:  "https://git.example.com/gitlab/api/v4",
+			globalURL: "https://git.example.com/gitlab",
+		},
+		{
+			name:              "pointing elsewhere with an own secret is allowed",
+			localURL:          "https://ghe.example.com",
+			globalURL:         "https://github.com",
+			localHasOwnSecret: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, log := setupTestContext(t)
+
+			repo := createTestRepository(true)
+			repo.Spec.GitProvider.URL = tt.localURL
+			if !tt.localHasOwnSecret {
+				repo.Spec.GitProvider.Secret = nil
+			}
+
+			globalRepo := testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "global-repo",
+				URL:              "https://github.com/global/repo",
+				InstallNamespace: "pipelines-as-code",
+			})
+			globalRepo.Spec.GitProvider = &v1alpha1.GitProvider{
+				URL:    tt.globalURL,
+				Secret: &v1alpha1.Secret{Name: "global-secret", Key: "token"},
+			}
+
+			run := seedTestData(ctx, t, []*v1alpha1.Repository{repo, globalRepo})
+			kint := createTestKintMock(map[string]string{
+				"test-secret":   "test-token",
+				"global-secret": "global-token",
+			})
+
+			err := SetupAuthenticatedClient(ctx, createTestProvider(log), kint, run,
+				createTestEvent("pull_request", 0, ""), repo, globalRepo, createTestPacInfo(), log)
+
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
 		})
 	}
 }

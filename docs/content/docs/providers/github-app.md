@@ -79,4 +79,67 @@ Finally, install the App on the repositories you want to use with Pipelines-as-C
 
 ## Notes
 
-- Pipelines-as-Code supports GitHub Enterprise with no special configuration required. Pipelines-as-Code automatically detects the header set by GitHub Enterprise and uses the GitHub Enterprise API auth URL instead of the public GitHub API.
+- GitHub.com requires no additional configuration.
+- For a self hosted instance such as GitHub Enterprise Server, the hostname must
+  be trusted by the controller before it will send credentials to it. See
+  [Trusted provider hostnames]({{< relref "/docs/operations/settings.md#trusted-provider-hostnames" >}}).
+
+### Trusting a self hosted GitHub instance
+
+Pipelines-as-Code only sends its Git provider credentials to hostnames it
+trusts, listed in the `trusted-provider-hostnames` key of the controller
+ConfigMap (`pipelines-as-code` by default):
+
+```bash
+kubectl -n pipelines-as-code patch configmap pipelines-as-code \
+  --type merge -p '{"data":{"trusted-provider-hostnames":"ghe.example.com"}}'
+```
+
+The value is a comma separated list, so several instances can be trusted at
+once, which is what you want when a single controller serves more than one self
+hosted provider:
+
+```yaml
+trusted-provider-hostnames: "ghe.example.com, gitlab.example.com"
+```
+
+While the key is empty, the public hostnames (`github.com`, `gitlab.com`,
+`bitbucket.org`, `gitea.com`, `codeberg.org`) stay trusted and the controller
+records the hostname of every webhook whose signature it verified in the
+`pipelinesascode.tekton.dev/auto-trusted-provider-hostnames` ConfigMap
+annotation. This keeps a default installation working without configuration,
+and a controller serving several instances learns all of them.
+
+A non-empty list is authoritative for every hostname, public ones included, and
+the controller stops learning hosts. Listing only `ghe.example.com` is how you
+make sure the controller never talks to `github.com`.
+
+The automatic trust only covers webhooks GitHub signed:
+[incoming webhooks]({{< relref "/docs/advanced/incoming-webhooks.md" >}}) carry
+no signature and will fail until the hostname is trusted. Setting the key
+explicitly is therefore the recommended setup for any self hosted instance.
+
+A hostname that is not routable on the public internet (loopback, a private
+range, or an in-cluster `.svc` name) is never recorded automatically: list it
+explicitly to trust it.
+
+If a hostname is not trusted, the controller refuses the request and logs the
+exact command to run:
+
+```text
+refusing to use credentials with the "ghe.example.com" host: it is not listed in
+the "trusted-provider-hostnames" key of the pipelines-as-code/pipelines-as-code
+ConfigMap. Add it with: kubectl -n pipelines-as-code patch configmap ...
+```
+
+After migrating to a new hostname, replace the value with the new one. Removing
+a hostname from a non-empty list immediately stops the controller from talking
+to it. Emptying the key gives the policy back to the controller and makes its
+previously learned hosts effective again; delete the auto-trusted annotation as
+well to forget them.
+
+If the controller ConfigMap is managed by GitOps tooling (Argo CD, the
+OpenShift Pipelines operator through `TektonConfig`, ...), set
+`trusted-provider-hostnames` in the source of truth. Otherwise a reconciler that
+prunes controller-owned annotations makes the controller relearn the hostname
+on every signed webhook.
