@@ -40,7 +40,12 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Run unit tests with coverage
-        run: go test -coverprofile=coverage.txt -covermode=atomic ./pkg/...
+        run: |
+          PACKAGES=$(go list ./... | grep -vE '/cmd(/|$)|/vendor(/|$)|/hack(/|$)|/test(/|$)|/config(/|$)|/docs(/|$)|/pkg/generated(/|$)|/pkg/apis(/|$)|/pkg/test(/|$)|/pkg/provider/.*/test(/|$)|/fake(/|$)')
+          COVERPKG=$(echo $PACKAGES | tr ' ' ',')
+          go test -coverprofile=coverage_raw.txt -covermode=atomic -coverpkg="$COVERPKG" $PACKAGES
+          grep -vE 'zz_generated\.deepcopy\.go|\.pb\.go' coverage_raw.txt > coverage.txt
+          rm -f coverage_raw.txt
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -49,3 +54,4 @@ jobs:
           flags: unit-tests
           use_oidc: true
           fail_ci_if_error: true
+          disable_search: true

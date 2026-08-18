@@ -1,26 +1,28 @@
 coverage:
-  # Commit status https://docs.codecov.io/docs/commit-status are used
-  # to block PR based on coverage threshold.
   status:
     project:
       default:
         target: auto
         threshold: 5%
     patch:
-      # Disable the coverage threshold of the patch, so that PRs are
-      # only failing because of overall project coverage threshold.
-      # See https://docs.codecov.io/docs/commit-status#disabling-a-status.
       default: false
 
 ignore:
+  # Auto-generated code.
   - "**/zz_generated*.go"
   - "**/*.pb.go"
-  - "hack"
+  - "**/fake/**"
+  # Auto-generated client/informer/lister code.
   - "pkg/generated"
+  # API type definitions.
   - "pkg/apis"
-  - "cmd/*"
+  # Entry-point binaries.
+  - "cmd"
+  # Test infrastructure.
   - "test"
   - "pkg/test"
   - "pkg/provider/**/test"
-  - "third_party"
+  - "hack"
+  - "config"
+  - "docs"
   - "vendor"
