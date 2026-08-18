@@ -130,6 +130,7 @@ func TestWaitingForCheckRunID(t *testing.T) {
 		name        string
 		annotations map[string]string
 		conditions  knativeduckv1.Conditions
+		specStatus  tektonv1.PipelineRunSpecStatus
 		want        bool
 	}{
 		{
@@ -156,12 +157,24 @@ func TestWaitingForCheckRunID(t *testing.T) {
 			conditions:  doneCondition,
 			want:        false,
 		},
+		{
+			// IsCancelled() reads Spec.Status, not the Succeeded condition, so this
+			// case has to set the spec field to exercise the branch at all.
+			name:        "GitHub App pipelineRun cancelled without check run id",
+			annotations: map[string]string{keys.InstallationID: "1234"},
+			conditions:  runningCondition,
+			specStatus:  tektonv1.PipelineRunSpecStatusCancelled,
+			want:        false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pr := &tektonv1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: tt.annotations,
+				},
+				Spec: tektonv1.PipelineRunSpec{
+					Status: tt.specStatus,
 				},
 				Status: tektonv1.PipelineRunStatus{
 					Status: knativeduckv1.Status{
