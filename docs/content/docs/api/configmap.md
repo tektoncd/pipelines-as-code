@@ -363,6 +363,12 @@ Pipelines-as-Code only repeats an operation when it can do so safely. It does
 not repeat provider changes after an uncertain network or server failure when
 doing so could create duplicate comments, statuses, or other mutations.
 
+Independently of this setting, Pipelines-as-Code always retries a GitHub
+check-run update that returns a 404 when the check-run id comes from the
+annotation on a PipelineRun. Another reconcile may have created that check run
+moments earlier and GitHub can still report it as missing, so the update is
+retried a few times with a short backoff before the error is reported.
+
 ```yaml
 enable-api-retry: "false"
 ```
