@@ -6,8 +6,8 @@ import (
 	"slices"
 
 	"github.com/google/go-github/v90/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/hostpolicy"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/vcshost"
 	corev1 "k8s.io/api/core/v1"
@@ -49,10 +49,7 @@ func createPacSecret(ctx context.Context, run *params.Run, opts *bootstrapOpts, 
 // immediately: the hostname comes from the user running the bootstrap, not from
 // a webhook payload.
 func trustProviderHostname(ctx context.Context, run *params.Run, opts *bootstrapOpts) error {
-	configMapName := info.DefaultPipelinesAscodeConfigmapName
-	if run.Info.Controller != nil && run.Info.Controller.Configmap != "" {
-		configMapName = run.Info.Controller.Configmap
-	}
+	configMapName := hostpolicy.ControllerConfigMap(run)
 
 	host, err := vcshost.Parse(opts.GithubAPIURL)
 	if err != nil {

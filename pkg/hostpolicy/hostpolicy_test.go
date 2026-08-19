@@ -385,6 +385,36 @@ func TestTrustedUsesControllerConfigMap(t *testing.T) {
 	assert.ErrorContains(t, err, "is not listed in")
 }
 
+func TestControllerConfigMap(t *testing.T) {
+	tests := []struct {
+		name       string
+		controller *info.ControllerInfo
+		want       string
+	}{
+		{
+			name:       "nil controller falls back to default",
+			controller: nil,
+			want:       info.DefaultPipelinesAscodeConfigmapName,
+		},
+		{
+			name:       "empty configmap field falls back to default",
+			controller: &info.ControllerInfo{Configmap: ""},
+			want:       info.DefaultPipelinesAscodeConfigmapName,
+		},
+		{
+			name:       "custom configmap is returned",
+			controller: &info.ControllerInfo{Configmap: "my-configmap"},
+			want:       "my-configmap",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run := &params.Run{Info: info.Info{Controller: tt.controller}}
+			assert.Equal(t, ControllerConfigMap(run), tt.want)
+		})
+	}
+}
+
 // The error must tell the administrator exactly how to fix the situation.
 func TestNotTrustedErrorIsActionable(t *testing.T) {
 	err := NotTrustedError(testNamespace, testConfigMapName, "ghe.example.com", reasonUnconfigured)

@@ -68,7 +68,7 @@ func Trusted(ctx context.Context, run *params.Run, rawHost string) (string, erro
 	}
 
 	namespace := info.GetNS(ctx)
-	configMapName := controllerConfigMap(run)
+	configMapName := ControllerConfigMap(run)
 	policy, err := readPolicy(ctx, run.Clients.Kube, namespace, configMapName)
 	if err != nil {
 		return "", err
@@ -94,7 +94,7 @@ func TrustOnFirstUse(ctx context.Context, run *params.Run, rawHost string) (stri
 	canonical := vcshost.Canonical(host)
 
 	namespace := info.GetNS(ctx)
-	configMapName := controllerConfigMap(run)
+	configMapName := ControllerConfigMap(run)
 	if run.Clients.Kube == nil {
 		return "", noKubeClientError(namespace, configMapName)
 	}
@@ -149,10 +149,10 @@ func TrustOnFirstUse(ctx context.Context, run *params.Run, rawHost string) (stri
 	return canonical, nil
 }
 
-// controllerConfigMap returns the ConfigMap holding this controller policy. Each
+// ControllerConfigMap returns the ConfigMap holding this controller policy. Each
 // controller has its own, so a second controller can never widen the policy of
 // the first one.
-func controllerConfigMap(run *params.Run) string {
+func ControllerConfigMap(run *params.Run) string {
 	if run.Info.Controller != nil && run.Info.Controller.Configmap != "" {
 		return run.Info.Controller.Configmap
 	}
