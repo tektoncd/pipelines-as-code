@@ -110,6 +110,83 @@ func TestCopyRepositoryForMergeCopiesMutableSpecPointers(t *testing.T) {
 	assert.Equal(t, "webhook-secret", repo.Spec.GitProvider.WebhookSecret.Name)
 }
 
+func TestWaitingForCheckRunID(t *testing.T) {
+	runningCondition := knativeduckv1.Conditions{
+		{
+			Type:   knativeapi.ConditionSucceeded,
+			Status: corev1.ConditionUnknown,
+			Reason: string(tektonv1.PipelineRunReasonRunning),
+		},
+	}
+	doneCondition := knativeduckv1.Conditions{
+		{
+			Type:   knativeapi.ConditionSucceeded,
+			Status: corev1.ConditionTrue,
+			Reason: string(tektonv1.PipelineRunReasonSuccessful),
+		},
+	}
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		conditions  knativeduckv1.Conditions
+		specStatus  tektonv1.PipelineRunSpecStatus
+		want        bool
+	}{
+		{
+			name:        "not a GitHub App pipelineRun",
+			annotations: map[string]string{},
+			conditions:  runningCondition,
+			want:        false,
+		},
+		{
+			name:        "GitHub App pipelineRun with check run id already set",
+			annotations: map[string]string{keys.InstallationID: "1234", keys.CheckRunID: "999"},
+			conditions:  runningCondition,
+			want:        false,
+		},
+		{
+			name:        "GitHub App pipelineRun still running without check run id",
+			annotations: map[string]string{keys.InstallationID: "1234"},
+			conditions:  runningCondition,
+			want:        true,
+		},
+		{
+			name:        "GitHub App pipelineRun done without check run id",
+			annotations: map[string]string{keys.InstallationID: "1234"},
+			conditions:  doneCondition,
+			want:        false,
+		},
+		{
+			// IsCancelled() reads Spec.Status, not the Succeeded condition, so this
+			// case has to set the spec field to exercise the branch at all.
+			name:        "GitHub App pipelineRun cancelled without check run id",
+			annotations: map[string]string{keys.InstallationID: "1234"},
+			conditions:  runningCondition,
+			specStatus:  tektonv1.PipelineRunSpecStatusCancelled,
+			want:        false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: tt.annotations,
+				},
+				Spec: tektonv1.PipelineRunSpec{
+					Status: tt.specStatus,
+				},
+				Status: tektonv1.PipelineRunStatus{
+					Status: knativeduckv1.Status{
+						Conditions: tt.conditions,
+					},
+				},
+			}
+			assert.Equal(t, waitingForCheckRunID(pr), tt.want)
+		})
+	}
+}
+
 func testSetupGHReplies(t *testing.T, mux *http.ServeMux, runevent *info.Event, checkrunID, finalStatus string) {
 	t.Helper()
 	mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/check-runs/%s", runevent.Organization, runevent.Repository, checkrunID),

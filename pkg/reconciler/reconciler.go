@@ -114,6 +114,26 @@ func copyRepositoryForMerge(repo *v1alpha1.Repository) *v1alpha1.Repository {
 	return repo
 }
 
+// waitingForCheckRunID reports whether a GitHub App pipelineRun is still waiting
+// for its initial CheckRunID annotation to be patched on. While that is true the
+// reconciler skips further processing, so it does not report a status before the
+// initial "in progress" check run has landed.
+//
+// Once the pipelineRun is done or cancelled we stop waiting even if CheckRunID is
+// still missing. Otherwise a pipelineRun whose CheckRunID patch never landed --
+// for example because the patch lost a resource-version conflict under high
+// parallelism -- would report "in progress" forever. For a finished pipelineRun
+// the provider can still look up or recreate the check run without the annotation.
+func waitingForCheckRunID(pr *tektonv1.PipelineRun) bool {
+	if _, ok := pr.Annotations[keys.InstallationID]; !ok {
+		return false
+	}
+	if _, ok := pr.Annotations[keys.CheckRunID]; ok {
+		return false
+	}
+	return !pr.IsDone() && !pr.IsCancelled()
+}
+
 // ReconcileKind is the main entry point for reconciling PipelineRun resources.
 func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	ctx = info.StoreNS(ctx, system.Namespace())
@@ -197,11 +217,8 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	}
 	logger.Debugf("pipelineRun %s/%s condition not met: reason='%s', startReported=%v", pr.GetNamespace(), pr.GetName(), reason, startReported)
 
-	// if its a GitHub App pipelineRun PR then process only if check run id is added otherwise wait
-	if _, ok := pr.Annotations[keys.InstallationID]; ok {
-		if _, ok := pr.Annotations[keys.CheckRunID]; !ok {
-			return nil
-		}
+	if waitingForCheckRunID(pr) {
+		return nil
 	}
 
 	// queue pipelines which are in queued state and pending status
