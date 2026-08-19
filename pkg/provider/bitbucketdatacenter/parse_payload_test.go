@@ -574,6 +574,9 @@ func TestParsePayload(t *testing.T) {
 		rawStr                  string
 		targetPipelinerun       string
 		canceltargetPipelinerun string
+		expTriggerTarget        string
+		expEventType            string
+		expTriggerComment       string
 	}{
 		{
 			name:          "bad/invalid event type",
@@ -604,16 +607,20 @@ func TestParsePayload(t *testing.T) {
 			wantErrSubstr: "invalid control character",
 		},
 		{
-			name:         "good/pull_request",
-			eventType:    "pr:opened",
-			payloadEvent: bbv1test.MakePREvent(ev1, ""),
-			expEvent:     ev1,
+			name:             "good/pull_request",
+			eventType:        "pr:opened",
+			payloadEvent:     bbv1test.MakePREvent(ev1, ""),
+			expEvent:         ev1,
+			expEventType:     "pull_request",
+			expTriggerTarget: "pull_request",
 		},
 		{
-			name:         "good/push",
-			eventType:    "repo:refs_changed",
-			payloadEvent: bbv1test.MakePushEvent(ev1, []types.PushRequestEventChange{{ToHash: ev1.SHA, RefID: "base"}}, []types.Commit{{ID: ev1.SHA}}),
-			expEvent:     ev1,
+			name:             "good/push",
+			eventType:        "repo:refs_changed",
+			payloadEvent:     bbv1test.MakePushEvent(ev1, []types.PushRequestEventChange{{ToHash: ev1.SHA, RefID: "base"}}, []types.Commit{{ID: ev1.SHA}}),
+			expEvent:         ev1,
+			expEventType:     "push",
+			expTriggerTarget: "push",
 		},
 		{
 			name:          "bad/changes are empty in push",
@@ -630,16 +637,32 @@ func TestParsePayload(t *testing.T) {
 			wantErrSubstr: "push event contains no commits; cannot proceed",
 		},
 		{
-			name:         "good/comment ok-to-test",
-			eventType:    "pr:comment:added",
-			payloadEvent: bbv1test.MakePREvent(ev1, "/ok-to-test"),
-			expEvent:     ev1,
+			name:              "good/comment ok-to-test",
+			eventType:         "pr:comment:added",
+			payloadEvent:      bbv1test.MakePREvent(ev1, "/ok-to-test"),
+			expEvent:          ev1,
+			expEventType:      "ok-to-test-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/ok-to-test",
 		},
 		{
-			name:         "good/comment test",
-			eventType:    "pr:comment:added",
-			payloadEvent: bbv1test.MakePREvent(ev1, "/test"),
-			expEvent:     ev1,
+			name:              "good/comment test",
+			eventType:         "pr:comment:added",
+			payloadEvent:      bbv1test.MakePREvent(ev1, "/test"),
+			expEvent:          ev1,
+			expEventType:      "test-all-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/test",
+		},
+		{
+			name:              "good/comment test single",
+			eventType:         "pr:comment:added",
+			payloadEvent:      bbv1test.MakePREvent(ev1, "/test dummy"),
+			expEvent:          ev1,
+			expEventType:      "test-comment",
+			expTriggerTarget:  "pull_request",
+			targetPipelinerun: "dummy",
+			expTriggerComment: "/test dummy",
 		},
 		{
 			name:              "good/comment retest a pr",
@@ -647,6 +670,9 @@ func TestParsePayload(t *testing.T) {
 			payloadEvent:      bbv1test.MakePREvent(ev1, "/retest dummy"),
 			expEvent:          ev1,
 			targetPipelinerun: "dummy",
+			expEventType:      "retest-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/retest dummy",
 		},
 		{
 			name:                    "good/comment cancel a pr",
@@ -654,12 +680,27 @@ func TestParsePayload(t *testing.T) {
 			payloadEvent:            bbv1test.MakePREvent(ev1, "/cancel dummy"),
 			expEvent:                ev1,
 			canceltargetPipelinerun: "dummy",
+			expEventType:            "cancel-comment",
+			expTriggerTarget:        "pull_request",
+			expTriggerComment:       "/cancel dummy",
 		},
 		{
-			name:         "good/comment cancel all",
-			eventType:    "pr:comment:added",
-			payloadEvent: bbv1test.MakePREvent(ev1, "/cancel"),
-			expEvent:     ev1,
+			name:              "good/comment cancel all",
+			eventType:         "pr:comment:added",
+			payloadEvent:      bbv1test.MakePREvent(ev1, "/cancel"),
+			expEvent:          ev1,
+			expEventType:      "cancel-all-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/cancel",
+		},
+		{
+			name:              "good/comment non-gitops",
+			eventType:         "pr:comment:added",
+			payloadEvent:      bbv1test.MakePREvent(ev1, "/review"),
+			expEvent:          ev1,
+			expTriggerTarget:  "pull_request",
+			expEventType:      "no-ops-comment",
+			expTriggerComment: "/review",
 		},
 		{
 			name:      "branch/deleted with zero hash",
@@ -722,6 +763,9 @@ func TestParsePayload(t *testing.T) {
 			if tt.canceltargetPipelinerun != "" {
 				assert.Equal(t, got.TargetCancelPipelineRun, tt.canceltargetPipelinerun)
 			}
+			assert.Equal(t, string(got.TriggerTarget), tt.expTriggerTarget)
+			assert.Equal(t, string(got.EventType), tt.expEventType)
+			assert.Equal(t, got.TriggerComment, tt.expTriggerComment)
 		})
 	}
 }
