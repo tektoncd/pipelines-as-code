@@ -1142,6 +1142,9 @@ func (v *Provider) storePipelineID(ctx context.Context, statusOpts providerstatu
 // patchPipelineIDAnnotation stores the GitLab pipeline ID as a PipelineRun
 // annotation so the reconciler can read it back across Provider instances.
 func (v *Provider) patchPipelineIDAnnotation(ctx context.Context, statusOpts providerstatus.StatusOpts, pipelineID int64) {
+	if statusOpts.IsUnmatchedReport {
+		return
+	}
 	pr := statusOpts.PipelineRun
 	if pr == nil || (pr.GetName() == "" && pr.GetGenerateName() == "") {
 		return

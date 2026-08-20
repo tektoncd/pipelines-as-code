@@ -307,4 +307,7 @@ spec:
             container_logs:
               enabled: true
               max_lines: 100
+    status_check:
+      enabled: true
+      mode: "per_unmatched_pipelinerun"
 ```

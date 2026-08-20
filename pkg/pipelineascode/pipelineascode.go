@@ -81,7 +81,7 @@ func (p *PacRun) Run(ctx context.Context) error {
 		return nil
 	}
 
-	matchedPRs, repo, err := p.matchRepoPR(ctx)
+	matchedPRs, unmatchedPRs, repo, err := p.matchRepoPR(ctx)
 	if err != nil {
 		createStatusErr := p.vcx.CreateStatus(ctx, p.event, providerstatus.StatusOpts{
 			Status:     CompletedStatus,
@@ -103,6 +103,10 @@ func (p *PacRun) Run(ctx context.Context) error {
 	p.debugf("match results: matched=%d repo=%s/%s", len(matchedPRs), repoNamespace, repoName)
 	if len(matchedPRs) == 0 {
 		p.debugf("no pipelineruns matched; returning without starting any runs")
+		// check and report if status check is enabled from repo CR settings here so that status reporting will be done early
+		// if there is no matched PipelineRun otherwise after all the pipelineruns are started, we will report the status check
+		// for all the unmatched pipelineruns, to not cause delay to matched PipelineRuns start and reporting process.
+		p.reportStatusCheckFromRepoSettings(ctx, repo, unmatchedPRs, "when there is no matched pipelinerun")
 		return nil
 	}
 	if repo == nil {
@@ -204,7 +208,56 @@ func (p *PacRun) Run(ctx context.Context) error {
 		}
 	}
 	wg.Wait()
+	// report status check for unmatched pipelineruns after all the pipelineruns are started
+	p.reportStatusCheckFromRepoSettings(ctx, repo, unmatchedPRs, "after all the pipelineruns are started")
 	return nil
+}
+
+func (p *PacRun) reportStatusCheckFromRepoSettings(ctx context.Context, repo *v1alpha1.Repository, unmatchedPRs []*tektonv1.PipelineRun, whenMsg string) {
+	p.debugf("checking status check settings from repo CR %s", whenMsg)
+	// TODO(zaki): change the default to 'aggregate' from 'per_unmatched_pipelinerun' when aggregate mode is implemented
+	// since only per_unmatched_pipelinerun is supported now, we default to it if mode is not set but enabled is true
+	if repo != nil && repo.Spec.Settings != nil && repo.Spec.Settings.StatusCheck != nil &&
+		repo.Spec.Settings.StatusCheck.Enabled &&
+		(repo.Spec.Settings.StatusCheck.Mode == v1alpha1.StatusCheckModePerUnmatchedPipelineRun || repo.Spec.Settings.StatusCheck.Mode == "") {
+		p.debugf("status check is enabled from repo CR settings in mode=%s for %d unmatched pipelineruns", repo.Spec.Settings.StatusCheck.Mode, len(unmatchedPRs))
+	} else {
+		return
+	}
+
+	conclusion := providerstatus.Conclusion(repo.Spec.Settings.StatusCheck.NoMatchConclusion)
+	if conclusion == "" {
+		conclusion = providerstatus.ConclusionSkipped
+	}
+	p.debugf("reporting status check from repo settings for %d unmatched pipelineruns with conclusion=%s", len(unmatchedPRs), conclusion)
+
+	var wg sync.WaitGroup
+	for _, pr := range unmatchedPRs {
+		wg.Add(1)
+
+		go func(pr *tektonv1.PipelineRun) {
+			defer wg.Done()
+			prName := pr.GetName()
+			if prName == "" {
+				prName = pr.GetGenerateName()
+			}
+			err := p.vcx.CreateStatus(ctx, p.event, providerstatus.StatusOpts{
+				PipelineRunName:         prName,
+				IsUnmatchedReport:       true,
+				PipelineRun:             pr,
+				OriginalPipelineRunName: prName,
+				DetailsURL:              p.run.Clients.ConsoleUI().URL(),
+				Status:                  CompletedStatus,
+				Conclusion:              conclusion,
+				Text:                    fmt.Sprintf("PipelineRun %s is not matched to event %s", prName, p.event.TriggerTarget.String()),
+			})
+			// we don't return the error here because we want to report all the status checks
+			if err != nil {
+				p.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryStatusCheckReportFailed", fmt.Sprintf("error reporting status check from repo settings: %s", err.Error()))
+			}
+		}(pr)
+	}
+	wg.Wait()
 }
 
 func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.PipelineRun, error) {

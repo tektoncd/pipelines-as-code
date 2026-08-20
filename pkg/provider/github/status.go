@@ -194,9 +194,12 @@ func (v *Provider) createCheckRunStatus(ctx context.Context, runevent *info.Even
 			Summary: github.Ptr(status.Summary),
 			Text:    github.Ptr(status.Text),
 		},
-		DetailsURL: github.Ptr(status.DetailsURL),
 		ExternalID: github.Ptr(status.PipelineRunName),
 		StartedAt:  &now,
+	}
+
+	if status.DetailsURL != "" {
+		checkrunoption.DetailsURL = github.Ptr(status.DetailsURL)
 	}
 
 	if status.Status != "in_progress" && status.Status != "queued" {
@@ -319,7 +322,7 @@ func (v *Provider) getOrUpdateCheckRunStatus(ctx context.Context, runevent *info
 		// Patch the pipelineRun with the checkRunID and logURL only when the pipelineRun is not nil and has a name
 		// because on validation failed PipelineRun will provide PipelineRun struct but it is not a valid resource
 		// created in cluster so if its only validation error report then ignore patching the pipelineRun.
-		if statusOpts.PipelineRun != nil && (statusOpts.PipelineRun.GetName() != "" || statusOpts.PipelineRun.GetGenerateName() != "") {
+		if !statusOpts.IsUnmatchedReport && statusOpts.PipelineRun != nil && (statusOpts.PipelineRun.GetName() != "" || statusOpts.PipelineRun.GetGenerateName() != "") {
 			if _, err := action.PatchPipelineRun(ctx, v.Logger, "checkRunID and logURL", v.Run.Clients.Tekton, statusOpts.PipelineRun, metadataPatch(checkRunID, statusOpts.DetailsURL)); err != nil {
 				return err
 			}
@@ -399,6 +402,8 @@ func (v *Provider) createStatusCommit(ctx context.Context, runevent *info.Event,
 	switch status.Conclusion {
 	case providerstatus.ConclusionNeutral:
 		status.Conclusion = providerstatus.ConclusionSuccess // We don't have a choice other than setting as success, no pending here.
+	case providerstatus.ConclusionSkipped:
+		status.Conclusion = providerstatus.ConclusionSuccess // GitHub commit status API doesn't support "skipped", map to success.
 	case providerstatus.ConclusionPending:
 		if status.Title != "" {
 			status.Conclusion = providerstatus.ConclusionPending
@@ -513,7 +518,10 @@ func (v *Provider) CreateStatus(ctx context.Context, runevent *info.Event, statu
 			statusOpts.Title = "Unknown"
 		}
 		statusOpts.Summary = "<b>Completed</b>"
-	case providerstatus.ConclusionCompleted, providerstatus.ConclusionSkipped:
+	case providerstatus.ConclusionSkipped:
+		statusOpts.Title = "Skipped"
+		statusOpts.Summary = "has <b>skipped</b> this PipelineRun."
+	case providerstatus.ConclusionCompleted:
 	}
 
 	if statusOpts.Status == "in_progress" {

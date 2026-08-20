@@ -213,6 +213,15 @@ func TestCreateStatus(t *testing.T) {
 
 			pacOpts: pacopts,
 		},
+		{
+			name: "good/skipped",
+			status: status.StatusOpts{
+				Conclusion: "skipped",
+				Text:       "Skipping",
+			},
+
+			pacOpts: pacopts,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -343,6 +343,92 @@ func TestMergeSpecs(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "status check from global",
+			local: &RepositorySpec{
+				Settings:    &Settings{},
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:       true,
+						Mode:          "aggregate",
+						AggregateName: "Pipelines as Code",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:       true,
+						Mode:          "aggregate",
+						AggregateName: "Pipelines as Code",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
+		{
+			name: "local status check takes precedence",
+			local: &RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:           true,
+						Mode:              "per_unmatched_pipelinerun",
+						NoMatchConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:       true,
+						Mode:          "aggregate",
+						AggregateName: "Pipelines as Code",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:           true,
+						Mode:              "per_unmatched_pipelinerun",
+						NoMatchConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
+		{
+			name: "nil local settings inherits global status check",
+			local: &RepositorySpec{
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:           true,
+						Mode:              "per_unmatched_pipelinerun",
+						NoMatchConclusion: "success",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusCheck: &StatusCheck{
+						Enabled:           true,
+						Mode:              "per_unmatched_pipelinerun",
+						NoMatchConclusion: "success",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
 	}
 
 	for _, tt := range tests {

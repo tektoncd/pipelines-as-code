@@ -318,7 +318,10 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	case providerstatus.ConclusionNeutral:
 		statusOpts.Title = "Unknown"
 		statusOpts.Summary = "doesn't know what happened with this commit."
-	case providerstatus.ConclusionCancelled, providerstatus.ConclusionCompleted, providerstatus.ConclusionSkipped:
+	case providerstatus.ConclusionSkipped:
+		statusOpts.Title = "Skipped"
+		statusOpts.Summary = "has <b>skipped</b>."
+	case providerstatus.ConclusionCancelled, providerstatus.ConclusionCompleted:
 	}
 
 	if statusOpts.Status == "in_progress" {
@@ -340,7 +343,9 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 	state := forgejo.StatusState(status.Conclusion)
 	switch status.Conclusion {
 	case providerstatus.ConclusionNeutral:
-		state = forgejo.StatusSuccess // We don't have a choice than setting as success, no pending here.c
+		state = forgejo.StatusSuccess // We don't have a choice than setting as success, no pending here.
+	case providerstatus.ConclusionSkipped:
+		state = forgejo.StatusSuccess // We don't have a choice than setting as success, skipped is neither pending nor failure.
 	case providerstatus.ConclusionPending:
 		if status.Title != "" {
 			state = forgejo.StatusPending

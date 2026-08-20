@@ -97,8 +97,8 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 
 	switch statusOpts.Conclusion {
 	case status.ConclusionSkipped:
-		state = scm.StateFailure
-		statusOpts.Title = "➖ Skipping this commit"
+		state = scm.StateUnknown
+		statusOpts.Title = "➖ Skipping this PipelineRun"
 	case status.ConclusionNeutral:
 		state = scm.StateFailure
 		statusOpts.Title = "➖ CI has stopped"

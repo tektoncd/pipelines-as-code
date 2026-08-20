@@ -4,6 +4,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	StatusCheckModeAggregate               = "aggregate"
+	StatusCheckModePerUnmatchedPipelineRun = "per_unmatched_pipelinerun"
+)
+
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -135,6 +140,10 @@ type Settings struct {
 	// AIAnalysis contains AI/LLM analysis configuration for automated CI/CD pipeline analysis.
 	// +optional
 	AIAnalysis *AIAnalysisConfig `json:"ai,omitempty"`
+
+	// StatusCheck configures the status checks for the repository.
+	// +optional
+	StatusCheck *StatusCheck `json:"status_check,omitempty"`
 }
 
 type GitlabSettings struct {
@@ -182,6 +191,35 @@ type ForgejoSettings struct {
 	CommentStrategy string `json:"comment_strategy,omitempty"`
 }
 
+// StatusCheck configures the status checks for the repository.
+type StatusCheck struct {
+	// Enabled defines if the status checks should be reported. Default is false.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Mode defines how the status checks should be reported when is enabled.
+	// Options:
+	// - 'per_unmatched_pipelinerun': Report the status check of each PipelineRun separately.
+	// - 'aggregate': Aggregate the status checks of all PipelineRuns into a single status check. (planned, not yet implemented)
+	// +optional
+	// +kubebuilder:validation:Enum="";per_unmatched_pipelinerun
+	Mode string `json:"mode,omitempty"`
+
+	// TODO(zaki): Remove this comment when aggregate mode is implemented.
+	// AggregateName defines the name of the aggregate status check. Only used when Mode is 'aggregate' which is not yet implemented.
+	AggregateName string `json:"aggregate_name,omitempty"`
+
+	// NoMatchConclusion defines the conclusion to report when pipeline run is not matched. Default is 'skipped'.
+	// this will be used only if mode is 'per_unmatched_pipelinerun'.
+	// Options:
+	// - 'success': Report as success.
+	// - 'neutral': Report as neutral.
+	// - 'skipped': Report as skipped. Default.
+	// +optional
+	// +kubebuilder:validation:Enum="";success;neutral;skipped
+	NoMatchConclusion string `json:"no_match_conclusion,omitempty"`
+}
+
 func (s *Settings) Merge(newSettings *Settings) {
 	if newSettings.PipelineRunProvenance != "" && s.PipelineRunProvenance == "" {
 		s.PipelineRunProvenance = newSettings.PipelineRunProvenance
@@ -210,6 +248,10 @@ func (s *Settings) Merge(newSettings *Settings) {
 
 	if newSettings.GitOpsCommandPrefix != "" && s.GitOpsCommandPrefix == "" {
 		s.GitOpsCommandPrefix = newSettings.GitOpsCommandPrefix
+	}
+
+	if newSettings.StatusCheck != nil && s.StatusCheck == nil {
+		s.StatusCheck = newSettings.StatusCheck
 	}
 }
 

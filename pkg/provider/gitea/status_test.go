@@ -299,6 +299,28 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 			wantStatusJSON:  `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
 			wantCommentJSON: `{"body":"\ntime to get started"}`,
 		},
+		{
+			name: "skipped",
+			args: args{
+				status: status.StatusOpts{
+					Conclusion: status.ConclusionSkipped,
+					Title:      "Skipped",
+					Text:       "has <b>skipped</b>.",
+				},
+				pacopts: &info.PacOpts{Settings: settings.Settings{
+					ApplicationName: "myapp",
+				}},
+				event: &info.Event{
+					Organization:      "myorg",
+					Repository:        "myrepo",
+					PullRequestNumber: 1,
+					TriggerTarget:     "pull_request",
+					SHA:               "123456",
+				},
+			},
+			wantStatusJSON:  `{"state":"success","target_url":"","description":"Skipped","context":"myapp"}`,
+			wantCommentJSON: `{"body":"\nhas \u003cb\u003eskipped\u003c/b\u003e."}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

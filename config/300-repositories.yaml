@@ -432,6 +432,41 @@ spec:
                             type: string
                           type: array
                       type: object
+                    status_check:
+                      description: StatusCheck configures the status checks for the repository.
+                      properties:
+                        aggregate_name:
+                          description: AggregateName defines the name of the aggregate status check. Only used when Mode is 'aggregate'.
+                          type: string
+                        enabled:
+                          description: Enabled defines if the status checks should be reported. Default is false.
+                          type: boolean
+                        mode:
+                          description: |-
+                            Mode defines how the status checks should be reported when is enabled.
+                            Options:
+                            - 'per_unmatched_pipelinerun': Report the status check of each PipelineRun separately.
+                            - 'aggregate': Aggregate the status checks of all PipelineRuns into a single status check. (planned, not yet implemented)
+                          enum:
+                            - ""
+                            - aggregate
+                            - per_unmatched_pipelinerun
+                          type: string
+                        no_match_conclusion:
+                          description: |-
+                            NoMatchConclusion defines the conclusion to report when pipeline run is not matched. Default is 'skipped'.
+                            this will be used only if mode is 'per_unmatched_pipelinerun'.
+                            Options:
+                            - 'success': Report as success.
+                            - 'neutral': Report as neutral.
+                            - 'skipped': Report as skipped. Default.
+                          enum:
+                            - ""
+                            - success
+                            - neutral
+                            - skipped
+                          type: string
+                      type: object
                   type: object
                 url:
                   description: |-
