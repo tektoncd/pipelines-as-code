@@ -2,13 +2,13 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  name: push-generate-coverage-releaseyaml
+  name: push-generate-release-yaml
   annotations:
     pipelinesascode.tekton.dev/task: "[git-clone]"
     pipelinesascode.tekton.dev/max-keep-runs: "2"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && target_branch == "main" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-coverage-release.yaml".pathChanged())
+      event == "push" && target_branch == "main" && ("***/*.go".pathChanged() || "config/***".pathChanged() || ".tekton/generate-release.yaml".pathChanged())
 spec:
   params:
     - name: repo_url
@@ -29,11 +29,20 @@ spec:
             - name: source
           steps:
             - name: fetch-repo
+              displayName: "Fetch Repository"
               ref:
-                resolver: http
+                resolver: hub
                 params:
-                  - name: url
-                    value: https://raw.githubusercontent.com/tektoncd/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                  - name: catalog
+                    value: git-clone-stepaction
+                  - name: type
+                    value: artifact
+                  - name: kind
+                    value: stepaction
+                  - name: name
+                    value: git-clone
+                  - name: version
+                    value: "1.7.0"
               params:
                 - name: output-path
                   value: $(workspaces.source.path)
@@ -42,6 +51,7 @@ spec:
                 - name: revision
                   value: "$(params.revision)"
             - name: cache-fetch
+              displayName: "Fetch Cache"
               ref:
                 resolver: http
                 params:
@@ -57,6 +67,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: unittest
+              displayName: "Run Unit Tests"
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
@@ -64,24 +75,6 @@ spec:
                   value: $(workspaces.source.path)/go-build-cache/cache
                 - name: GOMODCACHE
                   value: $(workspaces.source.path)/go-build-cache/mod
-                - name: TESTRR_URL
-                  value: "https://testrr.pipelinesascode.com"
-                - name: TESTRR_PROJECT
-                  value: "pipelinesascode"
-                - name: TESTRR_USERNAME
-                  value: "pac"
-                - name: TESTRR_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: testrr-secret
-                      key: password
-                      optional: true
-                - name: TESTRR_COMMIT_SHA
-                  value: "{{revision}}"
-                - name: TESTRR_BUILD_ID
-                  value: "$(context.pipelineRun.name)"
-                - name: TESTRR_RUN_LABEL
-                  value: "tekton-coverage-release"
                 - name: GH_TOKEN
                   valueFrom:
                     secretKeyRef:
@@ -92,32 +85,11 @@ spec:
                 set -euo pipefail
                 ./hack/install-gotestsum.sh 1.13.0 "$(go env GOPATH)/bin"
                 test_status=0
-                gotestsum --format standard-verbose --jsonfile /tmp/testrr-coverage-go.json -- \
+                gotestsum --format standard-verbose -- \
                   -coverprofile=coverage.txt -covermode=atomic ./pkg/... || test_status=$?
-                if ! ./hack/upload-testrr.sh /tmp/testrr-coverage-go.json; then
-                  echo "WARNING: testrr upload failed; continuing without failing Tekton"
-                fi
                 exit "${test_status}"
-            - name: codecov
-              # Has everything we need in there and we already fetched it!
-              image: docker.io/golang:1.26
-              workingDir: $(workspaces.source.path)
-              env:
-                - name: CODECOV_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: pipelines-as-code-codecov-token
-                      key: token
-              script: |
-                #!/usr/bin/env bash
-                set -eux
-                ARCH=aarch64
-                git config --global --add safe.directory $(workspaces.source.path)
-                git fetch -a --tags
-                curl -LOs https://uploader.codecov.io/v0.7.3/aarch64/codecov
-                chmod +x ./codecov
-                ./codecov -C {{revision}} -v
             - name: upload-release
+              displayName: "Upload Release YAML"
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               env:
@@ -139,7 +111,7 @@ spec:
                     for i in $(git tag -l | grep '^v' | sort -rn); do echo -n "$i,"; done | sed 's/,$//'
                 )
 
-                git checkout -B nightly origin/main
+                git checkout -B nightly {{revision}}
                 echo nightly > docs/content/VERSION
                 echo ${allversions} > docs/content/ALLVERSIONS
                 echo "nightly-$ssa-$(date +%Y%m%d)" > pkg/params/versiondata/version.txt
@@ -153,6 +125,7 @@ spec:
                 set -x
                 git checkout -
             - name: cache-upload
+              displayName: "Upload Cache"
               ref:
                 resolver: http
                 params:
@@ -192,6 +165,7 @@ spec:
             - name: image_url
           steps:
             - name: send-slack-notification
+              displayName: "Send Slack Notification"
               ref:
                 resolver: http
                 params:
