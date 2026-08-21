@@ -7,10 +7,8 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "2"
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/on-cel-expression: |
-      event == "push" && (
-        (target_branch == "main" && "docs/***".pathChanged()) ||
-        target_branch.startsWith("refs/tags/")
-      ) ||
+      (event == "push" && ((target_branch == "main" && "docs/***".pathChanged()) || target_branch.startsWith("refs/tags/")))
+      ||
       (event == "pull_request" && "docs/***".pathChanged())
 spec:
   params:
@@ -35,11 +33,20 @@ spec:
             - name: source
           steps:
             - name: fetch-repo
+              displayName: "Fetch Repository"
               ref:
-                resolver: http
+                resolver: hub
                 params:
-                  - name: url
-                    value: https://raw.githubusercontent.com/tektoncd/pipelines-as-code/refs/heads/main/.tekton/stepactions/git-clone.yaml
+                  - name: catalog
+                    value: git-clone-stepaction
+                  - name: type
+                    value: artifact
+                  - name: kind
+                    value: stepaction
+                  - name: name
+                    value: git-clone
+                  - name: version
+                    value: "1.7.0"
               params:
                 - name: output-path
                   value: $(workspaces.source.path)
@@ -48,6 +55,7 @@ spec:
                 - name: revision
                   value: "$(params.revision)"
             - name: cache-fetch
+              displayName: "Fetch Cache"
               ref:
                 resolver: http
                 params:
@@ -63,6 +71,7 @@ spec:
                 - name: workingdir
                   value: $(workspaces.source.path)
             - name: hugo-build
+              displayName: "Build Hugo Site"
               image: docker.io/golang:1.26
               workingDir: $(workspaces.source.path)
               script: |
@@ -77,6 +86,7 @@ spec:
                 cd $(git rev-parse --show-toplevel)/docs
                 ${hugobin} build --gc --minify
             - name: deploy
+              displayName: "Deploy to Cloudflare Pages"
               image: docker.io/node:20-slim
               workingDir: $(workspaces.source.path)
               env:
@@ -109,6 +119,7 @@ spec:
                   --project-name='pipelines-as-code' \
                   --branch="${branch}"
             - name: post-preview-status
+              displayName: "Post Preview Status"
               image: docker.io/curlimages/curl
               env:
                 - name: HUB_TOKEN
@@ -126,6 +137,7 @@ spec:
                   -X POST "https://api.github.com/repos/{{repo_owner}}/{{repo_name}}/statuses/{{revision}}" \
                   -d "{\"state\": \"success\", \"target_url\": \"${preview_url}\", \"description\": \"Documentation Preview\", \"context\": \"Pipelines as Code Preview URL\"}"
             - name: cache-upload
+              displayName: "Upload Cache"
               ref:
                 resolver: http
                 params:
