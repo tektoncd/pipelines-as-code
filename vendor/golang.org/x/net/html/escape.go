@@ -6,6 +6,7 @@ package html
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -50,25 +51,24 @@ var replacementTable = [...]rune{
 	// 0x0D->'\u000D' is a no-op.
 }
 
-// unescapeEntity reads an entity like "&lt;" from b[src:] and writes the
-// corresponding "<" to b[dst:], returning the incremented dst and src cursors.
-// Precondition: b[src] == '&' && dst <= src.
-// attribute should be true if parsing an attribute value.
-func unescapeEntity(b []byte, dst, src int, attribute bool) (dst1, src1 int) {
+// unescapeEntity attempts to consume a character reference from s[src:],
+// returning the rune, potential second rune, and number of bytes consumed
+// (which indicates the length of the character reference). It is assumed that
+// the first byte of s is '&'. attribute should be true if parsing an attribute
+// value.
+func unescapeEntity(s []byte, attribute bool) (rune, rune, int) {
 	// https://html.spec.whatwg.org/multipage/syntax.html#consume-a-character-reference
 
 	// i starts at 1 because we already know that s[0] == '&'.
-	i, s := 1, b[src:]
+	i := 1
 
 	if len(s) <= 1 {
-		b[dst] = b[src]
-		return dst + 1, src + 1
+		return '&', 0, 1
 	}
 
 	if s[i] == '#' {
-		if len(s) <= 3 { // We need to have at least "&#.".
-			b[dst] = b[src]
-			return dst + 1, src + 1
+		if len(s) <= 2 { // We need to have at least "&#".
+			return '&', 0, 1
 		}
 		i++
 		c := s[i]
@@ -78,34 +78,43 @@ func unescapeEntity(b []byte, dst, src int, attribute bool) (dst1, src1 int) {
 			i++
 		}
 
+		i0 := i
 		x := '\x00'
 		for i < len(s) {
 			c = s[i]
-			i++
+			var d rune
+			var mult rune
 			if hex {
+				mult = 16
 				if '0' <= c && c <= '9' {
-					x = 16*x + rune(c) - '0'
-					continue
+					d = rune(c) - '0'
 				} else if 'a' <= c && c <= 'f' {
-					x = 16*x + rune(c) - 'a' + 10
-					continue
+					d = rune(c) - 'a' + 10
 				} else if 'A' <= c && c <= 'F' {
-					x = 16*x + rune(c) - 'A' + 10
-					continue
+					d = rune(c) - 'A' + 10
+				} else {
+					break
 				}
-			} else if '0' <= c && c <= '9' {
-				x = 10*x + rune(c) - '0'
-				continue
+			} else {
+				mult = 10
+				if '0' <= c && c <= '9' {
+					d = rune(c) - '0'
+				} else {
+					break
+				}
 			}
-			if c != ';' {
-				i--
+			if x <= 0x10FFFF {
+				x = mult*x + d
 			}
-			break
+			i++
 		}
 
-		if i <= 3 { // No characters matched.
-			b[dst] = b[src]
-			return dst + 1, src + 1
+		if i == i0 { // No characters matched.
+			return '&', 0, 1
+		}
+
+		if i < len(s) && s[i] == ';' {
+			i++
 		}
 
 		if 0x80 <= x && x <= 0x9F {
@@ -116,7 +125,7 @@ func unescapeEntity(b []byte, dst, src int, attribute bool) (dst1, src1 int) {
 			x = '\uFFFD'
 		}
 
-		return dst + utf8.EncodeRune(b[dst:], x), src + i
+		return x, 0, i
 	}
 
 	// Consume the maximum number of characters possible, with the
@@ -141,10 +150,9 @@ func unescapeEntity(b []byte, dst, src int, attribute bool) (dst1, src1 int) {
 	} else if attribute && entityName[len(entityName)-1] != ';' && len(s) > i && s[i] == '=' {
 		// No-op.
 	} else if x := entity[entityName]; x != 0 {
-		return dst + utf8.EncodeRune(b[dst:], x), src + i
+		return x, 0, i
 	} else if x := entity2[entityName]; x[0] != 0 {
-		dst1 := dst + utf8.EncodeRune(b[dst:], x[0])
-		return dst1 + utf8.EncodeRune(b[dst1:], x[1]), src + i
+		return x[0], x[1], i
 	} else if !attribute {
 		maxLen := len(entityName) - 1
 		if maxLen > longestEntityWithoutSemicolon {
@@ -152,35 +160,67 @@ func unescapeEntity(b []byte, dst, src int, attribute bool) (dst1, src1 int) {
 		}
 		for j := maxLen; j > 1; j-- {
 			if x := entity[entityName[:j]]; x != 0 {
-				return dst + utf8.EncodeRune(b[dst:], x), src + j + 1
+				return x, 0, j + 1
 			}
 		}
 	}
 
-	dst1, src1 = dst+i, src+i
-	copy(b[dst:dst1], b[src:src1])
-	return dst1, src1
+	return '&', 0, 1
 }
 
-// unescape unescapes b's entities in-place, so that "a&lt;b" becomes "a<b".
-// attribute should be true if parsing an attribute value.
+// unescape unescapes b's entites, so that "a&lt;b" becomes "a<b". It attempts
+// to do so in place, but if the unescaped value is longer than the input it
+// allocates a new slice. attribute should be true if parsing an attribute
+// value.
 func unescape(b []byte, attribute bool) []byte {
-	for i, c := range b {
-		if c == '&' {
-			dst, src := unescapeEntity(b, i, i, attribute)
-			for src < len(b) {
-				c := b[src]
-				if c == '&' {
-					dst, src = unescapeEntity(b, dst, src, attribute)
-				} else {
-					b[dst] = c
-					dst, src = dst+1, src+1
-				}
-			}
-			return b[0:dst]
-		}
+	firstAmp := slices.Index(b, '&')
+	if firstAmp == -1 {
+		return b
 	}
-	return b
+
+	out := b[:firstAmp]
+	src := firstAmp
+	reusingB := true
+	for src < len(b) {
+		if b[src] != '&' {
+			out = append(out, b[src])
+			src++
+			continue
+		}
+
+		r1, r2, entityNameLen := unescapeEntity(b[src:], attribute)
+		if entityNameLen == 1 && r1 == '&' {
+			// Not an entity
+			out = append(out, '&')
+			src++
+			continue
+		}
+
+		// Compute replacement length
+		replLen := utf8.RuneLen(r1)
+		if r2 != 0 {
+			replLen += utf8.RuneLen(r2)
+		}
+
+		// If the name of the entity is shorter than the width of the
+		// replacement runes then we need to expand the output slice to
+		// fit the replacement.
+		if replLen > entityNameLen {
+			if reusingB {
+				out = slices.Clone(out)
+				reusingB = false
+			}
+			out = slices.Grow(out, replLen)
+		}
+		out = utf8.AppendRune(out, r1)
+		if r2 != 0 {
+			out = utf8.AppendRune(out, r2)
+		}
+
+		src += entityNameLen
+	}
+
+	return out
 }
 
 // lower lower-cases the A-Z bytes in b in-place, so that "aBc" becomes "abc".
@@ -191,6 +231,87 @@ func lower(b []byte) []byte {
 		}
 	}
 	return b
+}
+
+// escapeComment is like func escape but escapes its input bytes less often.
+// Per https://github.com/golang/go/issues/58246 some HTML comments are (1)
+// meaningful and (2) contain angle brackets that we'd like to avoid escaping
+// unless we have to.
+//
+// "We have to" includes the '&' byte, since that introduces other escapes.
+//
+// It also includes those bytes (not including EOF) that would otherwise end
+// the comment. Per the summary table at the bottom of comment_test.go, this is
+// the '>' byte that, per above, we'd like to avoid escaping unless we have to.
+//
+// Studying the summary table (and T actions in its '>' column) closely, we
+// only need to escape in states 43, 44, 49, 51 and 52. State 43 is at the
+// start of the comment data. State 52 is after a '!'. The other three states
+// are after a '-'.
+//
+// Our algorithm is thus to escape every '&' and to escape '>' if and only if:
+//   - The '>' is after a '!' or '-' (in the unescaped data) or
+//   - The '>' is at the start of the comment data (after the opening "<!--").
+func escapeComment(w writer, s string) error {
+	// When modifying this function, consider manually increasing the
+	// maxSuffixLen constant in func TestComments, from 6 to e.g. 9 or more.
+	// That increase should only be temporary, not committed, as it
+	// exponentially affects the test running time.
+
+	if len(s) == 0 {
+		return nil
+	}
+
+	// Loop:
+	//   - Grow j such that s[i:j] does not need escaping.
+	//   - If s[j] does need escaping, output s[i:j] and an escaped s[j],
+	//     resetting i and j to point past that s[j] byte.
+	i := 0
+	for j := 0; j < len(s); j++ {
+		escaped := ""
+		switch s[j] {
+		case '&':
+			escaped = "&amp;"
+
+		case '>':
+			if j > 0 {
+				if prev := s[j-1]; (prev != '!') && (prev != '-') {
+					continue
+				}
+			}
+			escaped = "&gt;"
+
+		default:
+			continue
+		}
+
+		if i < j {
+			if _, err := w.WriteString(s[i:j]); err != nil {
+				return err
+			}
+		}
+		if _, err := w.WriteString(escaped); err != nil {
+			return err
+		}
+		i = j + 1
+	}
+
+	if i < len(s) {
+		if _, err := w.WriteString(s[i:]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// escapeCommentString is to EscapeString as escapeComment is to escape.
+func escapeCommentString(s string) string {
+	if strings.IndexAny(s, "&>") == -1 {
+		return s
+	}
+	var buf bytes.Buffer
+	escapeComment(&buf, s)
+	return buf.String()
 }
 
 const escapedChars = "&'<>\"\r"
@@ -218,7 +339,7 @@ func escape(w writer, s string) error {
 		case '\r':
 			esc = "&#13;"
 		default:
-			panic("unrecognized escape character")
+			panic("html: unrecognized escape character")
 		}
 		s = s[i+1:]
 		if _, err := w.WriteString(esc); err != nil {

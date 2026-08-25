@@ -97,6 +97,8 @@ type ceClient struct {
 	receiverMu                sync.Mutex
 	eventDefaulterFns         []EventDefaulter
 	pollGoroutines            int
+	blockingCallback          bool
+	ackMalformedEvent         bool
 }
 
 func (c *ceClient) applyOptions(opts ...Option) error {
@@ -201,7 +203,13 @@ func (c *ceClient) StartReceiver(ctx context.Context, fn interface{}) error {
 		return fmt.Errorf("client already has a receiver")
 	}
 
-	invoker, err := newReceiveInvoker(fn, c.observabilityService, c.inboundContextDecorators, c.eventDefaulterFns...)
+	invoker, err := newReceiveInvoker(
+		fn,
+		c.observabilityService,
+		c.inboundContextDecorators,
+		c.eventDefaulterFns,
+		c.ackMalformedEvent,
+	)
 	if err != nil {
 		return err
 	}
@@ -248,14 +256,22 @@ func (c *ceClient) StartReceiver(ctx context.Context, fn interface{}) error {
 					continue
 				}
 
-				// Do not block on the invoker.
-				wg.Add(1)
-				go func() {
+				callback := func() {
 					if err := c.invoker.Invoke(ctx, msg, respFn); err != nil {
 						cecontext.LoggerFrom(ctx).Warn("Error while handling a message: ", err)
 					}
-					wg.Done()
-				}()
+				}
+
+				if c.blockingCallback {
+					callback()
+				} else {
+					// Do not block on the invoker.
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						callback()
+					}()
+				}
 			}
 		}()
 	}

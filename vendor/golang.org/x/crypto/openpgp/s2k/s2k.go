@@ -5,12 +5,13 @@
 // Package s2k implements the various OpenPGP string-to-key transforms as
 // specified in RFC 4800 section 3.7.1.
 //
-// Deprecated: this package is unmaintained except for security fixes. New
-// applications should consider a more focused, modern alternative to OpenPGP
-// for their specific task. If you are required to interoperate with OpenPGP
-// systems and need a maintained package, consider a community fork.
-// See https://golang.org/issue/44226.
-package s2k // import "golang.org/x/crypto/openpgp/s2k"
+// Deprecated: this package is unsafe by design, and has numerous known security
+// issues. It is not maintained, and should not be used. New applications should
+// consider a more focused, modern alternative to OpenPGP for their specific
+// task. If you are required to interoperate with OpenPGP systems and need a
+// maintained package, consider github.com/ProtonMail/go-crypto/openpgp, which
+// is a maintained fork that aims to be a drop-in replacement for this package.
+package s2k
 
 import (
 	"crypto"
@@ -53,7 +54,7 @@ func (c *Config) hash() crypto.Hash {
 
 func (c *Config) encodedCount() uint8 {
 	if c == nil || c.S2KCount == 0 {
-		return 96 // The common case. Correspoding to 65536
+		return 96 // The common case. Corresponding to 65536
 	}
 
 	i := c.S2KCount
@@ -268,7 +269,7 @@ func HashIdToString(id byte) (name string, ok bool) {
 	return "", false
 }
 
-// HashIdToHash returns an OpenPGP hash id which corresponds the given Hash.
+// HashToHashId returns an OpenPGP hash id which corresponds the given Hash.
 func HashToHashId(h crypto.Hash) (id byte, ok bool) {
 	for _, m := range hashToHashIdMapping {
 		if m.hash == h {
