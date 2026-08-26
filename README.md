@@ -1,12 +1,12 @@
 # Tekton Pipelines-as-Code
 
-[![Latest Release](https://img.shields.io/github/v/release/tektoncd/pipelines-as-code)](https://github.com/tektoncd/pipelines-as-code/releases/latest)
-[![Container Repository on GHCR](https://img.shields.io/badge/GHCR-image-87DCC0.svg?logo=GitHub)](https://github.com/orgs/tektoncd/packages/container/package/pipelines-as-code%2Fpipelines-as-code-controller)
-[![Go Report Card](https://goreportcard.com/badge/tektoncd/pipelines-as-code)](https://goreportcard.com/report/tektoncd/pipelines-as-code)
-[![E2E Tests](https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml/badge.svg)](https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml)
-[![codecov](https://codecov.io/gh/tektoncd/pipelines-as-code/branch/main/graph/badge.svg)](https://codecov.io/gh/tektoncd/pipelines-as-code)
-[![License](https://img.shields.io/github/license/tektoncd/pipelines-as-code)](LICENSE)
-
+<p align="left">
+  <a href="https://github.com/tektoncd/pipelines-as-code/releases/latest"><img src="https://img.shields.io/github/v/release/tektoncd/pipelines-as-code" alt="Latest Release"></a>
+  <a href="https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml"><img src="https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml/badge.svg" alt="E2E Tests"></a>
+  <a href="https://codecov.io/gh/tektoncd/pipelines-as-code"><img src="https://codecov.io/gh/tektoncd/pipelines-as-code/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/tektoncd/pipelines-as-code" alt="License"></a>
+  <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code?ref=badge_shield"><img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code.svg?type=shield" alt="FOSSA Status"></a>
+</p>
 <img src="docs/static/images/pac-logo-with-tagline-small.png" alt="PAC LOGO" width="300" align="right"/>
 
 Pipelines-as-Code is an opinionated CI/CD framework for Tekton that lets you
@@ -102,3 +102,5 @@ Releases: <https://github.com/tektoncd/pipelines-as-code/releases>
 ## License
 
 [Apache 2.0](LICENSE)
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code?ref=badge_large)
