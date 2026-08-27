@@ -7,11 +7,14 @@ import (
 	"strings"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/adapter"
+	pacinformers "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/informer/transform"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	evadapter "knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/pkg/client/injection/kube/client"
+	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection/sharedmain"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/signals"
@@ -31,9 +34,27 @@ func main() {
 		log.Fatal("failed to init clients : ", err)
 	}
 
+	// Create a dedicated Repository informer factory to avoid starting unwanted informers.
+	pacInformerFactory := pacinformers.NewSharedInformerFactory(run.Clients.PipelineAsCode, controller.DefaultResyncPeriod)
+	repoInformer := pacInformerFactory.Pipelinesascode().V1alpha1().Repositories()
+
+	if err := repoInformer.Informer().SetTransform(transform.RepositoryForCache); err != nil {
+		log.Fatal("failed to set transform on repository informer: ", err)
+	}
+	run.RepositoryLister = repoInformer.Lister()
+
 	kinteract, err := kubeinteraction.NewKubernetesInteraction(run)
 	if err != nil {
 		log.Fatal("failed to init kinit client : ", err)
+	}
+
+	// Start the Repository informer and wait for cache sync before processing webhooks.
+	pacInformerFactory.Start(ctx.Done())
+	syncStatus := pacInformerFactory.WaitForCacheSync(ctx.Done())
+	for informerType, synced := range syncStatus {
+		if !synced {
+			log.Fatalf("failed to sync informer cache for %v", informerType)
+		}
 	}
 
 	loggerConfiguratorOpt := evadapter.WithLoggerConfiguratorConfigMapName(logging.ConfigMapName())
