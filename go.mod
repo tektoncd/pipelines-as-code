@@ -25,7 +25,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.2
-	github.com/tektoncd/pipeline v1.15.0
+	github.com/tektoncd/pipeline v1.15.1
 	gitlab.com/gitlab-org/api/client-go v1.46.0
 	// otel is pinned via the replace block below, see the comment there.
 	go.opentelemetry.io/otel v1.45.0
