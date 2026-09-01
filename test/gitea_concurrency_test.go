@@ -571,7 +571,9 @@ func TestGiteaConcurrencyTransientAPIFailureDoesNotWedgeQueue(t *testing.T) {
 	runcnx, opts, giteacnx, err := tgitea.Setup(ctx)
 	assert.NilError(t, err)
 
-	// Restarts the watcher, so it has to happen before there is anything queued.
+	// Restarts the watcher, so it has to happen before there is anything
+	// queued: see EnsureQueueDebugEnabled.
+	tkubestuff.EnsureQueueDebugEnabled(ctx, t, runcnx)
 
 	yamlFiles := map[string]string{}
 	for i := 0; i < numPipelines; i++ {
