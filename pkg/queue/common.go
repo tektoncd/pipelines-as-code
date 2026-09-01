@@ -6,6 +6,8 @@ import (
 
 type Semaphore interface {
 	acquireLatest() string
+	nextPending() string
+	requeue(string) bool
 	release(string) bool
 	resize(int) bool
 	addToQueue(string, time.Time) bool

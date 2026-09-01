@@ -479,6 +479,166 @@ func TestUpdatePipelineRunState(t *testing.T) {
 	}
 }
 
+func TestReconcileKindControllerInfoHandling(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotation  string
+		wantErrSub  string
+		wantControl *info.ControllerInfo
+	}{
+		{
+			name:       "invalid controller annotation",
+			annotation: "{",
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:       "null controller annotation",
+			annotation: "null",
+			wantErrSub: "value must not be null",
+		},
+		{
+			name:        "controller annotation does not mutate shared run",
+			annotation:  `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+		{
+			name:        "fallback controller is copied",
+			wantControl: &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			controller := &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"}
+			annotations := map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+			}
+			if tt.annotation != "" {
+				annotations[keys.ControllerInfo] = tt.annotation
+			}
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pr",
+					Namespace:   "test-ns",
+					Annotations: annotations,
+				},
+			}
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "test-ns",
+				},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{},
+						},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: controller,
+					},
+				},
+				qm: queuepkg.NewManager(logger),
+			}
+
+			err := r.ReconcileKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			if tt.wantControl != nil {
+				assert.DeepEqual(t, r.run.Info.Controller, tt.wantControl)
+				assert.Assert(t, r.run.Info.Controller == controller, "reconcile must keep the shared controller pointer")
+			}
+		})
+	}
+}
+
+func TestReconcileKindDropsUnstartableRunningPipelineRun(t *testing.T) {
+	tests := []struct {
+		name   string
+		status tektonv1.PipelineRunSpecStatus
+	}{
+		{name: "cancelled", status: tektonv1.PipelineRunSpecStatusCancelled},
+		{name: "cancelled run finally", status: tektonv1.PipelineRunSpecStatusCancelledRunFinally},
+		{name: "stopped run finally", status: tektonv1.PipelineRunSpecStatusStoppedRunFinally},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pr", Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:         kubeinteraction.StateStarted,
+						keys.Repository:    "test-repo",
+						keys.SecretCreated: "true",
+						keys.GitProvider:   "github",
+					},
+				},
+				Spec: tektonv1.PipelineRunSpec{Status: tt.status},
+				Status: tektonv1.PipelineRunStatus{
+					Status: knativeduckv1.Status{
+						Conditions: knativeduckv1.Conditions{{
+							Type:   knativeapi.ConditionSucceeded,
+							Status: corev1.ConditionUnknown,
+							Reason: string(tektonv1.PipelineRunReasonRunning),
+						}},
+					},
+				},
+			}
+			limit := 1
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+				Spec:       v1alpha1.RepositorySpec{ConcurrencyLimit: &limit},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			qm := queuepkg.NewManager(logger)
+			_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{Tekton: stdata.Pipeline, Kube: stdata.Kube, Log: logger},
+					Info: info.Info{
+						Pac:        &info.PacOpts{Settings: settings.Settings{}},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+					},
+				},
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			assert.NilError(t, r.ReconcileKind(ctx, pr),
+				"an unstartable run must not be retried forever")
+		})
+	}
+}
+
 func TestReconcileKindSCMReportingLogic(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
@@ -653,6 +813,7 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 				repoLister: informers.Repository.Lister(),
 				run:        cs,
 				kinteract:  kinterfaceTest,
+				qm:         queuepkg.NewManager(logger),
 			}
 
 			err := r.ReconcileKind(ctx, tt.pipelineRun)
@@ -950,6 +1111,7 @@ func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
 				"pac-provider-secret": "test-token",
 			},
 		},
+		qm: queuepkg.NewManager(logger),
 	}
 
 	err := r.ReconcileKind(ctx, pr)
