@@ -1,13 +1,16 @@
 package reconciler
 
 import (
+	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v85/github"
 	"github.com/jonboulle/clockwork"
@@ -25,8 +28,10 @@ import (
 	queuepkg "github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	testconcurrency "github.com/openshift-pipelines/pipelines-as-code/pkg/test/concurrency"
 	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
 	testkubernetestint "github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
+	tprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
@@ -41,8 +46,38 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	knativeapi "knative.dev/pkg/apis"
 	knativeduckv1 "knative.dev/pkg/apis/duck/v1"
+	"knative.dev/pkg/logging"
 	rtesting "knative.dev/pkg/reconciler/testing"
+	"knative.dev/pkg/system"
 )
+
+const reconcilerFakePrivateKey = `-----BEGIN RSA PRIVATE KEY-----
+MIICXAIBAAKBgQC6GorZBeri0eVERMZQDFh5E1RMPjFk9AevaWr27yJse6eiUlos
+gY2L2vcZKLOrdvVR+TLLapIMFfg1E1qVr1iTHP3IiSCs1uW6NKDmxEQc9Uf/fG9c
+i56tGmTVxLkC94AvlVFmgxtWfHdP3lF2O0EcfRyIi6EIbGkWDqWQVEQG2wIDAQAB
+AoGAaKOd6FK0dB5Si6Uj4ERgxosAvfHGMh4n6BAc7YUd1ONeKR2myBl77eQLRaEm
+DMXRP+sfDVL5lUQRED62ky1JXlDc0TmdLiO+2YVyXI5Tbej0Q6wGVC25/HedguUX
+fw+MdKe8jsOOXVRLrJ2GfpKZ2CmOKGTm/hyrFa10TmeoTxkCQQDa4fvqZYD4vOwZ
+CplONnVk+PyQETj+mAyUiBnHEeLpztMImNLVwZbrmMHnBtCNx5We10oCLW+Qndfw
+Xi4LgliVAkEA2amSV+TZiUVQmm5j9yzon0rt1FK+cmVWfRS/JAUXyvl+Xh/J+7Gu
+QzoEGJNAnzkUIZuwhTfNRWlzURWYA8BVrwJAZFQhfJd6PomaTwAktU0REm9ulTrP
+vSNE4PBhoHX6ZOGAqfgi7AgIfYVPm+3rupE5a82TBtx8vvUa/fqtcGkW4QJAaL9t
+WPUeJyx/XMJxQzuOe1JA4CQt2LmiBLHeRoRY7ephgQSFXKYmed3KqNT8jWOXp5DY
+Q1QWaigUQdpFfNCrqwJBANLgWaJV722PhQXOCmR+INvZ7ksIhJVcq/x1l2BYOLw2
+QsncVExbMiPa9Oclo5qLuTosS8qwHm1MJEytp3/SkB8=
+-----END RSA PRIVATE KEY-----`
+
+type reportFinalStatusProvider struct {
+	tprovider.TestProviderImp
+	setClientErr error
+}
+
+func (v *reportFinalStatusProvider) SetClient(ctx context.Context, run *params.Run, event *info.Event, repo *v1alpha1.Repository, eventEmitter *events.EventEmitter) error {
+	if v.setClientErr != nil {
+		return v.setClientErr
+	}
+	return v.TestProviderImp.SetClient(ctx, run, event, repo, eventEmitter)
+}
 
 var (
 	randomURL          = "https://github.com/random/app"
@@ -570,6 +605,483 @@ func TestReconcileKindControllerInfoHandling(t *testing.T) {
 	}
 }
 
+// TestReconcileKindReturnsErrorWhenDetectProviderFailsTransiently asserts that
+// a done PipelineRun whose git-provider annotation names a real provider, but
+// whose provider client fails to initialize for what could be a transient
+// reason (here: the GitHub App private key secret is missing), makes
+// ReconcileKind return an error instead of nil. Swallowing the error here
+// used to forget the workqueue key: reportFinalStatus never ran, the
+// finished PipelineRun's concurrency slot was never released, and nothing
+// ever retried.
+func TestReconcileKindReturnsErrorWhenDetectProviderFailsTransiently(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "github",
+				// A non-zero InstallationID routes detectProvider through
+				// InitAppClient, which fails here because no GitHub App
+				// private key secret was seeded -- a stand-in for any
+				// transient client-initialization failure. CheckRunID must
+				// also be set, or reconcileKind returns early before ever
+				// reaching detectProvider.
+				keys.InstallationID: "123",
+				keys.CheckRunID:     "456",
+			},
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionTrue,
+						Reason: string(tektonv1.PipelineRunReasonSuccessful),
+					},
+				},
+			},
+		},
+	}
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	metrics, err := prmetrics.NewRecorder()
+	assert.NilError(t, err)
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         queuepkg.NewManager(logger),
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{},
+				},
+				Kube: &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{
+					Name:             "default",
+					Secret:           "default-secret",
+					GlobalRepository: "default-global",
+				},
+			},
+		},
+		metrics:      metrics,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.ErrorContains(t, err, "detect provider")
+	assert.Assert(t, !stderrors.Is(err, ErrProviderNotConfigured),
+		"a transient client-init failure must not be classified as permanent")
+}
+
+// TestReconcileKindAbandonsDoneRunWhenProviderNotConfigured asserts that a
+// done PipelineRun whose git-provider annotation can never be resolved (a
+// permanent condition: retrying detectProvider can never succeed, whether
+// the annotation is missing or names an unsupported provider) is marked
+// failed and has its concurrency slot released and handed to the next
+// queued candidate, and that ReconcileKind returns nil rather than an error
+// that would otherwise be retried forever while still holding the slot.
+func TestReconcileKindAbandonsDoneRunWhenProviderNotConfigured(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+	}{
+		{
+			name: "missing git-provider annotation",
+			annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+			},
+		},
+		{
+			name: "unknown git-provider annotation",
+			annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "batman",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pr",
+					Namespace:   "test-ns",
+					Annotations: tt.annotations,
+				},
+				Status: tektonv1.PipelineRunStatus{
+					Status: knativeduckv1.Status{
+						Conditions: knativeduckv1.Conditions{
+							{
+								Type:   knativeapi.ConditionSucceeded,
+								Status: corev1.ConditionTrue,
+								Reason: string(tektonv1.PipelineRunReasonSuccessful),
+							},
+						},
+					},
+				},
+			}
+			nextPR := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "next-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State: kubeinteraction.StateQueued,
+					},
+				},
+				Spec: tektonv1.PipelineRunSpec{
+					Status: tektonv1.PipelineRunSpecStatusPending,
+				},
+			}
+			limit := 1
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "test-ns",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					ConcurrencyLimit: &limit,
+				},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr, nextPR},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			metrics, err := prmetrics.NewRecorder()
+			assert.NilError(t, err)
+
+			qm := queuepkg.NewManager(logger)
+			_, err = qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+			assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, qm.AddToPendingQueue(repo, []string{queuepkg.PrKey(nextPR)}))
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Kube:   stdata.Kube,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{},
+						},
+						Kube: &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{
+							Name:             "default",
+							Secret:           "default-secret",
+							GlobalRepository: "default-global",
+						},
+					},
+				},
+				metrics:      metrics,
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			err = r.ReconcileKind(ctx, pr)
+			assert.NilError(t, err, "a permanent detectProvider failure must not be retried forever")
+			assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(nextPR)})
+			assert.Assert(t, len(qm.QueuedPipelineRuns(repo)) == 0, "the promoted candidate must no longer be pending")
+
+			updated, err := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+			assert.NilError(t, err)
+			assert.Equal(t, updated.GetAnnotations()[keys.State], kubeinteraction.StateFailed)
+		})
+	}
+}
+
+// TestReconcileKindAbandonsDoneRunReleasesQueueEvenWhenStatePatchFails proves
+// the ordering in abandonDoneWithoutProvider: the concurrency slot must be
+// released before the terminal state is written, not after. If the state
+// patch fails (here: the PipelineRun was deleted from the fake client
+// between detectProvider failing and the patch), ReconcileKind must still
+// return an error (so this reconcile is retried), but the queue release must
+// already have happened. The manager remembers the handoff while the state
+// write is retried, rather than acquiring another successor.
+func TestReconcileKindAbandonsDoneRunReleasesQueueEvenWhenStatePatchFails(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				// keys.GitProvider deliberately absent: detectProvider fails
+				// permanently.
+			},
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionTrue,
+						Reason: string(tektonv1.PipelineRunReasonSuccessful),
+					},
+				},
+			},
+		},
+	}
+	limit := 1
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: &limit,
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	metrics, err := prmetrics.NewRecorder()
+	assert.NilError(t, err)
+
+	qm := queuepkg.NewManager(logger)
+	_, err = qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+	assert.NilError(t, err)
+
+	// Make the terminal-state patch fail while leaving reads (including the
+	// "fetch latest" Get at the top of reconcileKind) unaffected, so the
+	// failure is isolated to abandonDoneWithoutProvider's state write.
+	stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("injected patch failure")
+	})
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         qm,
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{},
+				},
+				Kube: &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{
+					Name:             "default",
+					Secret:           "default-secret",
+					GlobalRepository: "default-global",
+				},
+			},
+		},
+		metrics:      metrics,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.ErrorContains(t, err, "cannot update state")
+	assert.Assert(t, len(qm.RunningPipelineRuns(repo)) == 0, "the concurrency slot must already be released even though the state patch failed")
+
+	// A second attempt (simulating a retry after the failed patch) must not
+	// find another reservation to release or promote: the queue step is
+	// already done and must not run twice.
+	assert.NilError(t, r.startNextPipelineRunInQueue(ctx, logger, repo, pr))
+	assert.Assert(t, len(qm.RunningPipelineRuns(repo)) == 0, "retrying the queue release must stay a no-op")
+}
+
+// TestReconcileKindDeletedRepositoryWithDoneRun asserts that a PipelineRun
+// whose Repository CR has been deleted stops being reconciled once it reached
+// a terminal PAC state. Dropping the repository clears every queue entry it
+// held, so there is nothing left to recover, and retrying could never make the
+// deleted Repository reappear. A run that is not done keeps returning the
+// error so the reconcile is retried.
+func TestReconcileKindDeletedRepositoryWithDoneRun(t *testing.T) {
+	tests := []struct {
+		name    string
+		state   string
+		wantErr bool
+	}{
+		{name: "completed run", state: kubeinteraction.StateCompleted},
+		{name: "failed run", state: kubeinteraction.StateFailed},
+		{name: "started run", state: kubeinteraction.StateStarted, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:         tt.state,
+						keys.Repository:    "deleted-repo",
+						keys.SecretCreated: "true",
+					},
+				},
+			}
+			// Never seeded in the lister: the Repository CR is gone, but the
+			// queue manager still holds the entries it had for it.
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "deleted-repo", Namespace: "test-ns"},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+			})
+			qm := queuepkg.NewManager(logger)
+			_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Kube:   stdata.Kube,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac:        &info.PacOpts{Settings: settings.Settings{}},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+					},
+				},
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			err = r.ReconcileKind(ctx, pr)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "failed to get repository CR")
+			} else {
+				assert.NilError(t, err, "a done pipelineRun must not be retried forever for a deleted repository")
+			}
+			assert.Equal(t, len(qm.RunningPipelineRuns(repo)), 0, "the queue of a deleted repository must be dropped")
+		})
+	}
+}
+
+// TestReconcileKindRetriesUnconfirmedStartOfRunningPipelineRun asserts that a
+// failed state patch on an already running PipelineRun is retried. The patch
+// only carries metadata for such a run, so a readback showing it is not
+// pending proves nothing: without the state and reporting annotations the
+// write did not land and the reconcile has to be retried.
+func TestReconcileKindRetriesUnconfirmedStartOfRunningPipelineRun(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateQueued,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "github",
+			},
+		},
+		// Tekton already started it, so it is no longer pending before the
+		// patch and the patch carries no spec change.
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionUnknown,
+						Reason: string(tektonv1.PipelineRunReasonRunning),
+					},
+				},
+			},
+		},
+	}
+	limit := 1
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+		Spec:       v1alpha1.RepositorySpec{ConcurrencyLimit: &limit},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	qm := queuepkg.NewManager(logger)
+	_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+	assert.NilError(t, err)
+
+	stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.NewConflict(tektonv1.Resource("pipelineruns"), "test-pr", fmt.Errorf("stale start"))
+	})
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         qm,
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac:        &info.PacOpts{Settings: settings.Settings{}},
+				Kube:       &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+			},
+		},
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.Assert(t, stderrors.Is(err, ErrPipelineRunNotStarted), "got %v", err)
+	updated, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+	assert.NilError(t, getErr)
+	assert.Equal(t, updated.GetAnnotations()[keys.State], kubeinteraction.StateQueued)
+	_, reported := updated.GetAnnotations()[keys.SCMReportingPLRStarted]
+	assert.Assert(t, !reported, "the reporting marker was never written")
+	assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(pr)})
+}
+
+// TestReconcileKindDropsUnstartableRunningPipelineRun covers a PipelineRun that
+// Tekton still reports as Running while its spec has already been cancelled or
+// gracefully stopped, and whose start was never reported to the provider.
+//
+// Such a run can never be started, so the promotion path deliberately treats
+// errPipelineRunGone as "nothing to do" and returns nil. Returning it here
+// instead would requeue forever over a condition no retry can change. Graceful
+// stop makes that window wide: Tekton lets running tasks drain, so the Running
+// condition legitimately survives for as long as those tasks take.
 func TestReconcileKindDropsUnstartableRunningPipelineRun(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -856,6 +1368,829 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 	}
 }
 
+func TestReconcileKindEarlyBranches(t *testing.T) {
+	tests := []struct {
+		name            string
+		seedPipelineRun bool
+		seedRepository  bool
+		annotations     map[string]string
+		resourceVersion string
+		// tektonGetErr, when set, makes the freshness read fail with it.
+		tektonGetErr error
+		wantErrSub   string
+	}{
+		{
+			// A PipelineRun that is already gone is handed to the finalizer so
+			// its queue slot is released, rather than being reported as a read
+			// failure that would be retried forever against an object that no
+			// longer exists.
+			name: "missing pipelinerun is finalized instead of erroring",
+			annotations: map[string]string{
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
+			},
+		},
+		{
+			name: "pipelinerun read failure is returned",
+			annotations: map[string]string{
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
+			},
+			tektonGetErr: errors.NewServiceUnavailable("apiserver is shutting down"),
+			wantErrSub:   "cannot get pipelineRun",
+		},
+		{
+			name:            "stale resource version is ignored",
+			seedPipelineRun: true,
+			seedRepository:  true,
+			resourceVersion: "stale",
+			annotations: map[string]string{
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
+			},
+		},
+		{
+			name:            "missing repository returns lister error",
+			seedPipelineRun: true,
+			annotations: map[string]string{
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
+			},
+			wantErrSub: "failed to get repository CR",
+		},
+		{
+			name:            "github app waits for checkrun id",
+			seedPipelineRun: true,
+			seedRepository:  true,
+			annotations: map[string]string{
+				keys.State:          kubeinteraction.StateStarted,
+				keys.Repository:     "test-repo",
+				keys.InstallationID: "1234",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-pr",
+					Namespace:       "test-ns",
+					Annotations:     tt.annotations,
+					ResourceVersion: tt.resourceVersion,
+				},
+			}
+			seeded := pr.DeepCopy()
+			seeded.ResourceVersion = ""
+
+			testData := testclient.Data{}
+			if tt.seedPipelineRun {
+				testData.PipelineRuns = []*tektonv1.PipelineRun{seeded}
+			}
+			if tt.seedRepository {
+				testData.Repositories = []*v1alpha1.Repository{{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+				}}
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testData)
+			if tt.tektonGetErr != nil {
+				stdata.Pipeline.PrependReactor("get", "pipelineruns", func(k8stesting.Action) (bool, runtime.Object, error) {
+					return true, nil, tt.tektonGetErr
+				})
+			}
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         testconcurrency.TestQMI{},
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac:        info.NewPacOpts(),
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default"},
+					},
+				},
+			}
+
+			err := r.ReconcileKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+		})
+	}
+}
+
+func TestReconcileKindSecretCreationBranches(t *testing.T) {
+	tests := []struct {
+		name              string
+		annotations       map[string]string
+		getSecretResult   map[string]string
+		createSecretError error
+		wantErrSub        string
+		wantLogSub        string
+	}{
+		{
+			name: "basic auth secret creation error is returned",
+			annotations: map[string]string{
+				keys.GitAuthSecret: "test-secret",
+			},
+			getSecretResult: map[string]string{
+				"provider-secret": "test-token",
+			},
+			createSecretError: fmt.Errorf("connection timeout"),
+			wantErrSub:        "creating basic auth secret",
+		},
+		{
+			name:        "non basic auth secret error is logged and ignored",
+			annotations: map[string]string{},
+			wantLogSub:  "failed to create secret for pipelineRun test-ns/test-pr",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, log := zapobserver.New(zap.ErrorLevel)
+			logger := zap.New(observer).Sugar()
+			ctx = logging.WithLogger(ctx, logger)
+
+			annotations := map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "false",
+				keys.GitProvider:   "github",
+				keys.RepoURL:       "https://github.com/org/repo",
+				keys.URLOrg:        "org",
+				keys.URLRepository: "repo",
+				keys.SHA:           "abc123",
+			}
+			maps.Copy(annotations, tt.annotations)
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pr",
+					Namespace:   "test-ns",
+					Annotations: annotations,
+				},
+			}
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+				Spec: v1alpha1.RepositorySpec{
+					GitProvider: &v1alpha1.GitProvider{
+						Secret: &v1alpha1.Secret{Name: "provider-secret"},
+					},
+				},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+				ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
+			})
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         testconcurrency.TestQMI{},
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Kube:   stdata.Kube,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{SecretAutoCreation: true},
+						},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{GlobalRepository: "global-repo"},
+					},
+				},
+				kinteract: &testkubernetestint.KinterfaceTest{
+					GetSecretResult:   tt.getSecretResult,
+					CreateSecretError: tt.createSecretError,
+				},
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			err := r.ReconcileKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			if tt.wantLogSub != "" {
+				assert.Equal(t, log.FilterMessageSnippet(tt.wantLogSub).Len(), 1)
+			}
+		})
+	}
+}
+
+func TestReconcileKindDonePathWithDetectedGitHubApp(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	_, mux, ghTestServerURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	t.Setenv("PAC_GIT_PROVIDER_TOKEN_APIURL", ghTestServerURL+"/api/v3")
+
+	const (
+		checkRunID = "6566930541"
+		secretName = "pipelines-as-code-secret"
+	)
+	mux.HandleFunc("/app/installations/1234/access_tokens", func(rw http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(rw, `{"token":"ghs_test_token","expires_at":"2099-01-01T00:00:00Z"}`)
+	})
+	checkRunUpdates := 0
+	mux.HandleFunc("/repos/random/app/check-runs/"+checkRunID, func(rw http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, req.Method, http.MethodPatch)
+		checkRunUpdates++
+		var updated github.UpdateCheckRunOptions
+		assert.NilError(t, json.NewDecoder(req.Body).Decode(&updated))
+		assert.Equal(t, updated.GetStatus(), "completed")
+		assert.Equal(t, updated.GetConclusion(), finalSuccessStatus)
+		fmt.Fprintf(rw, `{"id":%s}`, checkRunID)
+	})
+
+	clock := clockwork.NewFakeClock()
+	pr := tektontest.MakePRCompletion(clock, "pipeline-newest", "ns", tektonv1.PipelineRunReasonSuccessful.String(), nil, map[string]string{}, 10)
+	pr.Annotations = map[string]string{
+		keys.GitAuthSecret:  "unused-for-github-app",
+		keys.State:          kubeinteraction.StateStarted,
+		keys.InstallationID: "1234",
+		keys.RepoURL:        randomURL,
+		keys.Repository:     pr.GetName(),
+		keys.OriginalPRName: pr.GetName(),
+		keys.GitProvider:    "github",
+		keys.CheckRunID:     checkRunID,
+		keys.URLOrg:         "random",
+		keys.URLRepository:  "app",
+		keys.SHA:            "123afc",
+		keys.Branch:         "main",
+		keys.SourceBranch:   "feature",
+		keys.EventType:      "push",
+	}
+	pr.Labels = map[string]string{
+		keys.Repository: pr.GetName(),
+	}
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: pr.GetName(), Namespace: pr.GetNamespace()},
+		Spec: v1alpha1.RepositorySpec{
+			URL: randomURL,
+			GitProvider: &v1alpha1.GitProvider{
+				URL: "https://github.com",
+			},
+		},
+	}
+	appSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: system.Namespace()},
+		Data: map[string][]byte{
+			keys.GithubApplicationID: []byte("12345"),
+			keys.GithubPrivateKey:    []byte(reconcilerFakePrivateKey),
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+		Secret:       []*corev1.Secret{appSecret},
+		ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
+	})
+	metrics, err := prmetrics.NewRecorder()
+	assert.NilError(t, err)
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         queuepkg.NewManager(logger),
+		run: &params.Run{
+			Clients: clients.Clients{
+				PipelineAsCode: stdata.PipelineAsCode,
+				Tekton:         stdata.Pipeline,
+				Kube:           stdata.Kube,
+				Log:            logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{},
+				},
+				Kube: &info.KubeOpts{Namespace: system.Namespace()},
+				Controller: &info.ControllerInfo{
+					Name:             "default",
+					Secret:           secretName,
+					GlobalRepository: "global-repo",
+				},
+			},
+		},
+		pipelineRunLister: stdata.PipelineLister,
+		kinteract: &testkubernetestint.KinterfaceTest{
+			GetSecretResult: map[string]string{
+				secretName: "webhook-secret",
+			},
+		},
+		metrics:      metrics,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+	r.run.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.NilError(t, err)
+	assert.Equal(t, checkRunUpdates, 1)
+	updatedPR, err := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+	assert.NilError(t, err)
+	assert.Equal(t, updatedPR.Annotations[keys.State], kubeinteraction.StateCompleted)
+}
+
+func TestReconcileKindDonePathProviderErrors(t *testing.T) {
+	tests := []struct {
+		name             string
+		annotations      map[string]string
+		setup            func(t *testing.T, stdata testclient.Clients)
+		wantErrSub       string
+		wantLogSub       string
+		wantEventReason  string
+		setupGitHubMocks bool
+	}{
+		{
+			name: "detect provider error is emitted and ignored",
+			annotations: map[string]string{
+				keys.GitProvider: "unknown",
+			},
+			wantLogSub: "detectProvider:",
+		},
+		{
+			name: "report final status error is emitted and returned",
+			annotations: map[string]string{
+				keys.GitProvider: "github",
+			},
+			setup: func(t *testing.T, stdata testclient.Clients) {
+				t.Helper()
+				stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+					return true, nil, fmt.Errorf("patch failed")
+				})
+			},
+			wantErrSub:       "cannot update state",
+			wantLogSub:       "report status:",
+			wantEventReason:  "RepositoryReportFinalStatus",
+			setupGitHubMocks: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, log := zapobserver.New(zap.ErrorLevel)
+			logger := zap.New(observer).Sugar()
+			ctx = logging.WithLogger(ctx, logger)
+
+			var mux *http.ServeMux
+			var ghTestServerURL string
+			var teardown func()
+			if tt.setupGitHubMocks {
+				_, mux, ghTestServerURL, teardown = ghtesthelper.SetupGH()
+				defer teardown()
+				mux.HandleFunc("/repos/random/app/statuses/123afc", func(rw http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(rw, `{"state":"success"}`)
+				})
+			}
+
+			clock := clockwork.NewFakeClock()
+			pr := tektontest.MakePRCompletion(clock, "pipeline-newest", "ns", tektonv1.PipelineRunReasonSuccessful.String(), nil, map[string]string{}, 10)
+			pr.Annotations = map[string]string{
+				keys.State:          kubeinteraction.StateStarted,
+				keys.RepoURL:        randomURL,
+				keys.Repository:     pr.GetName(),
+				keys.OriginalPRName: pr.GetName(),
+				keys.URLOrg:         "random",
+				keys.URLRepository:  "app",
+				keys.SHA:            "123afc",
+				keys.EventType:      "push",
+			}
+			maps.Copy(pr.Annotations, tt.annotations)
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: pr.GetName(), Namespace: pr.GetNamespace()},
+				Spec: v1alpha1.RepositorySpec{
+					URL: randomURL,
+					GitProvider: &v1alpha1.GitProvider{
+						URL:    ghTestServerURL,
+						Secret: &v1alpha1.Secret{Name: "provider-secret"},
+					},
+				},
+			}
+			testData := testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+				ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
+			}
+			if ghTestServerURL != "" {
+				testData.ConfigMap = []*corev1.ConfigMap{{
+					ObjectMeta: metav1.ObjectMeta{Name: "pipelines-as-code", Namespace: system.Namespace()},
+					Data: map[string]string{
+						"trusted-provider-hostnames": strings.TrimPrefix(ghTestServerURL, "http://"),
+					},
+				}}
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testData)
+			if tt.setup != nil {
+				tt.setup(t, stdata)
+			}
+			metrics, err := prmetrics.NewRecorder()
+			assert.NilError(t, err)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         queuepkg.NewManager(logger),
+				run: &params.Run{
+					Clients: clients.Clients{
+						PipelineAsCode: stdata.PipelineAsCode,
+						Tekton:         stdata.Pipeline,
+						Kube:           stdata.Kube,
+						Log:            logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{},
+						},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "global-repo"},
+					},
+				},
+				kinteract: &testkubernetestint.KinterfaceTest{
+					GetSecretResult: map[string]string{
+						"provider-secret": "test-token",
+					},
+				},
+				metrics:      metrics,
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+			r.run.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			err = r.ReconcileKind(ctx, pr)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			assert.Assert(t, log.FilterMessageSnippet(tt.wantLogSub).Len() > 0, "expected log %q", tt.wantLogSub)
+			if tt.wantEventReason != "" {
+				events, listErr := stdata.Kube.CoreV1().Events(pr.Namespace).List(ctx, metav1.ListOptions{})
+				assert.NilError(t, listErr)
+				found := false
+				for _, event := range events.Items {
+					if event.Reason == tt.wantEventReason {
+						found = true
+					}
+				}
+				assert.Assert(t, found, "expected event reason %q", tt.wantEventReason)
+			}
+		})
+	}
+}
+
+func TestReportFinalStatusErrorBranches(t *testing.T) {
+	tests := []struct {
+		name            string
+		repository      *v1alpha1.Repository
+		globalRepo      *v1alpha1.Repository
+		seedPipelineRun bool
+		kint            *testkubernetestint.KinterfaceTest
+		provider        *reportFinalStatusProvider
+		metrics         *prmetrics.Recorder
+		pacInfo         *info.PacOpts
+		setup           func(t *testing.T, stdata testclient.Clients)
+		wantErrSub      string
+		wantLogSub      string
+		wantRunLogSet   bool
+	}{
+		{
+			name:       "missing repository returns error",
+			wantErrSub: "reportFinalStatus",
+		},
+		{
+			name: "inherited global secret with local provider url returns error",
+			repository: &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+				Spec: v1alpha1.RepositorySpec{
+					URL:         "https://github.com/org/repo",
+					GitProvider: &v1alpha1.GitProvider{URL: "https://evil.example.com"},
+				},
+			},
+			globalRepo: &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "global-repo", Namespace: "global"},
+				Spec: v1alpha1.RepositorySpec{
+					GitProvider: &v1alpha1.GitProvider{
+						URL:    "https://github.com",
+						Secret: &v1alpha1.Secret{Name: "global-secret"},
+					},
+				},
+			},
+			wantErrSub: "cannot get secret from repository",
+		},
+		{
+			name:            "missing provider secret returns error",
+			repository:      reportFinalStatusTestRepository(nil),
+			seedPipelineRun: true,
+			kint:            &testkubernetestint.KinterfaceTest{GetSecretResult: map[string]string{}},
+			wantErrSub:      "cannot get secret from repository",
+		},
+		{
+			name:            "set client error returns error",
+			repository:      reportFinalStatusTestRepository(nil),
+			seedPipelineRun: true,
+			kint: &testkubernetestint.KinterfaceTest{GetSecretResult: map[string]string{
+				"provider-secret": "test-token",
+			}},
+			provider:   &reportFinalStatusProvider{setClientErr: fmt.Errorf("client refused")},
+			wantErrSub: "cannot set client",
+		},
+		{
+			name:       "missing final pipelinerun warns and update state returns error",
+			repository: reportFinalStatusTestRepository(nil),
+			kint: &testkubernetestint.KinterfaceTest{GetSecretResult: map[string]string{
+				"provider-secret": "test-token",
+			}},
+			wantErrSub: "cannot update state",
+		},
+		{
+			name:            "update state error returns error",
+			repository:      reportFinalStatusTestRepository(nil),
+			seedPipelineRun: true,
+			kint: &testkubernetestint.KinterfaceTest{GetSecretResult: map[string]string{
+				"provider-secret": "test-token",
+			}},
+			setup: func(t *testing.T, stdata testclient.Clients) {
+				t.Helper()
+				stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+					return true, nil, fmt.Errorf("patch failed")
+				})
+			},
+			wantErrSub: "cannot update state",
+		},
+		{
+			name:            "cleanup error returns error",
+			repository:      reportFinalStatusTestRepository(nil),
+			seedPipelineRun: true,
+			kint: &testkubernetestint.KinterfaceTest{
+				ExpectedNumberofCleanups: 2,
+				GetSecretResult: map[string]string{
+					"provider-secret": "test-token",
+				},
+			},
+			pacInfo: &info.PacOpts{
+				Settings: settings.Settings{DefaultMaxKeepRuns: 1},
+			},
+			wantErrSub: "error cleaning pipelineruns",
+		},
+		{
+			name:            "nil run logger is populated",
+			repository:      reportFinalStatusTestRepository(nil),
+			seedPipelineRun: true,
+			kint: &testkubernetestint.KinterfaceTest{GetSecretResult: map[string]string{
+				"provider-secret": "test-token",
+			}},
+			wantRunLogSet: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, log := zapobserver.New(zap.WarnLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := reportFinalStatusTestPipelineRun()
+			testData := testclient.Data{}
+			if tt.seedPipelineRun {
+				testData.PipelineRuns = []*tektonv1.PipelineRun{pr}
+			}
+			if tt.repository != nil {
+				testData.Repositories = append(testData.Repositories, tt.repository)
+			}
+			if tt.globalRepo != nil {
+				testData.Repositories = append(testData.Repositories, tt.globalRepo)
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testData)
+			if tt.setup != nil {
+				tt.setup(t, stdata)
+			}
+			pacInfo := tt.pacInfo
+			if pacInfo == nil {
+				pacInfo = &info.PacOpts{Settings: settings.Settings{}}
+			}
+			metrics := tt.metrics
+			if metrics == nil {
+				var err error
+				metrics, err = prmetrics.NewRecorder()
+				assert.NilError(t, err)
+			}
+			kint := tt.kint
+			if kint == nil {
+				kint = &testkubernetestint.KinterfaceTest{}
+			}
+			vcx := tt.provider
+			if vcx == nil {
+				vcx = &reportFinalStatusProvider{}
+			}
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         queuepkg.NewManager(logger),
+				run: &params.Run{
+					Clients: clients.Clients{
+						PipelineAsCode: stdata.PipelineAsCode,
+						Tekton:         stdata.Pipeline,
+						Kube:           stdata.Kube,
+					},
+					Info: info.Info{
+						Pac:        pacInfo,
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{GlobalRepository: "global-repo"},
+					},
+				},
+				kinteract:    kint,
+				metrics:      metrics,
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+			r.run.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			_, err := r.reportFinalStatus(ctx, logger, pacInfo, buildEventFromPipelineRun(pr), pr, vcx)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+			} else {
+				assert.NilError(t, err)
+			}
+			if tt.wantLogSub != "" {
+				assert.Assert(t, log.FilterMessageSnippet(tt.wantLogSub).Len() > 0, "expected log %q", tt.wantLogSub)
+			}
+			if tt.wantRunLogSet {
+				assert.Assert(t, r.run.Clients.Log != nil, "reportFinalStatus should populate a nil run logger")
+			}
+		})
+	}
+}
+
+func TestReportFinalStatusNonBlockingBranches(t *testing.T) {
+	tests := []struct {
+		name            string
+		repository      *v1alpha1.Repository
+		provider        *reportFinalStatusProvider
+		metrics         *prmetrics.Recorder
+		setupBackoff    bool
+		wantFinalState  string
+		wantLogSub      string
+		wantEventReason string
+	}{
+		{
+			name:           "post final status error marks pipelinerun failed and continues",
+			repository:     reportFinalStatusTestRepository(nil),
+			provider:       &reportFinalStatusProvider{TestProviderImp: tprovider.TestProviderImp{CreateStatusErorring: true}},
+			setupBackoff:   true,
+			wantFinalState: kubeinteraction.StateFailed,
+			wantLogSub:     "failed to post final status",
+		},
+		{
+			name:           "metrics error is logged and ignored",
+			repository:     reportFinalStatusTestRepository(nil),
+			metrics:        &prmetrics.Recorder{},
+			wantFinalState: kubeinteraction.StateCompleted,
+			wantLogSub:     "failed to emit metrics",
+		},
+		{
+			name: "llm analysis error emits warning and continues",
+			repository: reportFinalStatusTestRepository(&v1alpha1.Settings{
+				AIAnalysis: &v1alpha1.AIAnalysisConfig{Enabled: true},
+			}),
+			wantFinalState:  kubeinteraction.StateCompleted,
+			wantLogSub:      "LLM analysis failed",
+			wantEventReason: "LLMAnalysisFailed",
+		},
+		{
+			name: "custom params error emits event and continues",
+			repository: func() *v1alpha1.Repository {
+				repo := reportFinalStatusTestRepository(nil)
+				params := []v1alpha1.Params{{
+					Name:   "broken",
+					Value:  "value",
+					Filter: "event ==",
+				}}
+				repo.Spec.Params = &params
+				return repo
+			}(),
+			wantFinalState: kubeinteraction.StateCompleted,
+			wantLogSub:     "error processing repository CR custom params",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupBackoff {
+				oldBackoffSchedule := backoffSchedule
+				backoffSchedule = []time.Duration{time.Millisecond}
+				defer func() { backoffSchedule = oldBackoffSchedule }()
+			}
+
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, log := zapobserver.New(zap.WarnLevel)
+			logger := zap.New(observer).Sugar()
+			pr := reportFinalStatusTestPipelineRun()
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{tt.repository},
+			})
+			metrics := tt.metrics
+			if metrics == nil {
+				var err error
+				metrics, err = prmetrics.NewRecorder()
+				assert.NilError(t, err)
+			}
+			vcx := tt.provider
+			if vcx == nil {
+				vcx = &reportFinalStatusProvider{}
+			}
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         queuepkg.NewManager(logger),
+				run: &params.Run{
+					Clients: clients.Clients{
+						PipelineAsCode: stdata.PipelineAsCode,
+						Tekton:         stdata.Pipeline,
+						Kube:           stdata.Kube,
+						Log:            logger,
+					},
+					Info: info.Info{
+						Pac:        &info.PacOpts{Settings: settings.Settings{}},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{GlobalRepository: "global-repo"},
+					},
+				},
+				kinteract: &testkubernetestint.KinterfaceTest{
+					GetSecretResult: map[string]string{
+						"provider-secret": "test-token",
+					},
+				},
+				metrics:      metrics,
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+			r.run.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+			_, err := r.reportFinalStatus(ctx, logger, r.run.Info.Pac, buildEventFromPipelineRun(pr), pr, vcx)
+			assert.NilError(t, err)
+			updatedPR, err := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+			assert.NilError(t, err)
+			assert.Equal(t, updatedPR.Annotations[keys.State], tt.wantFinalState)
+			assert.Assert(t, log.FilterMessageSnippet(tt.wantLogSub).Len() > 0, "expected log %q", tt.wantLogSub)
+			if tt.wantEventReason != "" {
+				events, listErr := stdata.Kube.CoreV1().Events(pr.Namespace).List(ctx, metav1.ListOptions{})
+				assert.NilError(t, listErr)
+				found := false
+				for _, event := range events.Items {
+					if event.Reason == tt.wantEventReason {
+						found = true
+					}
+				}
+				assert.Assert(t, found, "expected event reason %q", tt.wantEventReason)
+			}
+		})
+	}
+}
+
+func reportFinalStatusTestPipelineRun() *tektonv1.PipelineRun {
+	clock := clockwork.NewFakeClock()
+	pr := tektontest.MakePRCompletion(clock, "test-pr", "test-ns", tektonv1.PipelineRunReasonSuccessful.String(), nil, map[string]string{}, 10)
+	pr.Annotations = map[string]string{
+		keys.State:          kubeinteraction.StateStarted,
+		keys.Repository:     "test-repo",
+		keys.GitProvider:    "github",
+		keys.RepoURL:        "https://github.com/org/repo",
+		keys.URLOrg:         "org",
+		keys.URLRepository:  "repo",
+		keys.SHA:            "abc123",
+		keys.EventType:      "push",
+		keys.OriginalPRName: "test-pr",
+	}
+	return pr
+}
+
+func reportFinalStatusTestRepository(repoSettings *v1alpha1.Settings) *v1alpha1.Repository {
+	return &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+		Spec: v1alpha1.RepositorySpec{
+			URL:      "https://github.com/org/repo",
+			Settings: repoSettings,
+			GitProvider: &v1alpha1.GitProvider{
+				URL:    "https://github.com",
+				Secret: &v1alpha1.Secret{Name: "provider-secret"},
+			},
+		},
+	}
+}
+
 func TestCreateSecretForPipelineRun(t *testing.T) {
 	// Base annotations required by initGitProviderClient (detectProvider + buildEventFromPipelineRun)
 	baseAnnotations := map[string]string{
@@ -1123,4 +2458,13 @@ func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
 
 	logEntries := log.FilterMessageSnippet("failed to create secret for pipelineRun").TakeAll()
 	assert.Equal(t, len(logEntries), 0)
+}
+
+// defaultPolicyConfigMap is a controller ConfigMap with no configured allowlist,
+// which is the state every stock install starts in: the public instances are
+// trusted and nothing else is.
+func defaultPolicyConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "pipelines-as-code", Namespace: system.Namespace()},
+	}
 }

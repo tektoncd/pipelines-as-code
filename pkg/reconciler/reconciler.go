@@ -161,10 +161,18 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	}
 
 	repoName := pr.GetAnnotations()[keys.Repository]
+	state, exist := pr.GetAnnotations()[keys.State]
+	done := exist && (state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed)
 	repo, err := r.repoLister.Repositories(pr.Namespace).Get(repoName)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// Dropping the repository clears every admission it held, this one
+			// included, so a done PipelineRun has nothing left to recover and
+			// retrying can never make a deleted Repository reappear.
 			r.qm.RemoveRepository(&v1alpha1.Repository{ObjectMeta: metav1.ObjectMeta{Name: repoName, Namespace: pr.Namespace}})
+			if done {
+				return nil
+			}
 		}
 		return fmt.Errorf("failed to get repository CR: %w", err)
 	}
@@ -192,8 +200,7 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	if err := r.processQueueAdmission(ctx, logger, repo, pr, nil, queuepkg.AdmissionResume); err != nil {
 		return err
 	}
-	state, exist := pr.GetAnnotations()[keys.State]
-	if exist && (state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed) {
+	if done {
 		r.qm.ForgetAdmission(queuepkg.RepoKey(repo), pr)
 		return nil
 	}
@@ -292,7 +299,21 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	if err != nil {
 		msg := fmt.Sprintf("detectProvider: %v", err)
 		r.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryDetectProvider", msg)
-		return nil
+
+		if stderrors.Is(err, ErrProviderNotConfigured) {
+			// Permanent: the git-provider annotation is missing or names a
+			// provider PAC does not know, so retrying detectProvider can
+			// never succeed. Returning the error here would rate-limited
+			// retry forever while still holding the concurrency slot; release
+			// it and mark the run failed instead.
+			return r.abandonDoneWithoutProvider(ctx, logger, repo, pr, err)
+		}
+		// Transient (e.g. a GitHub App client failed to initialize talking to
+		// the API): return the wrapped error so the reconcile is retried
+		// instead of swallowing it. Swallowing it here would forget the key,
+		// so reportFinalStatus never runs and the finished PipelineRun's
+		// concurrency slot is never released.
+		return fmt.Errorf("detect provider: %w", err)
 	}
 	detectedProvider.SetPacInfo(&pacInfo)
 
@@ -301,6 +322,28 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		r.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryReportFinalStatus", msg)
 		return err
 	}
+	return nil
+}
+
+// abandonDoneWithoutProvider marks a done PipelineRun failed and releases its
+// concurrency slot when its git-provider can never be resolved (missing or
+// unknown annotation, see ErrProviderNotConfigured). There is no provider or
+// event here to post a final status through, unlike reportFinalStatus, so
+// this only performs the two things needed to stop the run wedging its
+// repository's queue: releasing/promoting the queue and writing the terminal
+// PAC state, in that order.
+//
+// The manager remembers a successful handoff until the terminal write succeeds.
+// An unfinished promotion must return an error before the terminal state makes
+// reconcileKind short-circuit.
+func (r *Reconciler) abandonDoneWithoutProvider(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun, cause error) error {
+	if err := r.startNextPipelineRunInQueue(ctx, logger, repo, pr); err != nil {
+		return err
+	}
+	if _, err := r.updatePipelineRunState(ctx, logger, pr, kubeinteraction.StateFailed); err != nil {
+		return fmt.Errorf("abandon pipelinerun without provider %s/%s (cause: %w): cannot update state: %w", pr.Namespace, pr.Name, cause, err)
+	}
+	r.qm.ForgetAdmission(queuepkg.RepoKey(repo), pr)
 	return nil
 }
 
@@ -480,7 +523,7 @@ func (r *Reconciler) updatePipelineRunToInProgress(ctx context.Context, logger *
 		if errors.IsNotFound(err) || (err == nil && (patched.UID != pr.UID || noLongerStartable(patched))) {
 			return errPipelineRunGone
 		}
-		if err != nil || patched.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
+		if err != nil || !startConfirmed(patched) {
 			return fmt.Errorf("%w: cannot update state: %w", ErrPipelineRunNotStarted, stderrors.Join(patchErr, err))
 		}
 	}
@@ -530,6 +573,16 @@ func noLongerStartable(current *tektonv1.PipelineRun) bool {
 	return queuepkg.Finishing(current) ||
 		current.Annotations[keys.State] == kubeinteraction.StateCompleted ||
 		current.Annotations[keys.State] == kubeinteraction.StateFailed
+}
+
+// startConfirmed reports whether the start write is visible in the cluster. A
+// non-pending PipelineRun is not enough on its own: the patch is metadata-only
+// for a run Tekton already started, so a run that is merely running proves
+// nothing about the state and reporting annotations this patch carries.
+func startConfirmed(current *tektonv1.PipelineRun) bool {
+	return current.Spec.Status != tektonv1.PipelineRunSpecStatusPending &&
+		current.Annotations[keys.State] == kubeinteraction.StateStarted &&
+		current.Annotations[keys.SCMReportingPLRStarted] == "true"
 }
 
 func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun) (provider.Interface, *info.Event, error) {
