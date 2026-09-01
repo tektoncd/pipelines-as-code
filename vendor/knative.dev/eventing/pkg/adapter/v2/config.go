@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"knative.dev/eventing/pkg/observability"
+	pkgutils "knative.dev/eventing/pkg/utils"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	kle "knative.dev/pkg/leaderelection"
 	"knative.dev/pkg/logging"
@@ -47,6 +48,7 @@ const (
 	EnvConfigObservabilityConfig  = "K_OBSERVABILITY_CONFIG"
 	EnvConfigLeaderElectionConfig = "K_LEADER_ELECTION_CONFIG"
 	EnvSinkTimeout                = "K_SINK_TIMEOUT"
+	EnvConfigKlogVerbosity        = "K_KLOG_VERBOSITY"
 )
 
 // EnvConfig is the minimal set of configuration parameters
@@ -85,6 +87,9 @@ type EnvConfig struct {
 	// This is used to configure the logging config, the config is stored in
 	// a config map inside the controllers namespace and copied here.
 	LoggingConfigJson string `envconfig:"K_LOGGING_CONFIG" default:"{}"`
+
+	// KlogVerbosity is the klog verbosity level (0-9). Injected from config-logging ConfigMap.
+	KlogVerbosity string `envconfig:"K_KLOG_VERBOSITY" default:"0"`
 
 	// ObservabilityConfigJson is a json string of observability.Config.
 	// This is used to configure the observability config, the config is stored in
@@ -157,6 +162,11 @@ func (e *EnvConfig) GetLogger() *zap.SugaredLogger {
 		}
 
 		logger, _ := logging.NewLoggerFromConfig(loggingConfig, e.Component)
+
+		if _, err := pkgutils.SetKlogVerbosity(e.KlogVerbosity); err != nil {
+			logger.Warnw("Failed to set klog verbosity", zap.Error(err))
+		}
+
 		e.logger = logger
 	}
 	return e.logger
