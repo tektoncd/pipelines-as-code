@@ -323,9 +323,66 @@ func TestFilterPipelineRunByInProgress(t *testing.T) {
 		orderList[i] = fmt.Sprintf("%s/%s", ns, pr.GetName())
 	}
 	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
-	filtered := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	filtered, err := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	assert.NilError(t, err)
 	expected := []string{"test-ns/pr1"}
 	assert.DeepEqual(t, filtered, expected)
+}
+
+// TestFilterPipelineRunByStateSkipsMalformedKeys asserts that a malformed
+// entry in the execution-order annotation is skipped rather than panicking.
+// The annotation is user-editable, and this function runs inside InitQueues at
+// watcher startup, so a panic here is a persistent CrashLoopBackOff for the
+// whole cluster, not one dropped reconcile.
+func TestFilterPipelineRunByStateSkipsMalformedKeys(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ns := "test-ns"
+
+	pipelineRuns := []*tektonv1.PipelineRun{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "valid",
+				Namespace: ns,
+				Annotations: map[string]string{
+					keys.State: kubeinteraction.StateQueued,
+				},
+			},
+			Spec: tektonv1.PipelineRunSpec{
+				Status: tektonv1.PipelineRunSpecStatusPending,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "padded",
+				Namespace: ns,
+				Annotations: map[string]string{
+					keys.State: kubeinteraction.StateQueued,
+				},
+			},
+			Spec: tektonv1.PipelineRunSpec{
+				Status: tektonv1.PipelineRunSpecStatusPending,
+			},
+		},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Namespaces:   []*corev1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: ns}}},
+		PipelineRuns: pipelineRuns,
+	})
+
+	orderList := []string{
+		"",                 // strings.Split("", ",") yields this
+		"no-slash",         // missing namespace separator
+		"/name-only",       // empty namespace
+		"ns-only/",         // empty name
+		"too/many/slashes", // name would contain a slash
+		// Surrounding whitespace is tolerated and points at a distinct run, so
+		// the expected result does not depend on the same key appearing twice.
+		"  " + ns + " / padded  ",
+		ns + "/valid",
+	}
+	filtered, err := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, filtered, []string{ns + "/padded", ns + "/valid"})
 }
 
 // TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder asserts that a
@@ -435,4 +492,146 @@ func TestCheckAndUpdateSemaphoreSizeHandlesRemovedLimit(t *testing.T) {
 	sema, err := qm.getSemaphore(repo)
 	assert.NilError(t, err)
 	assert.Equal(t, sema.getLimit(), 0, "a removed limit must be treated as unlimited")
+}
+
+func TestQueueManagerMissingQueues(t *testing.T) {
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+	repo := newTestRepo(1)
+	pr := newTestPR("missing", time.Now(), nil, nil, tektonv1.PipelineRunSpec{})
+
+	tests := []struct {
+		name string
+		run  func() any
+		want any
+	}{
+		{
+			name: "remove from missing queue",
+			run:  func() any { return qm.RemoveFromQueue(RepoKey(repo), PrKey(pr)) },
+			want: false,
+		},
+		{
+			name: "remove and take from missing queue",
+			run:  func() any { return qm.RemoveAndTakeItemFromQueue(repo, pr) },
+			want: "",
+		},
+		{
+			name: "queued runs from missing queue",
+			run:  func() any { return qm.QueuedPipelineRuns(repo) },
+			want: []string{},
+		},
+		{
+			name: "running runs from missing queue",
+			run:  func() any { return qm.RunningPipelineRuns(repo) },
+			want: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.DeepEqual(t, tt.run(), tt.want)
+		})
+	}
+}
+
+func TestAddListToRunningQueueWithZeroLimitReturnsPending(t *testing.T) {
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+
+	repo := newTestRepo(1)
+	zero := 0
+	repo.Spec.ConcurrencyLimit = &zero
+	first := newTestPR("first", time.Now(), nil, nil, tektonv1.PipelineRunSpec{})
+	second := newTestPR("second", time.Now().Add(time.Second), nil, nil, tektonv1.PipelineRunSpec{})
+
+	started, err := qm.AddListToRunningQueue(repo, []string{PrKey(first), PrKey(second)})
+	assert.NilError(t, err)
+	assert.DeepEqual(t, started, []string{PrKey(first), PrKey(second)})
+	assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{})
+}
+
+func TestFilterPipelineRunByStateSkipsUnusableItems(t *testing.T) {
+	ns := "test-ns"
+	tests := []struct {
+		name         string
+		pipelineRuns []*tektonv1.PipelineRun
+		orderList    []string
+		wantedStatus string
+		wantedState  string
+		want         []string
+	}{
+		{
+			name: "skips missing pipeline run",
+			orderList: []string{
+				ns + "/missing",
+			},
+			wantedState: kubeinteraction.StateQueued,
+			want:        []string{},
+		},
+		{
+			name: "skips pipeline run without state annotation",
+			pipelineRuns: []*tektonv1.PipelineRun{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "no-state",
+						Namespace: ns,
+					},
+				},
+			},
+			orderList:   []string{ns + "/no-state"},
+			wantedState: kubeinteraction.StateQueued,
+			want:        []string{},
+		},
+		{
+			name: "matches state when status is not required",
+			pipelineRuns: []*tektonv1.PipelineRun{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "started",
+						Namespace: ns,
+						Annotations: map[string]string{
+							keys.State: kubeinteraction.StateStarted,
+						},
+					},
+				},
+			},
+			orderList:   []string{ns + "/started"},
+			wantedState: kubeinteraction.StateStarted,
+			want:        []string{ns + "/started"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Namespaces:   []*corev1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: ns}}},
+				PipelineRuns: tt.pipelineRuns,
+			})
+
+			got, err := FilterPipelineRunByState(ctx, stdata.Pipeline, tt.orderList, tt.wantedStatus, tt.wantedState)
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.want)
+		})
+	}
+}
+
+func TestInitQueuesSkipsRepositoriesWithoutLimit(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+
+	noLimitRepo := newTestRepo(1)
+	noLimitRepo.Name = "no-limit"
+	noLimitRepo.Spec.ConcurrencyLimit = nil
+	zeroLimitRepo := newTestRepo(1)
+	zeroLimitRepo.Name = "zero-limit"
+	zero := 0
+	zeroLimitRepo.Spec.ConcurrencyLimit = &zero
+
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{noLimitRepo, zeroLimitRepo},
+	})
+	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
+	assert.Equal(t, 0, len(qm.queueMap))
 }
