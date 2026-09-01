@@ -268,7 +268,18 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	if err != nil {
 		msg := fmt.Sprintf("detectProvider: %v", err)
 		r.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryDetectProvider", msg)
-		return nil
+
+		if stderrors.Is(err, ErrProviderNotConfigured) {
+			// Nothing to retry here: the annotation is either missing or names
+			// a provider we don't support, and neither fixes itself. Free the
+			// slot and mark the run failed rather than spin on it forever.
+			return r.abandonFinishedWithoutProvider(ctx, logger, repo, pr, err)
+		}
+		// This one might be temporary, a GitHub App client failing to reach the
+		// API for instance, so let it retry. Returning nil here was the
+		// original bug: the key gets dropped, the final status is never
+		// reported and the slot is never freed.
+		return fmt.Errorf("detect provider: %w", err)
 	}
 	detectedProvider.SetPacInfo(&pacInfo)
 
@@ -276,6 +287,38 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		msg := fmt.Sprintf("report status: %v", err)
 		r.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryReportFinalStatus", msg)
 		return err
+	}
+	return nil
+}
+
+// abandonFinishedWithoutProvider handles a PipelineRun we can never report on,
+// because its git-provider annotation is missing or names something we don't
+// support. With no provider to post a status to, the most we can do is free the
+// concurrency slot it holds and mark it failed. Leave it be and it blocks the
+// repository's queue forever.
+//
+// Only call this for a finished PipelineRun, meaning IsDone() or IsCancelled().
+// Those two are not the same: a run cancelled before its Succeeded condition
+// settles is only the latter. Called on a run that is still going, this hands
+// its slot to somebody else and marks it failed, which stops reconcileKind ever
+// looking at it again.
+//
+// Free the queue before writing the state, not after. Releasing a slot twice is
+// harmless, so a retry after a failed patch still works out. In the other order,
+// dying between the two writes leaves a slot held by a run that already looks
+// failed, and nothing ever comes back for it.
+//
+// Returns nil because there is nothing here worth retrying.
+func (r *Reconciler) abandonFinishedWithoutProvider(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun, cause error) error {
+	r.startNextPipelineRunInQueue(ctx, logger, repo, pr)
+	if _, err := r.updatePipelineRunState(ctx, logger, pr, kubeinteraction.StateFailed); err != nil {
+		return fmt.Errorf("abandon pipelinerun without provider %s/%s (cause: %w): cannot update state: %w", pr.Namespace, pr.Name, cause, err)
+	}
+	// Not emitMetrics: it labels the count metric by git provider, which is the
+	// one thing we don't have. Record the duration on its own so these runs
+	// still show up somewhere per repository.
+	if err := r.calculatePRDuration(ctx, pr); err != nil {
+		logger.Error("failed to emit duration metric: ", err)
 	}
 	return nil
 }
