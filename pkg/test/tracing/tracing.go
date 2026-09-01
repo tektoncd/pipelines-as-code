@@ -54,7 +54,7 @@ func SetupTracer(t *testing.T) *RecordingExporter {
 func SpanAttr(s sdktrace.ReadOnlySpan, key string) string {
 	for _, attr := range s.Attributes() {
 		if string(attr.Key) == key {
-			return attr.Value.Emit()
+			return attr.Value.String()
 		}
 	}
 	return ""

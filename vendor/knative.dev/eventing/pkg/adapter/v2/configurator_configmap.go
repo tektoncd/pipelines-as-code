@@ -31,6 +31,7 @@ import (
 	"knative.dev/eventing/pkg/observability"
 	o11yconfigmap "knative.dev/eventing/pkg/observability/configmap"
 	"knative.dev/eventing/pkg/observability/otel"
+	"knative.dev/eventing/pkg/utils"
 )
 
 // loggerConfiguratorFromConfigMap dynamically
@@ -96,10 +97,17 @@ func (c *loggerConfiguratorFromConfigMap) CreateLogger(ctx context.Context) *zap
 
 	logger, atomicLevel := SetupLoggerFromConfig(lc, c.component)
 
+	if lcm != nil {
+		if _, err := utils.SetKlogVerbosityFromConfigMap(lcm.Data); err != nil {
+			logger.Warnw("Failed to set initial klog verbosity", zap.Error(err))
+		}
+	}
+
 	logger.Infof("Adding Watcher on ConfigMap %s for logs", c.configMapName)
 
 	cmw := ConfigWatcherFromContext(ctx)
 	cmw.Watch(c.configMapName, logging.UpdateLevelFromConfigMap(logger, atomicLevel, c.component))
+	cmw.Watch(c.configMapName, utils.UpdateKlogVerbosityFromConfigMap(logger))
 
 	return logger
 }
