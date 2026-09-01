@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"knative.dev/pkg/logging"
 )
 
 const (
@@ -181,8 +182,16 @@ func (qm *Manager) RemoveAndTakeItemFromQueue(repo *v1alpha1.Repository, run *te
 func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, orderList []string, wantedStatus, wantedState string) []string {
 	orderedList := []string{}
 	for _, prName := range orderList {
-		prKey := strings.Split(prName, "/")
-		pr, err := tekton.TektonV1().PipelineRuns(prKey[0]).Get(ctx, prKey[1], v1.GetOptions{})
+		// The list comes straight from a user-editable annotation, so a
+		// malformed entry must be skipped, not indexed: a panic here takes
+		// down the whole watcher, and from InitQueues it does so on every
+		// restart.
+		namespace, name, ok := SplitPrKey(prName)
+		if !ok {
+			logging.FromContext(ctx).Warnf("ignoring malformed execution-order entry %q", prName)
+			continue
+		}
+		pr, err := tekton.TektonV1().PipelineRuns(namespace).Get(ctx, name, v1.GetOptions{})
 		if err != nil {
 			continue
 		}
@@ -196,7 +205,7 @@ func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, 
 			if wantedStatus != "" && pr.Spec.Status != tektonv1.PipelineRunSpecStatus(wantedStatus) {
 				continue
 			}
-			orderedList = append(orderedList, prName)
+			orderedList = append(orderedList, namespace+"/"+name)
 		}
 	}
 	return orderedList

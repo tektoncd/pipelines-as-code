@@ -328,6 +328,47 @@ func TestFilterPipelineRunByInProgress(t *testing.T) {
 	assert.DeepEqual(t, filtered, expected)
 }
 
+// TestFilterPipelineRunByStateSkipsMalformedKeys asserts that a malformed
+// entry in the execution-order annotation is skipped rather than panicking.
+// The annotation is user-editable, and this function runs inside InitQueues at
+// watcher startup, so a panic here is a persistent CrashLoopBackOff for the
+// whole cluster, not one dropped reconcile.
+func TestFilterPipelineRunByStateSkipsMalformedKeys(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ns := "test-ns"
+
+	pipelineRuns := []*tektonv1.PipelineRun{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "valid",
+				Namespace: ns,
+				Annotations: map[string]string{
+					keys.State: kubeinteraction.StateQueued,
+				},
+			},
+			Spec: tektonv1.PipelineRunSpec{
+				Status: tektonv1.PipelineRunSpecStatusPending,
+			},
+		},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Namespaces:   []*corev1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: ns}}},
+		PipelineRuns: pipelineRuns,
+	})
+
+	orderList := []string{
+		"",                 // strings.Split("", ",") yields this
+		"no-slash",         // missing namespace separator
+		"/name-only",       // empty namespace
+		"ns-only/",         // empty name
+		"too/many/slashes", // name would contain a slash
+		"  " + ns + " / valid  ",
+		ns + "/valid",
+	}
+	filtered := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	assert.DeepEqual(t, filtered, []string{ns + "/valid", ns + "/valid"})
+}
+
 // TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder asserts that a
 // PipelineRun without an execution-order annotation is skipped rather than
 // aborting the whole initialization. The order-less runs are deliberately the

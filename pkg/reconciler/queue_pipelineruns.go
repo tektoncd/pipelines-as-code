@@ -85,14 +85,14 @@ func (r *Reconciler) queuePipelineRun(ctx context.Context, logger *zap.SugaredLo
 		dropped := map[string]bool{}
 		for _, prKeys := range acquired {
 			repoKey := queuepkg.RepoKey(repo)
-			nsName := strings.Split(prKeys, "/")
-			if len(nsName) != 2 {
+			namespace, name, ok := queuepkg.SplitPrKey(prKeys)
+			if !ok {
 				logger.Errorf("invalid pipelineRun key %q queued for repository %s, dropping it", prKeys, repo.GetName())
 				_ = r.qm.RemoveFromQueue(repoKey, prKeys)
 				dropped[prKeys] = true
 				continue
 			}
-			acquiredPR, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(nsName[0]).Get(ctx, nsName[1], metav1.GetOptions{})
+			acquiredPR, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(namespace).Get(ctx, name, metav1.GetOptions{})
 			if err != nil {
 				// Nothing has been written to the cluster yet, so this PipelineRun
 				// is still pending and cannot be running. Hand the slot back: if we
