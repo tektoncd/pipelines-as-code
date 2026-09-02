@@ -51,7 +51,10 @@ func replyString(mux *http.ServeMux, url, body string) {
 	})
 }
 
-func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText, queuedStatusText string, noReplyOrgPublicMembers bool) {
+// testSetupCommonGhReplies wires up the common GitHub API replies for a testcase and
+// returns a function reporting whether a "queued" check-run status was received, so
+// callers expecting one (via queuedStatusText) can assert it was actually sent.
+func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText, queuedStatusText string, noReplyOrgPublicMembers bool) func() bool {
 	t.Helper()
 	// Take a directory and generate replies as Github for it
 	replyString(mux,
@@ -81,30 +84,31 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 		fmt.Sprintf("/repos/%s/%s/check-runs", runevent.Organization, runevent.Repository),
 		`{"id": 26}`)
 
+	var queuedStatusReceived bool
 	mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/check-runs/26", runevent.Organization, runevent.Repository),
 		func(_ http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			created := github.CreateCheckRunOptions{}
 			err := json.Unmarshal(body, &created)
 			assert.NilError(t, err)
-			// We create multiple statuses over the life of a testcase (e.g. queued,
-			// in_progress, completed), but "completed" is the only one guaranteed to
-			// be sent for every testcase, so it's asserted unconditionally. PipelineRuns
-			// left pending by an external controller never reach "completed" here, so
-			// testcases that expect that outcome opt into checking the "queued" status
-			// text instead via queuedStatusText.
-			switch created.GetStatus() {
-			case CompletedStatus:
+			// "completed" is asserted unconditionally; "queued" is opt-in via queuedStatusText,
+			// since PipelineRuns left pending by another controller never reach "completed" here.
+			status := created.GetStatus()
+			if status == CompletedStatus {
 				assert.Equal(t, created.GetConclusion(), finalStatus, "we got the status `%s` but we should have get the status `%s`", created.GetConclusion(), finalStatus)
 				assert.Assert(t, strings.Contains(created.GetOutput().GetText(), finalStatusText),
 					"GetStatus/CheckRun %s != %s", created.GetOutput().GetText(), finalStatusText)
-			case queuedStatus:
+			}
+			if status == queuedStatus {
+				queuedStatusReceived = true
 				if queuedStatusText != "" {
 					assert.Assert(t, strings.Contains(created.GetOutput().GetText(), queuedStatusText),
 						"GetStatus/CheckRun queued text %q does not contain %q", created.GetOutput().GetText(), queuedStatusText)
 				}
 			}
 		})
+
+	return func() bool { return queuedStatusReceived }
 }
 
 func TestRun(t *testing.T) {
@@ -592,7 +596,7 @@ func TestRun(t *testing.T) {
 				},
 			}
 
-			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.queuedStatusText, tt.skipReplyingOrgPublicMembers)
+			queuedStatusReceived := testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.queuedStatusText, tt.skipReplyingOrgPublicMembers)
 			if tt.tektondir != "" {
 				ghtesthelper.SetupGitTree(t, mux, tt.tektondir, &tt.runevent, false)
 			}
@@ -697,6 +701,10 @@ func TestRun(t *testing.T) {
 			}
 
 			assert.NilError(t, err)
+
+			if tt.queuedStatusText != "" {
+				assert.Assert(t, queuedStatusReceived(), "expected a queued check-run status update but none was received")
+			}
 
 			if tt.expectedLogSnippet != "" {
 				logmsg := log.FilterMessageSnippet(tt.expectedLogSnippet).TakeAll()
