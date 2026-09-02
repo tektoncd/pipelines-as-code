@@ -21,8 +21,8 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 
+	"cel.dev/cel-go/common/types"
 	"github.com/gobwas/glob"
-	"github.com/google/cel-go/common/types"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
