@@ -3,6 +3,7 @@ module github.com/openshift-pipelines/pipelines-as-code
 go 1.26.6
 
 require (
+	cel.dev/cel-go v0.32.0
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
@@ -10,7 +11,6 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/fvbommel/sortorder v1.1.0
 	github.com/gobwas/glob v0.2.3
-	github.com/google/cel-go v0.31.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260808022349-848675fe0454
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
@@ -85,6 +85,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.28.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.28.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/google/cel-go v0.29.2 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/rickb777/plural v1.4.11 // indirect
