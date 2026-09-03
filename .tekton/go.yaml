@@ -91,7 +91,7 @@ spec:
 
             - name: lint
               displayName: "Go Lint"
-              image: docker.io/golangci/golangci-lint:v2.12.2
+              image: docker.io/golangci/golangci-lint:v2.13.2
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE

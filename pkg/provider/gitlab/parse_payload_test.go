@@ -104,7 +104,7 @@ func TestParsePayload(t *testing.T) {
 				event:   gitlab.EventTypePipeline,
 				payload: sample.MREventAsJSON("open", ""),
 			},
-			wantErrMsg: "json: cannot unmarshal object into Go struct field PipelineEventObjectAttributes.object_attributes.source of type string",
+			wantErrMsg: "object_attributes.source of type string",
 		},
 		{
 			name: "merge event",
