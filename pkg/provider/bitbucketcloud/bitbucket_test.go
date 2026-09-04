@@ -344,6 +344,14 @@ func TestCreateStatus(t *testing.T) {
 			expectedDescSubstr: "started",
 		},
 		{
+			name: "skipped",
+			status: status.StatusOpts{
+				Conclusion:              "skipped",
+				OriginalPipelineRunName: originalPipelineRunName,
+			},
+			expectedDescSubstr: "Skipping",
+		},
+		{
 			name: "success",
 			status: status.StatusOpts{
 				Conclusion:              "success",

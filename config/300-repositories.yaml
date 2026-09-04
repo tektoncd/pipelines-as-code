@@ -432,6 +432,36 @@ spec:
                             type: string
                           type: array
                       type: object
+                    status_checks:
+                      description: StatusChecks configures the status checks for the repository.
+                      properties:
+                        enabled:
+                          description: Enabled defines if the status checks should be reported. Default is false.
+                          type: boolean
+                        mode:
+                          description: |-
+                            Mode defines how the status checks should be reported when is enabled.
+                            Options:
+                            - 'per_pipelinerun': Report the status check of each PipelineRun separately.
+                          enum:
+                            - ""
+                            - per_pipelinerun
+                          type: string
+                        unmatched_conclusion:
+                          description: |-
+                            UnmatchedConclusion defines the conclusion to report when pipeline run is not matched. Default is 'skipped'.
+                            this will be used only if mode is 'per_pipelinerun'.
+                            Options:
+                            - 'success': Report as success.
+                            - 'neutral': Report as neutral.
+                            - 'skipped': Report as skipped. Default.
+                          enum:
+                            - ""
+                            - success
+                            - neutral
+                            - skipped
+                          type: string
+                      type: object
                   type: object
                 url:
                   description: |-

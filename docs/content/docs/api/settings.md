@@ -366,6 +366,60 @@ settings:
 {{< /param-group >}}
 {{< /param >}}
 
+## Status check settings
+
+{{< param name="status_check" type="StatusCheck" >}}
+Configures status check reporting for PipelineRuns that did not match the incoming event. See the [Status Check guide]({{< relref "/docs/guides/repository-crd/status-check" >}}) for full details and provider behavior.
+
+{{< param-group label="Show StatusCheck Fields" >}}
+
+{{< param name="status_check.enabled" type="boolean" id="param-status-check-enabled" >}}
+Enables or disables status check reporting for unmatched PipelineRuns. Default: `false`.
+
+```yaml
+settings:
+  status_check:
+    enabled: true
+```
+
+{{< /param >}}
+
+{{< param name="status_check.mode" type="string" id="param-status-check-mode" >}}
+Controls how status checks are reported. Options:
+
+- `per_unmatched_pipelinerun` - Report a separate status for each unmatched PipelineRun
+
+```yaml
+settings:
+  status_check:
+    mode: "per_unmatched_pipelinerun"
+```
+
+{{< /param >}}
+
+{{< param name="status_check.no_match_conclusion" type="string" id="param-status-check-no-match-conclusion" >}}
+The conclusion to report for unmatched PipelineRuns. Only used when `mode` is `per_unmatched_pipelinerun`. Default: `skipped`. Options: `skipped`, `success`, `neutral`.
+
+```yaml
+settings:
+  status_check:
+    no_match_conclusion: "skipped"
+```
+
+{{< /param >}}
+
+{{< /param-group >}}
+
+```yaml
+settings:
+  status_check:
+    enabled: true
+    mode: "per_unmatched_pipelinerun"
+    no_match_conclusion: "skipped"
+```
+
+{{< /param >}}
+
 ## Complete example
 
 ```yaml
@@ -432,6 +486,12 @@ spec:
           context_items:
             commit_content: true
             pr_content: true
+
+    # Status check reporting
+    status_check:
+      enabled: true
+      mode: "per_unmatched_pipelinerun"
+      no_match_conclusion: "skipped"
 ```
 
 ## Settings inheritance

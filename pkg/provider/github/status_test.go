@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	pipelinesascode "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -25,82 +26,145 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
-func TestGithubProviderCreateCheckRun(t *testing.T) {
-	ctx, _ := rtesting.SetupFakeContext(t)
-	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
-	l, _ := logger.GetLogger()
-	cnx := Provider{
-		ghClient: fakeclient,
-		Run:      params.New(),
-		pacInfo: &info.PacOpts{
-			Settings: settings.Settings{
-				ApplicationName: settings.PACApplicationNameDefaultValue,
+func TestGetOrUpdateCheckRunStatus(t *testing.T) {
+	tests := []struct {
+		name          string
+		statusOpts    []providerstatus.StatusOpts
+		expectPatched bool
+	}{
+		{
+			name:          "create check run with pipeline run name",
+			expectPatched: true,
+			statusOpts: []providerstatus.StatusOpts{
+				{
+					PipelineRunName: "pr1",
+					Status:          "hello moto",
+					PipelineRun: &tektonv1.PipelineRun{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "pr1",
+							Namespace: "default",
+						},
+					},
+				},
 			},
 		},
-		Logger: l,
+		{
+			name:          "multiple failed PipelineRuns only creates one check run",
+			expectPatched: true,
+			statusOpts: []providerstatus.StatusOpts{
+				{
+					PipelineRunName:          "",
+					Title:                    "Failed",
+					InstanceCountForCheckRun: 0,
+					PipelineRun: &tektonv1.PipelineRun{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "failed-pr",
+							Namespace: "default",
+						},
+					},
+				},
+				{
+					PipelineRunName:          "",
+					Title:                    "Failed",
+					InstanceCountForCheckRun: 1,
+				},
+			},
+		},
+		{
+			name:          "matched report patches PipelineRun",
+			expectPatched: true,
+			statusOpts: []providerstatus.StatusOpts{
+				{
+					PipelineRunName: "matched-pr",
+					Status:          "completed",
+					Conclusion:      providerstatus.ConclusionSuccess,
+					Text:            "PipelineRun matched",
+					PipelineRun: &tektonv1.PipelineRun{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "matched-pr",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "unmatched report skips PipelineRun patch",
+			statusOpts: []providerstatus.StatusOpts{
+				{
+					PipelineRunName:   "unmatched-pr",
+					Status:            "completed",
+					Conclusion:        providerstatus.ConclusionSkipped,
+					Text:              "PipelineRun not matched",
+					IsUnmatchedReport: true,
+					PipelineRun: &tektonv1.PipelineRun{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "unmatched-pr",
+							Namespace: "default",
+						},
+					},
+				},
+			},
+		},
 	}
-	defer teardown()
-	mux.HandleFunc("/repos/check/info/check-runs", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"id": 555}`)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
 
-	mux.HandleFunc("/repos/check/info/check-runs/555", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"id": 555}`)
-	})
+			l, _ := logger.GetLogger()
+			run := params.New()
+			testData := testclient.Data{}
+			for _, so := range tt.statusOpts {
+				if so.PipelineRun != nil {
+					testData.PipelineRuns = append(testData.PipelineRuns, so.PipelineRun)
+				}
+			}
+			stdata, _ := testclient.SeedTestData(t, ctx, testData)
+			run.Clients.Tekton = stdata.Pipeline
 
-	event := &info.Event{
-		Organization: "check",
-		Repository:   "info",
-		SHA:          "createCheckRunSHA",
-	}
+			var patched bool
+			stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+				patched = true
+				return false, nil, nil
+			})
 
-	err := cnx.getOrUpdateCheckRunStatus(ctx, event, providerstatus.StatusOpts{
-		PipelineRunName: "pr1",
-		Status:          "hello moto",
-	})
-	assert.NilError(t, err)
-}
+			cnx := Provider{
+				ghClient: fakeclient,
+				Run:      run,
+				pacInfo: &info.PacOpts{
+					Settings: settings.Settings{
+						ApplicationName: settings.PACApplicationNameDefaultValue,
+					},
+				},
+				Logger: l,
+			}
 
-func TestGetOrUpdateCheckRunStatusForMultipleFailedPipelineRun(t *testing.T) {
-	ctx, _ := rtesting.SetupFakeContext(t)
-	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
-	l, _ := logger.GetLogger()
-	cnx := Provider{
-		ghClient: fakeclient,
-		Run:      params.New(),
-		pacInfo:  &info.PacOpts{},
-		Logger:   l,
-	}
-	defer teardown()
-	statusOptionData := []providerstatus.StatusOpts{{
-		PipelineRunName:          "",
-		Title:                    "Failed",
-		InstanceCountForCheckRun: 0,
-	}, {
-		PipelineRunName:          "",
-		Title:                    "Failed",
-		InstanceCountForCheckRun: 1,
-	}}
-	mux.HandleFunc("/repos/check/info/check-runs", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"id": 555}`)
-	})
+			mux.HandleFunc("/repos/check/info/check-runs", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, `{"id": 555}`)
+			})
+			mux.HandleFunc("/repos/check/info/check-runs/555", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, `{"id": 555}`)
+			})
 
-	mux.HandleFunc("/repos/check/info/check-runs/555", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"id": 555}`)
-	})
+			event := &info.Event{
+				Organization: "check",
+				Repository:   "info",
+				SHA:          "createCheckRunSHA",
+			}
 
-	event := &info.Event{
-		Organization: "check",
-		Repository:   "info",
-		SHA:          "createCheckRunSHA",
-	}
-
-	for i := range statusOptionData {
-		err := cnx.getOrUpdateCheckRunStatus(ctx, event, statusOptionData[i])
-		assert.NilError(t, err)
+			for i := range tt.statusOpts {
+				err := cnx.getOrUpdateCheckRunStatus(ctx, event, tt.statusOpts[i])
+				assert.NilError(t, err)
+			}
+			assert.Equal(t, patched, tt.expectPatched)
+		})
 	}
 }
 
@@ -407,6 +471,34 @@ func TestGithubProviderCreateStatus(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "skipped via github apps",
+			args: args{
+				runevent:    runEvent,
+				status:      "completed",
+				conclusion:  "skipped",
+				text:        "PipelineRun not matched",
+				detailsURL:  "https://cireport.com",
+				titleSubstr: "Skipped",
+				githubApps:  true,
+			},
+			want:    &github.CheckRun{ID: &resultid},
+			wantErr: false,
+		},
+		{
+			name: "skipped via webhook",
+			args: args{
+				runevent:    runEvent,
+				status:      "completed",
+				conclusion:  "skipped",
+				text:        "PipelineRun not matched",
+				detailsURL:  "https://cireport.com",
+				titleSubstr: "Skipped",
+				githubApps:  false,
+			},
+			want:    &github.CheckRun{ID: &resultid},
+			wantErr: false,
+		},
+		{
 			name: "unknown",
 			args: args{
 				runevent:    runEvent,
@@ -546,6 +638,7 @@ func TestGithubProviderCreateStatus(t *testing.T) {
 }
 
 func TestGithubProvidercreateStatusCommit(t *testing.T) {
+	commentCreationAPICalled := false
 	issuenumber := 666
 	anevent := &info.Event{
 		Event:             &github.PullRequestEvent{PullRequest: &github.PullRequest{Number: github.Ptr(issuenumber)}},
@@ -556,11 +649,13 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 		PullRequestNumber: issuenumber,
 	}
 	tests := []struct {
-		name               string
-		event              *info.Event
-		wantErr            bool
-		status             providerstatus.StatusOpts
-		expectedConclusion string
+		name                         string
+		event                        *info.Event
+		repo                         *pipelinesascode.Repository
+		wantErr                      bool
+		wantCommentCreationAPICalled bool
+		status                       providerstatus.StatusOpts
+		expectedConclusion           string
 	}{
 		{
 			name:  "completed",
@@ -571,7 +666,8 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 				Text:       "Finito amigo",
 				Conclusion: "completed",
 			},
-			expectedConclusion: "completed",
+			expectedConclusion:           "completed",
+			wantCommentCreationAPICalled: true,
 		},
 		{
 			name:  "in_progress",
@@ -597,9 +693,37 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 			},
 			expectedConclusion: "success",
 		},
+		{
+			name:  "pull_request status skipped",
+			event: anevent,
+			status: providerstatus.StatusOpts{
+				Conclusion: providerstatus.ConclusionSkipped,
+			},
+			expectedConclusion: "success",
+		},
+		{
+			name:  "unmatched report",
+			event: anevent,
+			repo: &pipelinesascode.Repository{
+				Spec: pipelinesascode.RepositorySpec{
+					Settings: &pipelinesascode.Settings{
+						Github: &pipelinesascode.GithubSettings{
+							CommentStrategy: "", // keep it empty so that comment strategy will be default and try to create a comment
+						},
+					},
+				},
+			},
+			status: providerstatus.StatusOpts{
+				Conclusion:        providerstatus.ConclusionSkipped,
+				IsUnmatchedReport: true,
+			},
+			expectedConclusion:           "success",
+			wantCommentCreationAPICalled: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			commentCreationAPICalled = false
 			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/statuses/%s",
@@ -610,6 +734,7 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 			if tt.status.Status == "completed" {
 				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/issues/%d/comments",
 					tt.event.Organization, tt.event.Repository, issuenumber), func(_ http.ResponseWriter, r *http.Request) {
+					commentCreationAPICalled = true
 					body, _ := io.ReadAll(r.Body)
 					assert.Equal(t, fmt.Sprintf(`{"body":"%s<br>%s"}`, tt.status.Summary, tt.status.Text)+"\n", string(body))
 				})
@@ -628,9 +753,14 @@ func TestGithubProvidercreateStatusCommit(t *testing.T) {
 				Logger: l,
 			}
 
+			if tt.repo != nil {
+				provider.repo = tt.repo
+			}
+
 			if err := provider.createStatusCommit(ctx, tt.event, tt.status); (err != nil) != tt.wantErr {
 				t.Errorf("GetCommitInfo() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			assert.Equal(t, tt.wantCommentCreationAPICalled, commentCreationAPICalled)
 		})
 	}
 }

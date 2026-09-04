@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
 	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
@@ -150,4 +151,72 @@ func TestGiteaPullRequestPrivateRepository(t *testing.T) {
 	err := twait.RegexpMatchingInControllerLog(ctx, topts.ParamsRun, *reg, 20, "controller", &maxLines, nil)
 	assert.NilError(t, err)
 	tgitea.WaitForSecretDeletion(t, topts, topts.TargetRefName)
+}
+
+func TestGiteaPRSkippedStatusReported(t *testing.T) {
+	topts := &tgitea.TestOpts{
+		TargetEvent:           triggertype.PullRequest.String(),
+		NoPullRequestCreation: true,
+		SkipEventsCheck:       true,
+		Settings: &v1alpha1.Settings{
+			StatusChecks: &v1alpha1.StatusChecks{
+				Enabled: true,
+				Mode:    v1alpha1.StatusCheckModePerPipelineRun,
+			},
+		},
+	}
+	ctx, f := tgitea.TestPR(t, topts)
+	defer f()
+
+	entries, err := payload.GetEntries(
+		map[string]string{".tekton/pipelinerun-matching.yaml": "testdata/pipelinerun.yaml"},
+		topts.TargetNS, topts.DefaultBranch, triggertype.PullRequest.String(), map[string]string{},
+	)
+	assert.NilError(t, err)
+
+	// this is not going to match as it's targeting main branch on push event while we're gonna raise a pull request
+	skipEntry, err := payload.GetEntries(
+		map[string]string{".tekton/pipelinerun-skipped.yaml": "testdata/pipelinerun.yaml"},
+		topts.TargetNS, topts.DefaultBranch, triggertype.Push.String(), map[string]string{},
+	)
+	assert.NilError(t, err)
+	entries[".tekton/pipelinerun-skipped.yaml"] = skipEntry[".tekton/pipelinerun-skipped.yaml"]
+
+	scmOpts := &scm.Opts{
+		GitURL:        topts.GitCloneURL,
+		Log:           topts.ParamsRun.Clients.Log,
+		WebURL:        topts.GitHTMLURL,
+		TargetRefName: topts.TargetRefName,
+		BaseRefName:   topts.DefaultBranch,
+	}
+	topts.SHA = scm.PushFilesToRefGit(t, scmOpts, entries)
+
+	pr, _, err := topts.GiteaCNX.Client().CreatePullRequest(topts.Opts.Organization, topts.Opts.Repo, forgejo.CreatePullRequestOption{
+		Title: "Test Pull Request - " + topts.TargetRefName,
+		Head:  topts.TargetRefName,
+		Base:  topts.DefaultBranch,
+	})
+	assert.NilError(t, err)
+	topts.PullRequest = pr
+	topts.ParamsRun.Clients.Log.Infof("PullRequest %s has been created", pr.HTMLURL)
+
+	sopt := twait.SuccessOpt{
+		TargetNS:        topts.TargetNS,
+		OnEvent:         triggertype.PullRequest.String(),
+		NumberofPRMatch: 1,
+		MinNumberStatus: 1,
+	}
+	twait.Succeeded(ctx, t, topts.ParamsRun, topts.Opts, sopt)
+
+	statuses, _, err := topts.GiteaCNX.Client().ListStatuses(topts.Opts.Organization, topts.Opts.Repo, topts.SHA, forgejo.ListStatusesOption{})
+	assert.NilError(t, err)
+
+	foundStatus := false
+	for _, cstatus := range statuses {
+		if cstatus.State == forgejo.StatusSuccess && cstatus.Description == "Skipped" {
+			foundStatus = true
+			break
+		}
+	}
+	assert.Equal(t, foundStatus, true, "should have found the skipped status for the non-matching pipeline run")
 }

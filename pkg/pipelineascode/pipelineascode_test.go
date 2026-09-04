@@ -233,6 +233,30 @@ func TestRun(t *testing.T) {
 			finalStatusText: "<th>Status</th><th>Duration</th><th>Name</th>",
 		},
 		{
+			name: "pull request/allowed with status check mode per unmatched pipelinerun",
+			runevent: info.Event{
+				Event: &github.PullRequestEvent{
+					PullRequest: &github.PullRequest{
+						Number: github.Ptr(666),
+					},
+				},
+				SHA:               "fromwebhook",
+				Organization:      "owner",
+				Sender:            "owner",
+				Repository:        "repo",
+				URL:               "https://service/documentation",
+				HeadBranch:        "press",
+				BaseBranch:        "main",
+				EventType:         "pull_request",
+				TriggerTarget:     "pull_request",
+				PullRequestNumber: 666,
+				InstallationID:    1234,
+			},
+			tektondir:       "testdata/no-match",
+			finalStatus:     "skipped",
+			finalStatusText: "PipelineRun no-match is not matched to event pull_request",
+		},
+		{
 			name: "pull request/with webhook",
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{

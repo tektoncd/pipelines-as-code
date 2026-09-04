@@ -113,6 +113,10 @@ You can use the `tkn pac describe` command from the [CLI]({{< relref "/docs/cli/
 all statuses of PipelineRuns associated with your repository and
 their metadata.
 
+## Status checks for unmatched PipelineRuns
+
+By default, Pipelines-as-Code only reports status for PipelineRuns that matched and ran. If you want to see which PipelineRuns were skipped because their annotations did not match the incoming event, enable the `status_check` setting in your Repository CR. See the [Status Check guide]({{< relref "/docs/guides/repository-crd/status-check" >}}) for configuration and provider behavior.
+
 ## Notifications
 
 Pipelines-as-Code does not manage notifications directly. Instead, you can add notifications to your PipelineRuns using the [finally feature of

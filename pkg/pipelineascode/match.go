@@ -25,30 +25,30 @@ import (
 	"go.uber.org/zap"
 )
 
-func (p *PacRun) matchRepoPR(ctx context.Context) ([]matcher.Match, *v1alpha1.Repository, error) {
+func (p *PacRun) matchRepoPR(ctx context.Context) ([]matcher.Match, []*tektonv1.PipelineRun, *v1alpha1.Repository, error) {
 	p.debugf("matchRepoPR: starting repo verification for url=%s", p.event.URL)
 	repo, err := p.verifyRepoAndUser(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, repo, err
 	}
 	if repo == nil {
 		p.debugf("matchRepoPR: no repository match for url=%s", p.event.URL)
-		return nil, nil, nil
+		return nil, nil, repo, nil
 	}
 
 	if p.event.CancelPipelineRuns {
 		p.debugf("matchRepoPR: cancel pipeline runs requested, skipping match")
-		return nil, repo, p.cancelPipelineRunsOpsComment(ctx, repo)
+		return nil, nil, repo, p.cancelPipelineRunsOpsComment(ctx, repo)
 	}
 
 	p.debugf("matchRepoPR: fetching pipelineruns from repo=%s/%s", repo.GetNamespace(), repo.GetName())
-	matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo)
+	matchedPRs, unmatchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo)
 	if err != nil {
-		return nil, repo, err
+		return nil, nil, repo, err
 	}
 
 	p.debugf("matchRepoPR: matched=%d repo=%s/%s", len(matchedPRs), repo.GetNamespace(), repo.GetName())
-	return matchedPRs, repo, nil
+	return matchedPRs, unmatchedPRs, repo, nil
 }
 
 // verifyRepoAndUser verifies if the Repo CR exists for the Git Repository,
@@ -143,7 +143,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 }
 
 // getPipelineRunsFromRepo fetches pipelineruns from git repository and prepare them for creation.
-func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository) ([]matcher.Match, error) {
+func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository) ([]matcher.Match, []*tektonv1.PipelineRun, error) {
 	provenance := "source"
 	if repo.Spec.Settings != nil && repo.Spec.Settings.PipelineRunProvenance != "" {
 		provenance = repo.Spec.Settings.PipelineRunProvenance
@@ -168,10 +168,10 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 					},
 				},
 			)
-			return nil, nil
+			return nil, nil, nil
 		}
 
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err != nil {
@@ -203,14 +203,14 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 			msg = fmt.Sprintf("cannot locate templates in %s/ directory for this repository in %s", tektonDir, p.event.HeadBranch)
 		}
 		p.eventEmitter.EmitMessage(nil, logLevel, reason, msg)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// check for condition if need update the pipelinerun with regexp from the
 	// "raw" pipelinerun string
 	if msg, needUpdate := p.checkNeedUpdate(rawTemplates); needUpdate {
 		p.eventEmitter.EmitMessage(repo, zap.InfoLevel, "RepositoryNeedUpdate", msg)
-		return nil, fmt.Errorf("%s", msg)
+		return nil, nil, fmt.Errorf("%s", msg)
 	}
 
 	// This is for bitbucket
@@ -232,11 +232,11 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 	if p.event.TargetTestPipelineRun == "" {
 		rtypes, err := resolve.ReadTektonTypes(ctx, p.logger, rawTemplates)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		p.debugf("getPipelineRunsFromRepo: pre-parse types: pipelineruns=%d pipelines=%d tasks=%d", len(rtypes.PipelineRuns), len(rtypes.Pipelines), len(rtypes.Tasks))
 		// Don't fail or do anything if we don't have a match yet, we will do it properly later in this function
-		_, _ = matcher.MatchPipelinerunByAnnotation(ctx, p.logger, rtypes.PipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, false)
+		_, _, _ = matcher.MatchPipelinerunByAnnotation(ctx, p.logger, rtypes.PipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, false)
 	}
 	// Replace those {{var}} placeholders user has in her template to the run.Info variable
 	allTemplates := p.makeTemplate(ctx, repo, rawTemplates)
@@ -244,7 +244,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 
 	types, err := resolve.ReadTektonTypes(ctx, p.logger, allTemplates)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	p.debugf("getPipelineRunsFromRepo: parsed types: pipelineruns=%d pipelines=%d tasks=%d validation_errors=%d", len(types.PipelineRuns), len(types.Pipelines), len(types.Tasks), len(types.ValidationErrors))
 
@@ -255,7 +255,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 	if len(pipelineRuns) == 0 {
 		msg := fmt.Sprintf("cannot locate valid templates in %s/ directory for this repository in %s", tektonDir, p.event.HeadBranch)
 		p.eventEmitter.EmitMessage(nil, zap.InfoLevel, "RepositoryCannotLocatePipelineRun", msg)
-		return nil, nil
+		return nil, nil, nil
 	}
 	p.debugf("getPipelineRunsFromRepo: pipelineRuns count=%d", len(pipelineRuns))
 	pipelineRuns, err = resolve.MetadataResolve(pipelineRuns)
@@ -264,26 +264,27 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 		// reporting creates a comment, which triggers another webhook, which hits the same error.
 		if p.event.EventType == opscomments.NoOpsCommentEventType.String() {
 			p.logger.Infof("skipping MetadataResolve error for no-ops comment event: %s", err)
-			return nil, nil
+			return nil, nil, nil
 		}
 		p.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "FailedToResolvePipelineRunMetadata", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 	p.debugf("getPipelineRunsFromRepo: metadata resolved for pipelineRuns count=%d", len(pipelineRuns))
 
 	// Match the PipelineRun with annotation
 	var matchedPRs []matcher.Match
+	var unmatchedPRs []*tektonv1.PipelineRun
 	if p.event.TargetTestPipelineRun == "" {
-		if matchedPRs, err = matcher.MatchPipelinerunByAnnotation(ctx, p.logger, pipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, true); err != nil {
+		if matchedPRs, unmatchedPRs, err = matcher.MatchPipelinerunByAnnotation(ctx, p.logger, pipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, true); err != nil {
 			prefix := provider.GetGitOpsCommentPrefix(repo)
 			// Check if all pipelines have already succeeded - post comment so user gets feedback
 			if errors.Is(err, matcher.NoFailedPipelineToRetestError(prefix)) {
 				p.logger.Infof("RepositoryAllPipelinesSucceeded: %s", err.Error())
 				p.eventEmitter.EmitMessage(nil, zap.InfoLevel, "RepositoryAllPipelinesSucceeded", err.Error())
 				if commentErr := p.vcx.CreateComment(ctx, p.event, err.Error(), ""); commentErr != nil {
-					return nil, fmt.Errorf("error adding no pipelineruns to rerun comment: %w", commentErr)
+					return nil, nil, fmt.Errorf("error adding no pipelineruns to rerun comment: %w", commentErr)
 				}
-				return nil, nil
+				return nil, unmatchedPRs, nil
 			}
 			// Don't fail when you don't have a match between pipeline and annotations
 			p.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositoryNoMatch", err.Error())
@@ -298,7 +299,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 				}
 				p.eventEmitter.EmitMessage(nil, zap.InfoLevel, "RepositoryNoMatch", text)
 			}
-			return nil, nil
+			return nil, unmatchedPRs, nil
 		}
 		p.debugf("getPipelineRunsFromRepo: initial match count=%d", len(matchedPRs))
 	}
@@ -314,7 +315,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 			AccessDenied: true,
 		}
 		if allowed, err := p.checkAccessOrError(ctx, repo, status, "by GitOps comment on push commit"); !allowed {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -323,7 +324,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 	if pipelineRuns == nil {
 		msg := fmt.Sprintf("cannot find pipelinerun %s for matching an incoming event in this repository", p.event.TargetPipelineRun)
 		p.eventEmitter.EmitMessage(repo, zap.InfoLevel, "RepositoryCannotLocatePipelineRunForIncomingEvent", msg)
-		return nil, nil
+		return nil, nil, nil
 	}
 	p.debugf("getPipelineRunsFromRepo: incoming filter result count=%d", len(pipelineRuns))
 
@@ -333,7 +334,7 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 		if targetPR == nil {
 			msg := fmt.Sprintf("cannot find the targeted pipelinerun %s in this repository", p.event.TargetTestPipelineRun)
 			p.eventEmitter.EmitMessage(repo, zap.InfoLevel, "RepositoryCannotLocatePipelineRun", msg)
-			return nil, nil
+			return nil, nil, nil
 		}
 		pipelineRuns = []*tektonv1.PipelineRun{targetPR}
 		p.debugf("getPipelineRunsFromRepo: filtered to target pipelinerun=%s", p.event.TargetTestPipelineRun)
@@ -361,13 +362,13 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 		})
 		if err != nil {
 			p.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryFailedToMatch", fmt.Sprintf("failed to match pipelineRuns: %s", err.Error()))
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	err = p.changePipelineRun(ctx, repo, pipelineRuns)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	p.debugf("getPipelineRunsFromRepo: updated pipelineRuns count=%d", len(pipelineRuns))
 	// if we are doing explicit /test command then we only want to run the one that has matched the /test
@@ -377,30 +378,35 @@ func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Rep
 		if selectedPr == nil {
 			msg := fmt.Sprintf("cannot find the targeted pipelinerun %s in this repository", p.event.TargetTestPipelineRun)
 			p.eventEmitter.EmitMessage(repo, zap.InfoLevel, "RepositoryCannotLocatePipelineRun", msg)
-			return nil, nil
+			return nil, nil, nil
 		}
 		selectedRepo := p.resolveTargetNamespaceRepo(ctx, repo, selectedPr)
 		if selectedRepo == nil {
 			msg := fmt.Sprintf("skipping pipelinerun %s: target-namespace repo not found", pipelineRunIdentifier(selectedPr))
 			p.eventEmitter.EmitMessage(repo, zap.InfoLevel, "RepositoryTargetNamespaceNotFound", msg)
-			return nil, nil
+			return nil, nil, nil
 		}
 		p.debugf("getPipelineRunsFromRepo: explicit /test using repo=%s/%s for pipelinerun=%s", selectedRepo.GetNamespace(), selectedRepo.GetName(), pipelineRunIdentifier(selectedPr))
 		return []matcher.Match{{
 			PipelineRun: selectedPr,
 			Repo:        selectedRepo,
-		}}, nil
+		}}, nil, nil
 	}
 
-	matchedPRs, err = matcher.MatchPipelinerunByAnnotation(ctx, p.logger, pipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, false)
+	// unmatchedPRs are filtered out above if RemoteTasks is enabled so we should also check if RemoteTasks is enabled then
+	// return unmatchedPRs from last call to MatchPipelinerunByAnnotation and if RemoteTasks is disabled then return unmatchedPRs from here
+	matchedPRs, unmatchedPRsNew, err := matcher.MatchPipelinerunByAnnotation(ctx, p.logger, pipelineRuns, p.run, p.event, p.vcx, p.eventEmitter, repo, false)
+	if !p.pacInfo.RemoteTasks {
+		unmatchedPRs = unmatchedPRsNew
+	}
 	if err != nil {
 		// Don't fail when you don't have a match between pipeline and annotations
 		p.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositoryNoMatch", err.Error())
-		return nil, nil
+		return nil, unmatchedPRs, nil
 	}
 	p.debugf("getPipelineRunsFromRepo: final match count=%d", len(matchedPRs))
 
-	return matchedPRs, nil
+	return matchedPRs, unmatchedPRs, nil
 }
 
 func getRepositoryRevisionForProvenance(event *info.Event, provenance string) string {

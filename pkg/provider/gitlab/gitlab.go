@@ -634,7 +634,7 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 		v.Logger.Warn("Comments related to PipelineRuns status have been disabled for GitLab merge requests")
 		return nil
 	case provider.UpdateCommentStrategy:
-		if eventType == triggertype.PullRequest || provider.Valid(event.EventType, anyMergeRequestEventType) {
+		if eventType == triggertype.PullRequest || provider.Valid(event.EventType, anyMergeRequestEventType) && !statusOpts.IsUnmatchedReport {
 			statusComment := v.formatPipelineComment(event.SHA, statusOpts)
 			// Creating the prefix that is added to the status comment for a pipeline run.
 			plrStatusCommentPrefix := fmt.Sprintf(provider.PlrStatusCommentPrefixTemplate, statusOpts.OriginalPipelineRunName)
@@ -652,7 +652,7 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 			}
 		}
 	default:
-		if eventType == triggertype.PullRequest || provider.Valid(event.EventType, anyMergeRequestEventType) {
+		if eventType == triggertype.PullRequest || provider.Valid(event.EventType, anyMergeRequestEventType) && !statusOpts.IsUnmatchedReport {
 			mopt := &gitlab.CreateMergeRequestNoteOptions{Body: gitlab.Ptr(body)}
 			_, _, err := v.Client().Notes.CreateMergeRequestNote(event.TargetProjectID, int64(event.PullRequestNumber), mopt)
 			return err
@@ -1142,6 +1142,9 @@ func (v *Provider) storePipelineID(ctx context.Context, statusOpts providerstatu
 // patchPipelineIDAnnotation stores the GitLab pipeline ID as a PipelineRun
 // annotation so the reconciler can read it back across Provider instances.
 func (v *Provider) patchPipelineIDAnnotation(ctx context.Context, statusOpts providerstatus.StatusOpts, pipelineID int64) {
+	if statusOpts.IsUnmatchedReport {
+		return
+	}
 	pr := statusOpts.PipelineRun
 	if pr == nil || (pr.GetName() == "" && pr.GetGenerateName() == "") {
 		return

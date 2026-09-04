@@ -208,8 +208,9 @@ func checkPipelineRunAnnotation(prun *tektonv1.PipelineRun, eventEmitter *events
 	}
 }
 
-func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger, pruns []*tektonv1.PipelineRun, cs *params.Run, event *info.Event, vcx provider.Interface, eventEmitter *events.EventEmitter, repo *apipac.Repository, reportErrors bool) ([]Match, error) {
+func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger, pruns []*tektonv1.PipelineRun, cs *params.Run, event *info.Event, vcx provider.Interface, eventEmitter *events.EventEmitter, repo *apipac.Repository, reportErrors bool) ([]Match, []*tektonv1.PipelineRun, error) {
 	matchedPRs := []Match{}
+	unmatchedPRs := make([]*tektonv1.PipelineRun, 0, len(pruns))
 	logger.Debugf("MatchPipelinerunByAnnotation: pipelineruns=%d event_type=%s trigger_target=%s report_errors=%t", len(pruns), event.EventType, event.TriggerTarget, reportErrors)
 	infomsg := fmt.Sprintf(
 		"matching pipelineruns to event: URL=%s, target-branch=%s, source-branch=%s, target-event=%s",
@@ -302,6 +303,10 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 				matchedPRs = append(matchedPRs, prMatch)
 				continue
 			}
+			logger.Debugf("PipelineRun %s: on-comment annotation did not match, skipping", prName)
+			if event.EventType == opscomments.NoOpsCommentEventType.String() || event.EventType == opscomments.OnCommentEventType.String() {
+				unmatchedPRs = append(unmatchedPRs, prun)
+			}
 		}
 		// if the event is a comment event, but we don't have any match from the keys.OnComment then skip the other evaluations
 		if event.EventType == opscomments.NoOpsCommentEventType.String() || event.EventType == opscomments.OnCommentEventType.String() {
@@ -342,6 +347,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			logger.Debugf("PipelineRun %s: CEL result=%v", prName, out)
 			if out != types.True {
 				logger.Infof("CEL expression for PipelineRun %s is not matching, skipping", prName)
+				unmatchedPRs = append(unmatchedPRs, prun)
 				continue
 			}
 			logger.Infof("CEL expression has been evaluated and matched")
@@ -357,10 +363,11 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 
 			matched, targetEvent, targetBranch, err := getTargetBranch(prun, event)
 			if err != nil {
-				return matchedPRs, err
+				return matchedPRs, unmatchedPRs, err
 			}
 			if !matched {
 				logger.Debugf("PipelineRun %s: target branch/event did not match", prName)
+				unmatchedPRs = append(unmatchedPRs, prun)
 				continue
 			}
 			prMatch.Config["target-branch"] = targetBranch
@@ -378,10 +385,11 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 				// our own path changes. we may split up if needed to refine.
 				matched, err := matchOnAnnotation(key, changedFiles.All, true)
 				if err != nil {
-					return matchedPRs, err
+					return matchedPRs, unmatchedPRs, err
 				}
 				if !matched {
 					logger.Debugf("PipelineRun %s: path-change annotation did not match", prName)
+					unmatchedPRs = append(unmatchedPRs, prun)
 					continue
 				}
 				logger.Infof("matched PipelineRun with name: %s, annotation PathChange: %q", prName, key)
@@ -391,10 +399,13 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			if key, ok := prun.GetObjectMeta().GetAnnotations()[keys.OnLabel]; ok {
 				matched, err := matchOnAnnotation(key, event.PullRequestLabel, false)
 				if err != nil {
-					return matchedPRs, err
+					return matchedPRs, unmatchedPRs, err
 				}
 				if !matched {
-					logger.Debugf("PipelineRun %s: label annotation did not match", prName)
+					logger.Debugf("PipelineRun %s: label annotation did not match, skipping", prName)
+					if event.EventType == triggertype.PullRequestLabeled.String() {
+						unmatchedPRs = append(unmatchedPRs, prun)
+					}
 					continue
 				}
 				logger.Infof("matched PipelineRun with name: %s, annotation Label: %q", prName, key)
@@ -412,10 +423,11 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 				// our own path changes. we may split up if needed to refine.
 				matched, err := matchOnAnnotation(key, changedFiles.All, true)
 				if err != nil {
-					return matchedPRs, err
+					return matchedPRs, unmatchedPRs, err
 				}
 				if matched {
 					logger.Infof("Skipping pipelinerun with name: %s, annotation PathChangeIgnore: %q", prName, key)
+					unmatchedPRs = append(unmatchedPRs, prun)
 					continue
 				}
 				prMatch.Config["path-change-ignore"] = key
@@ -439,14 +451,14 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			logger.Debugf("MatchPipelinerunByAnnotation: filtering successful templates for event_type=%s", event.EventType)
 			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, vcx, matchedPRs)
 			if len(filtered) == 0 {
-				return nil, NoFailedPipelineToRetestError(provider.GetGitOpsCommentPrefix(repo))
+				return nil, unmatchedPRs, NoFailedPipelineToRetestError(provider.GetGitOpsCommentPrefix(repo))
 			}
-			return filtered, nil
+			return filtered, unmatchedPRs, nil
 		}
-		return matchedPRs, nil
+		return matchedPRs, unmatchedPRs, nil
 	}
 
-	return nil, fmt.Errorf("%s", buildAvailableMatchingAnnotationErr(event, pruns))
+	return nil, unmatchedPRs, fmt.Errorf("%s", buildAvailableMatchingAnnotationErr(event, pruns))
 }
 
 // filterSuccessfulTemplates filters out templates that already have successful PipelineRuns

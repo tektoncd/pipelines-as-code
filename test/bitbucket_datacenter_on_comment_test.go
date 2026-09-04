@@ -29,7 +29,7 @@ func TestBitbucketDataCenterNonGitopsCommentTriggersPipelineRun(t *testing.T) {
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
 
-	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, bitbucketWSOwner, targetNS)
+	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
 	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
 	defer tbbdc.TearDownNs(ctx, t, runcnx, targetNS)
 

@@ -32,6 +32,7 @@ You can define the following settings in the global Repository CR:
   - The `type` must be defined in the namespace repository settings and must match the `type` of the global repository (see below for an example).
 - [Custom Parameters]({{< relref "/docs/advanced/custom-parameters" >}}).
 - [Incoming Webhooks Rules]({{< relref "/docs/advanced/incoming-webhooks" >}}).
+- [Status Check]({{< relref "/docs/guides/repository-crd/status-check" >}}).
 
 {{< callout type="info" >}}
 Global settings are only applied when running via a Git provider event; they are not applied when for example using the `tkn pac` cli.
