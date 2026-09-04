@@ -132,6 +132,7 @@ func TestHandleEvent(t *testing.T) {
 		name           string
 		event          []byte
 		eventType      string
+		eventUUID      string
 		requestType    string
 		statusCode     int
 		wantLogSnippet string
@@ -183,6 +184,15 @@ func TestHandleEvent(t *testing.T) {
 			event:       event,
 			statusCode:  200,
 		},
+		{
+			name:           "event time logged",
+			requestType:    "POST",
+			eventType:      "push",
+			event:          event,
+			statusCode:     202,
+			eventUUID:      "1234567890",
+			wantLogSnippet: "controller responded to event 1234567890",
+		},
 	}
 
 	for _, tt := range tests {
@@ -196,6 +206,10 @@ func TestHandleEvent(t *testing.T) {
 			req, err := http.NewRequestWithContext(context.Background(), tn.requestType, ts.URL, bytes.NewReader(tn.event))
 			assert.NilError(t, err)
 			req.Header.Set("X-Github-Event", tn.eventType)
+
+			if tn.eventUUID != "" {
+				req.Header.Set("X-GitHub-Delivery", tn.eventUUID)
+			}
 
 			resp, err := http.DefaultClient.Do(req)
 			assert.NilError(t, err)
@@ -324,5 +338,66 @@ func TestStartGracefulShutdown(t *testing.T) {
 		assert.NilError(t, err, "Start should return cleanly on context cancellation")
 	case <-time.After(15 * time.Second):
 		t.Fatal("listener did not shut down after context cancellation")
+	}
+}
+
+func TestGetProviderEventIDFromHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		header map[string][]string
+		want   string
+	}{
+		{
+			name: "github event",
+			header: map[string][]string{
+				"X-GitHub-Delivery": {"abcd"},
+			},
+			want: "abcd",
+		},
+		{
+			name: "gitea event",
+			header: map[string][]string{
+				"X-Gitea-Delivery": {"abcd"},
+			},
+			want: "abcd",
+		},
+		{
+			name: "gitlab event",
+			header: map[string][]string{
+				"X-Gitlab-Event-UUID": {"abcd"},
+			},
+			want: "abcd",
+		},
+		{
+			name: "bitbucket cloud event",
+			header: map[string][]string{
+				"X-Request-UUID": {"abcd"},
+			},
+			want: "abcd",
+		},
+		{
+			name: "bitbucket data center event",
+			header: map[string][]string{
+				"X-Request-Id": {"abcd"},
+			},
+			want: "abcd",
+		},
+		{
+			name:   "unknown git provider event",
+			header: map[string][]string{},
+			want:   "00000000-0000-0000-0000-000000000000",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			header := http.Header{}
+			for key, values := range tt.header {
+				for _, value := range values {
+					header.Set(key, value)
+				}
+			}
+			got := getProviderEventIDFromHeader(header)
+			assert.Equal(t, got, tt.want)
+		})
 	}
 }

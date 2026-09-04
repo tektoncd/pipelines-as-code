@@ -787,6 +787,26 @@ func TestGithubGHEPullRequestCELJoin(t *testing.T) {
 	assert.NilError(t, err)
 }
 
+func TestGithubGHEPullRequestEventTimeLogged(t *testing.T) {
+	ctx := context.Background()
+	g := &tgithub.PRTest{
+		Label:     "Github PullRequest Event Time Logged",
+		YamlFiles: []string{"testdata/pipelinerun.yaml"},
+		GHE:       true,
+	}
+	g.RunPullRequest(ctx, t)
+	defer g.TearDown(ctx, t)
+
+	globalNs, _, err := params.GetInstallLocation(ctx, g.Cnx)
+	assert.NilError(t, err)
+	ctx = info.StoreNS(ctx, globalNs)
+
+	reg := regexp.MustCompile("controller responded to event .* in .*ms")
+	maxLines := int64(1000)
+	err = twait.RegexpMatchingInControllerLog(ctx, g.Cnx, *reg, 20, "ghe-controller", &maxLines, nil)
+	assert.NilError(t, err)
+}
+
 // Local Variables:
 // compile-command: "go test -tags=e2e -v -info TestGithubPullRequest$ ."
 // End:

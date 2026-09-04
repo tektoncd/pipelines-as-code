@@ -173,30 +173,36 @@ func (l *listener) Start(ctx context.Context) error {
 
 func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
+		var logger *zap.SugaredLogger
+		start := time.Now().UnixMilli()
+		eventID := getProviderEventIDFromHeader(request.Header)
+		logger = l.logger.With("event-id", eventID)
 		if request.Method != http.MethodPost {
 			l.writeResponse(response, http.StatusOK, "ok")
+			logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 			return
 		}
 
 		// event body
 		payload, err := io.ReadAll(request.Body)
 		if err != nil {
-			l.logger.Errorf("failed to read body : %v", err)
+			logger.Errorf("failed to read body : %v", err)
 			response.WriteHeader(http.StatusInternalServerError)
+			logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 			return
 		}
 
 		var eventBody map[string]any
 		if string(payload) != "" {
 			if err := json.Unmarshal(payload, &eventBody); err != nil {
-				l.logger.Errorf("Invalid event body format format: %s", err)
+				logger.Errorf("Invalid event body format format: %s", err)
 				response.WriteHeader(http.StatusBadRequest)
+				logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 				return
 			}
 		}
 
 		var gitProvider provider.Interface
-		var logger *zap.SugaredLogger
 
 		event := info.NewEvent()
 		pacInfo := l.run.Info.GetPacOpts()
@@ -205,7 +211,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			ctx, l.run.Info.Controller.GlobalRepository, metav1.GetOptions{},
 		)
 		if err == nil && globalRepo != nil {
-			l.logger.Infof("detected global repository settings named %s in namespace %s", l.run.Info.Controller.GlobalRepository, l.run.Info.Kube.Namespace)
+			logger.Infof("detected global repository settings named %s in namespace %s", l.run.Info.Controller.GlobalRepository, l.run.Info.Kube.Namespace)
 		} else {
 			globalRepo = &v1alpha1.Repository{}
 		}
@@ -214,14 +220,17 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		if detected {
 			if configuring && err == nil {
 				l.writeResponse(response, http.StatusCreated, "configured")
+				logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 				return
 			}
 			if configuring && err != nil {
-				l.logger.Errorf("repository auto-configure has failed, err: %v", err)
+				logger.Errorf("repository auto-configure has failed, err: %v", err)
 				l.writeResponse(response, http.StatusOK, "failed to configure")
+				logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 				return
 			}
 			l.writeResponse(response, http.StatusOK, "skipped event")
+			logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 			return
 		}
 
@@ -230,7 +239,8 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			if errors.Is(err, errMissingFields) {
 				l.writeResponse(response, http.StatusBadRequest, err.Error())
 			}
-			l.logger.Errorf("error processing incoming webhook: %v", err)
+			logger.Errorf("error processing incoming webhook: %v", err)
+			logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 			return
 		}
 
@@ -243,6 +253,11 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		// figure out which provider request coming from
 		if err != nil || gitProvider == nil {
 			l.writeResponse(response, http.StatusOK, err.Error())
+			if logger != nil {
+				logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
+			} else {
+				l.logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
+			}
 			return
 		}
 		gitProvider.SetPacInfo(&pacInfo)
@@ -270,7 +285,11 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		localRequest := request.Clone(request.Context())
 
 		go func() {
-			defer span.End()
+			eventHandlerStart := time.Now().UnixMilli()
+			defer func() {
+				logger.Infof("event %s processed in %dms", eventID, time.Now().UnixMilli()-eventHandlerStart)
+				span.End()
+			}()
 			err := s.handleEvent(tracedCtx, localRequest)
 			if err != nil {
 				span.RecordError(err)
@@ -278,7 +297,32 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		}()
 
 		l.writeResponse(response, http.StatusAccepted, "accepted")
+		logger.Infof("controller responded to event %s in %dms", eventID, time.Now().UnixMilli()-start)
 	}
+}
+
+func getProviderEventIDFromHeader(header http.Header) string {
+	if header.Get("X-GitHub-Delivery") != "" {
+		return header.Get("X-GitHub-Delivery")
+	}
+	// For Gitea
+	if header.Get("X-Gitea-Delivery") != "" {
+		return header.Get("X-Gitea-Delivery")
+	}
+	// For GitLab
+	if header.Get("X-Gitlab-Event-UUID") != "" {
+		return header.Get("X-Gitlab-Event-UUID")
+	}
+	// For Bitbucket cloud
+	if header.Get("X-Request-UUID") != "" {
+		return header.Get("X-Request-UUID")
+	}
+	// For Bitbucket data center
+	if header.Get("X-Request-Id") != "" {
+		return header.Get("X-Request-Id")
+	}
+	// return nil UUID to indicate that git provider is unknown
+	return "00000000-0000-0000-0000-000000000000"
 }
 
 func (l listener) processRes(processEvent bool, provider provider.Interface, logger *zap.SugaredLogger, skipReason string, err error) (provider.Interface, *zap.SugaredLogger, error) {
