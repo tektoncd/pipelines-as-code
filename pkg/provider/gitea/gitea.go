@@ -28,6 +28,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/versiondata"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
 	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	"go.uber.org/zap"
@@ -284,6 +285,17 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, runevent *info.
 	}
 	if err != nil {
 		return err
+	}
+
+	if v.pacInfo != nil && v.pacInfo.EnableAPIRetry {
+		opts := retryhttp.Options{
+			MaxAttempts: v.pacInfo.APIRetryMaxAttempts,
+			MaxWait:     time.Duration(v.pacInfo.APIRetryMaxWaitSeconds) * time.Second,
+			Logger:      v.Logger,
+		}
+		v.giteaClient.SetHTTPClient(&http.Client{
+			Transport: retryhttp.Wrap(http.DefaultTransport, opts),
+		})
 	}
 
 	// Added log for security audit purposes to log client access when a token is used
