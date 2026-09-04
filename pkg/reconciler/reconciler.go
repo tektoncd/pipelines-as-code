@@ -268,7 +268,21 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	if err != nil {
 		msg := fmt.Sprintf("detectProvider: %v", err)
 		r.eventEmitter.EmitMessage(nil, zap.ErrorLevel, "RepositoryDetectProvider", msg)
-		return nil
+
+		if stderrors.Is(err, ErrProviderNotConfigured) {
+			// Permanent: the git-provider annotation is missing or names a
+			// provider PAC does not know, so retrying detectProvider can
+			// never succeed. Returning the error here would rate-limited
+			// retry forever while still holding the concurrency slot; release
+			// it and mark the run failed instead.
+			return r.abandonDoneWithoutProvider(ctx, logger, repo, pr, err)
+		}
+		// Transient (e.g. a GitHub App client failed to initialize talking to
+		// the API): return the wrapped error so the reconcile is retried
+		// instead of swallowing it. Swallowing it here would forget the key,
+		// so reportFinalStatus never runs and the finished PipelineRun's
+		// concurrency slot is never released.
+		return fmt.Errorf("detect provider: %w", err)
 	}
 	detectedProvider.SetPacInfo(&pacInfo)
 
@@ -276,6 +290,36 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		msg := fmt.Sprintf("report status: %v", err)
 		r.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryReportFinalStatus", msg)
 		return err
+	}
+	return nil
+}
+
+// abandonDoneWithoutProvider marks a done PipelineRun failed and releases its
+// concurrency slot when its git-provider can never be resolved (missing or
+// unknown annotation, see ErrProviderNotConfigured). There is no provider or
+// event here to post a final status through, unlike reportFinalStatus, so
+// this only performs the two things needed to stop the run wedging its
+// repository's queue: releasing/promoting the queue and writing the terminal
+// PAC state, in that order.
+//
+// The queue release happens first, deliberately the reverse of
+// reportFinalStatus's ordering: RemoveAndTakeItemFromQueue is idempotent (a
+// retry that finds no reservation for this run simply returns without
+// promoting a second candidate), so if the terminal-state patch below fails
+// and this reconcile is retried, the queue step safely no-ops while the state
+// write is attempted again. Doing it in the other order would let a crash or
+// cancellation between the two writes strand the reservation permanently: the
+// state patch alone makes the run look failed already, and reconcileKind
+// returns immediately for state == StateFailed, so nothing would ever revisit
+// the queue release again.
+//
+// Returning nil is deliberate: retrying detectProvider cannot ever succeed
+// for this PipelineRun, so treating this as retryable would rate-limited
+// retry it forever while still holding the slot.
+func (r *Reconciler) abandonDoneWithoutProvider(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun, cause error) error {
+	r.startNextPipelineRunInQueue(ctx, logger, repo, pr)
+	if _, err := r.updatePipelineRunState(ctx, logger, pr, kubeinteraction.StateFailed); err != nil {
+		return fmt.Errorf("abandon pipelinerun without provider %s/%s (cause: %w): cannot update state: %w", pr.Namespace, pr.Name, cause, err)
 	}
 	return nil
 }

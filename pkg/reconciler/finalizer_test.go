@@ -371,3 +371,149 @@ func TestReconcilerFinalizeKind(t *testing.T) {
 		})
 	}
 }
+
+// TestReconcilerFinalizeKindSkipsMalformedQueueKey is a regression test for a
+// panic on a malformed key taken off the queue: FinalizeKind splits and
+// indexes the "next" key returned by RemoveAndTakeItemFromQueue the same way
+// queue_pipelineruns.go and queue_manager.go do for execution-order entries,
+// so it needs the same guard against an entry that doesn't split into exactly
+// namespace/name. A malformed queue entry is not reachable through normal
+// annotation parsing today (see TestFilterPipelineRunByStateSkipsMalformedKeys),
+// but the guard here is deliberately defensive rather than relying on that
+// invariant holding everywhere a string is added to the queue.
+func TestReconcilerFinalizeKindSkipsMalformedQueueKey(t *testing.T) {
+	observer, logs := zapobserver.New(zap.InfoLevel)
+	fakelogger := zap.New(observer).Sugar()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = logging.WithLogger(ctx, fakelogger)
+
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{finalizeTestRepo},
+	})
+
+	cs := &params.Run{
+		Clients: clients.Clients{
+			PipelineAsCode: stdata.PipelineAsCode,
+			Kube:           stdata.Kube,
+			Log:            fakelogger,
+		},
+		Info: info.Info{
+			Kube:       &info.KubeOpts{Namespace: "pac"},
+			Controller: &info.ControllerInfo{GlobalRepository: "pac"},
+			Pac:        info.NewPacOpts(),
+		},
+	}
+	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+	r := Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         queuepkg.NewManager(fakelogger),
+		run:        cs,
+		kinteract:  &testkubernetestint.KinterfaceTest{},
+	}
+
+	running := getTestPR("running", kubeinteraction.StateStarted)
+	_, err := r.qm.AddListToRunningQueue(finalizeTestRepo, []string{queuepkg.PrKey(running)})
+	assert.NilError(t, err)
+	// A malformed entry, as if something other than PrKey had added it to the
+	// queue: no "/" separator to split on namespace/name.
+	assert.NilError(t, r.qm.AddToPendingQueue(finalizeTestRepo, []string{"malformed-entry-with-no-slash"}))
+
+	err = r.FinalizeKind(ctx, running)
+	assert.NilError(t, err, "a malformed queue entry must not panic or fail the finalizer")
+
+	found := false
+	for _, entry := range logs.All() {
+		if strings.Contains(entry.Message, "invalid pipelineRun key") {
+			found = true
+		}
+	}
+	assert.Assert(t, found, "expected a warning about the malformed queue entry, got: %v", logs.All())
+}
+
+// TestReconcilerFinalizeKindPromotesSuccessorPastMalformedKey is a regression
+// test for a slot leak: RemoveAndTakeItemFromQueue already moves the "next"
+// key into the running set before FinalizeKind gets a chance to validate it,
+// so simply discarding a malformed key without releasing that reservation
+// would strand it forever, since nothing ever completes to release a slot
+// that was never a real running PipelineRun. FinalizeKind must keep retrying
+// past the malformed entry and promote the next valid candidate instead of
+// leaving the running queue with a phantom occupant.
+func TestReconcilerFinalizeKindPromotesSuccessorPastMalformedKey(t *testing.T) {
+	observer, logs := zapobserver.New(zap.InfoLevel)
+	fakelogger := zap.New(observer).Sugar()
+
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ctx = logging.WithLogger(ctx, fakelogger)
+
+	_, mux, mockServerURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+	mux.HandleFunc("/repos/org/repo/statuses/123afc", func(rw http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(rw, `{"state":"pending"}`)
+	})
+
+	repo := finalizeTestRepo.DeepCopy()
+	repo.Spec.GitProvider.URL = mockServerURL
+
+	successor := getTestPR("successor", kubeinteraction.StateQueued)
+
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repo},
+		PipelineRuns: []*tektonv1.PipelineRun{successor},
+		ConfigMap: []*corev1.ConfigMap{{
+			ObjectMeta: metav1.ObjectMeta{Name: "pipelines-as-code", Namespace: system.Namespace()},
+			Data: map[string]string{
+				settings.TrustedProviderHostnamesKey: strings.TrimPrefix(mockServerURL, "http://"),
+			},
+		}},
+	})
+
+	cs := &params.Run{
+		Clients: clients.Clients{
+			PipelineAsCode: stdata.PipelineAsCode,
+			Kube:           stdata.Kube,
+			Tekton:         stdata.Pipeline,
+			Log:            fakelogger,
+		},
+		Info: info.Info{
+			Kube:       &info.KubeOpts{Namespace: "pac"},
+			Controller: &info.ControllerInfo{GlobalRepository: "pac"},
+			Pac:        info.NewPacOpts(),
+		},
+	}
+	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+	r := Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         queuepkg.NewManager(fakelogger),
+		run:        cs,
+		kinteract: &testkubernetestint.KinterfaceTest{
+			GetSecretResult: map[string]string{
+				"pac-git-basic-auth-owner-repo": "https://whateveryousayboss",
+			},
+		},
+	}
+
+	running := getTestPR("running", kubeinteraction.StateStarted)
+	_, err := r.qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(running)})
+	assert.NilError(t, err)
+	// The malformed entry is queued ahead of the valid successor so
+	// RemoveAndTakeItemFromQueue picks it first and FinalizeKind has to skip
+	// past it rather than stopping there.
+	assert.NilError(t, r.qm.AddToPendingQueue(repo, []string{"malformed-entry-with-no-slash"}))
+	assert.NilError(t, r.qm.AddToPendingQueue(repo, []string{queuepkg.PrKey(successor)}))
+
+	err = r.FinalizeKind(ctx, running)
+	assert.NilError(t, err, "a malformed queue entry must not panic or fail the finalizer")
+
+	found := false
+	for _, entry := range logs.All() {
+		if strings.Contains(entry.Message, "invalid pipelineRun key") {
+			found = true
+		}
+	}
+	assert.Assert(t, found, "expected a warning about the malformed queue entry, got: %v", logs.All())
+
+	runningKeys := r.qm.RunningPipelineRuns(repo)
+	assert.DeepEqual(t, runningKeys, []string{queuepkg.PrKey(successor)})
+	assert.Equal(t, len(r.qm.QueuedPipelineRuns(repo)), 0, "the successor must have been promoted, not left pending")
+}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,23 @@ import (
 )
 
 const globalProbesPort = "8080"
+
+// queueDebugEnabled reports whether PAC_ENABLE_QUEUE_DEBUG asks for the
+// /debug/queue endpoint. It defaults to disabled and fails closed: an unset or
+// unparseable value never enables it, and an invalid value is logged so a typo
+// in the deployment does not silently do nothing.
+func queueDebugEnabled() bool {
+	val, ok := os.LookupEnv("PAC_ENABLE_QUEUE_DEBUG")
+	if !ok {
+		return false
+	}
+	enabled, err := strconv.ParseBool(val)
+	if err != nil {
+		log.Printf("PAC_ENABLE_QUEUE_DEBUG=%q is not a valid boolean, leaving /debug/queue disabled: %v", val, err)
+		return false
+	}
+	return enabled
+}
 
 func main() {
 	probesPort := globalProbesPort
@@ -33,7 +51,14 @@ func main() {
 
 	// Read-only view of the concurrency queues, so a test or an operator can
 	// tell whether the queue still agrees with the cluster.
-	mux.HandleFunc("/debug/queue", queue.DebugHandler())
+	//
+	// This is unauthenticated and reachable from any pod that can route to
+	// this one, including untrusted PipelineRun workloads, so it stays off
+	// unless explicitly enabled. An absent route beats one that answers 403,
+	// since it does not confirm the feature exists to probe further.
+	if queueDebugEnabled() {
+		mux.HandleFunc("/debug/queue", queue.DebugHandler())
+	}
 
 	c := make(chan struct{})
 	go func() {

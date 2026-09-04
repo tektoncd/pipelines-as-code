@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +24,10 @@ const (
 	watcherDeployment = "pipelines-as-code-watcher"
 	watcherContainer  = "pac-watcher"
 	watcherProbesPort = "probes"
+	queueDebugEnvVar  = "PAC_ENABLE_QUEUE_DEBUG"
 )
+
+var enableQueueDebugOnce sync.Once
 
 // WatcherHealth is a snapshot of how many times the watcher has restarted.
 type WatcherHealth struct {
@@ -97,6 +101,13 @@ func BounceWatcher(ctx context.Context, t *testing.T, runcnx *params.Run) {
 // The endpoint answers 503 while the reconciler holds the queue lock, since it
 // gives up rather than block the thing it is reporting on. That is expected
 // under load, so retry for a bit before calling it a failure.
+//
+// Callers that intend to inspect queue state after running a scenario (for
+// example to detect a stranded reservation) must call
+// EnsureQueueDebugEnabled themselves *before* the scenario runs. Enabling it
+// here, lazily, would restart the watcher right when its in-memory state is
+// being examined, silently resetting whatever the scenario was trying to
+// prove leaked or did not leak.
 func QueueSnapshot(ctx context.Context, t *testing.T, runcnx *params.Run) map[string]queue.RepoQueue {
 	t.Helper()
 	pods := watcherPods(ctx, t, runcnx)
@@ -164,6 +175,82 @@ func keysOf(snapshot map[string]queue.RepoQueue) []string {
 		out = append(out, key)
 	}
 	return out
+}
+
+// EnsureQueueDebugEnabled turns on the watcher's /debug/queue endpoint if it
+// is not already on. The endpoint is disabled by default (it is
+// unauthenticated cluster-wide metadata), so E2E has to opt in explicitly the
+// same way an operator would, rather than relying on a special install.
+//
+// This restarts the watcher, so callers must invoke it before a scenario
+// queues or runs anything they intend to inspect afterward with
+// QueueSnapshot or AssertQueueDrained. Enabling it lazily, after the fact,
+// would reset the very in-memory state the scenario is trying to prove
+// leaked or did not leak.
+func EnsureQueueDebugEnabled(ctx context.Context, t *testing.T, runcnx *params.Run) {
+	t.Helper()
+	enableQueueDebugOnce.Do(func() {
+		dep, err := runcnx.Clients.Kube.AppsV1().Deployments(watcherNamespace).Get(ctx, watcherDeployment, metav1.GetOptions{})
+		assert.NilError(t, err)
+
+		found := false
+		for i := range dep.Spec.Template.Spec.Containers {
+			c := &dep.Spec.Template.Spec.Containers[i]
+			if c.Name != watcherContainer {
+				continue
+			}
+			found = true
+			for j := range c.Env {
+				if c.Env[j].Name == queueDebugEnvVar {
+					if v, parseErr := strconv.ParseBool(c.Env[j].Value); parseErr == nil && v {
+						return // already enabled, nothing to do
+					}
+					c.Env[j].Value = "true"
+					goto updated
+				}
+			}
+			c.Env = append(c.Env, corev1.EnvVar{Name: queueDebugEnvVar, Value: "true"})
+		}
+	updated:
+		assert.Assert(t, found, "container %q not found in deployment %s/%s", watcherContainer, watcherNamespace, watcherDeployment)
+		updatedDep, err := runcnx.Clients.Kube.AppsV1().Deployments(watcherNamespace).Update(ctx, dep, metav1.UpdateOptions{})
+		assert.NilError(t, err)
+		runcnx.Clients.Log.Infof("enabled %s on the watcher deployment for this test run", queueDebugEnvVar)
+		// Use the generation the server assigned to this update, not the one
+		// on the pre-update object: that one is already <= the deployment
+		// controller's current ObservedGeneration, so waiting on it would
+		// return immediately instead of waiting for the new pods to roll out.
+		waitForWatcherRollout(ctx, t, runcnx, updatedDep.Generation)
+	})
+}
+
+// waitForWatcherRollout waits until the deployment controller has observed the
+// update and the rollout has fully completed: every desired replica is
+// updated, available, and ready, and none of the old pod template's replicas
+// remain. Checking UpdatedReplicas/ReadyReplicas alone is not enough on a
+// single-replica rollout: the new pod can count toward UpdatedReplicas before
+// it is ready while the old pod still counts toward ReadyReplicas, letting a
+// caller proceed while the old, pre-change watcher is still serving traffic.
+func waitForWatcherRollout(ctx context.Context, t *testing.T, runcnx *params.Run, targetGeneration int64) {
+	t.Helper()
+	for range 60 {
+		dep, err := runcnx.Clients.Kube.AppsV1().Deployments(watcherNamespace).Get(ctx, watcherDeployment, metav1.GetOptions{})
+		assert.NilError(t, err)
+		want := int32(1)
+		if dep.Spec.Replicas != nil {
+			want = *dep.Spec.Replicas
+		}
+		if dep.Status.ObservedGeneration >= targetGeneration &&
+			dep.Status.UpdatedReplicas == want &&
+			dep.Status.Replicas == want &&
+			dep.Status.AvailableReplicas == want &&
+			dep.Status.ReadyReplicas == want {
+			runcnx.Clients.Log.Infof("watcher rollout settled with %s enabled", queueDebugEnvVar)
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Fatalf("watcher did not roll out the %s change within 2 minutes", queueDebugEnvVar)
 }
 
 func waitForWatcherReplicas(ctx context.Context, t *testing.T, runcnx *params.Run, want int32) {
