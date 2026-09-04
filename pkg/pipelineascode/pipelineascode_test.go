@@ -51,7 +51,7 @@ func replyString(mux *http.ServeMux, url, body string) {
 	})
 }
 
-func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool) {
+func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool, commitMessages ...string) {
 	t.Helper()
 	// Take a directory and generate replies as Github for it
 	replyString(mux,
@@ -65,8 +65,12 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 		fmt.Sprintf("/repos/%s/%s/statuses/%s", runevent.Organization, runevent.Repository, runevent.SHA),
 		"{}")
 
-	jj := fmt.Sprintf(`{"sha": "%s", "html_url": "https://git.commit.url/%s", "message": "commit message"}`,
-		runevent.SHA, runevent.SHA)
+	commitMsg := "commit message"
+	if len(commitMessages) > 0 && commitMessages[0] != "" {
+		commitMsg = commitMessages[0]
+	}
+	jj := fmt.Sprintf(`{"sha": "%s", "html_url": "https://git.commit.url/%s", "message": "%s"}`,
+		runevent.SHA, runevent.SHA, commitMsg)
 	replyString(mux,
 		fmt.Sprintf("/repos/%s/%s/git/commits/%s", runevent.Organization, runevent.Repository, runevent.SHA),
 		jj)
@@ -790,4 +794,122 @@ type KinterfaceTestWithError struct {
 
 func (k *KinterfaceTestWithError) CreateSecret(_ context.Context, _ string, _ *corev1.Secret) error {
 	return k.CreateSecretError
+}
+
+// TestRunIncomingWebhookIgnoresSkipCI verifies that an incoming webhook always
+// creates a PipelineRun even when the head commit message contains a skip-CI
+// marker. Incoming webhooks are explicit user-triggered runs; the skip-CI
+// convention should not override them.
+func TestRunIncomingWebhookIgnoresSkipCI(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	fakeclient, mux, ghTestServerURL, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	runevent := info.Event{
+		SHA:           "resolvedsha123",
+		Organization:  "organizationes",
+		Repository:    "lagaffe",
+		URL:           "https://service/documentation",
+		Sender:        "incoming",
+		HeadBranch:    "refs/heads/main",
+		BaseBranch:    "refs/heads/main",
+		DefaultBranch: "main",
+		EventType:     "incoming",
+		TriggerTarget: "push",
+	}
+
+	webhookSecret := "don'tlookatmeplease"
+	secrets := map[string]string{
+		info.DefaultPipelinesAscodeSecretName: webhookSecret,
+	}
+
+	testSetupCommonGhReplies(t, mux, runevent, "neutral", "", false, "fix: update docs [skip ci]")
+	ghtesthelper.SetupGitTree(t, mux, "testdata/push_branch", &runevent, false)
+
+	var hubCatalogs sync.Map
+	hubCatalogs.Store("default", settings.HubCatalog{
+		Index: "default",
+		URL:   testHubURL,
+		Name:  testCatalogHubName,
+	})
+
+	tdata := testclient.Data{
+		Namespaces: []*corev1.Namespace{
+			{ObjectMeta: metav1.ObjectMeta{Name: "namespace"}},
+		},
+		Repositories: []*v1alpha1.Repository{
+			testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				URL:              runevent.URL,
+				InstallNamespace: "namespace",
+			}),
+		},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+
+	logger := zap.NewNop().Sugar()
+	cs := &params.Run{
+		Clients: clients.Clients{
+			PipelineAsCode: stdata.PipelineAsCode,
+			Log:            logger,
+			Kube:           stdata.Kube,
+			Tekton:         stdata.Pipeline,
+		},
+		Info: info.Info{
+			Pac: &info.PacOpts{
+				Settings: settings.Settings{HubCatalogs: &hubCatalogs},
+			},
+			Controller: &info.ControllerInfo{
+				Secret:           info.DefaultPipelinesAscodeSecretName,
+				GlobalRepository: "global-repo",
+			},
+			Kube: &info.KubeOpts{Namespace: "namespace"},
+		},
+	}
+	cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+
+	mac := hmac.New(sha256.New, []byte(webhookSecret))
+	payload := []byte(`{"iam": "batman"}`)
+	mac.Write(payload)
+	hexs := hex.EncodeToString(mac.Sum(nil))
+
+	runevent.Request = &info.Request{
+		Header: map[string][]string{
+			github.SHA256SignatureHeader: {"sha256=" + hexs},
+		},
+		Payload: payload,
+	}
+	runevent.Provider = &info.Provider{URL: ghTestServerURL, Token: "NONE"}
+	runevent.InstallationID = 12345
+
+	ctx = info.StoreCurrentControllerName(ctx, "default")
+	ctx = info.StoreNS(ctx, "namespace")
+
+	pacInfo := &info.PacOpts{
+		Settings: settings.Settings{
+			SecretAutoCreation: true,
+			RemoteTasks:        true,
+			HubCatalogs:        &hubCatalogs,
+		},
+	}
+	vcx := &ghprovider.Provider{
+		Run:    cs,
+		Token:  github.Ptr("None"),
+		Logger: logger,
+	}
+	vcx.SetGithubClient(fakeclient)
+	vcx.SetPacInfo(pacInfo)
+
+	kintTest := &kitesthelper.KinterfaceTest{
+		ConsoleURL:      "https://console.url",
+		GetSecretResult: secrets,
+	}
+
+	p := NewPacs(&runevent, vcx, cs, pacInfo, kintTest, logger, nil)
+	err := p.Run(ctx)
+	assert.NilError(t, err)
+
+	prs, err := cs.Clients.Tekton.TektonV1().PipelineRuns("").List(ctx, metav1.ListOptions{})
+	assert.NilError(t, err)
+	assert.Assert(t, len(prs.Items) >= 1, "incoming webhook with [skip ci] commit must still create a PipelineRun")
 }
