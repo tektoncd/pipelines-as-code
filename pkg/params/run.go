@@ -5,15 +5,66 @@ import (
 	"fmt"
 	"os"
 
+	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
+	paclisters "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 type Run struct {
-	Clients clients.Clients
-	Info    info.Info
+	Clients          clients.Clients
+	Info             info.Info
+	RepositoryLister paclisters.RepositoryLister
+}
+
+// GetRepository returns the named Repository from ns, reading from the cached
+// lister when one is configured and falling back to a live API call otherwise.
+// The lister hands out pointers into the shared informer cache, so the result
+// is deep-copied to keep callers from mutating cached objects.
+func (r *Run) GetRepository(ctx context.Context, ns, name string) (*apipac.Repository, error) {
+	if r.RepositoryLister != nil {
+		repo, err := r.RepositoryLister.Repositories(ns).Get(name)
+		if err != nil {
+			return nil, err
+		}
+		return repo.DeepCopy(), nil
+	}
+	return r.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).Get(ctx, name, metav1.GetOptions{})
+}
+
+// ListRepositories returns the Repositories in ns (all namespaces when ns is
+// empty), reading from the cached lister when one is configured and falling
+// back to a live API call otherwise. Results are always deep copies, so callers
+// may mutate them without touching the informer cache.
+func (r *Run) ListRepositories(ctx context.Context, ns string) ([]apipac.Repository, error) {
+	if r.RepositoryLister != nil {
+		var listed []*apipac.Repository
+		var err error
+		if ns == "" {
+			listed, err = r.RepositoryLister.List(labels.Everything())
+		} else {
+			listed, err = r.RepositoryLister.Repositories(ns).List(labels.Everything())
+		}
+		if err != nil {
+			return nil, err
+		}
+		repos := make([]apipac.Repository, 0, len(listed))
+		for _, repo := range listed {
+			if dc := repo.DeepCopy(); dc != nil {
+				repos = append(repos, *dc)
+			}
+		}
+		return repos, nil
+	}
+
+	list, err := r.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
 }
 
 func (r *Run) UpdatePacConfig(ctx context.Context) error {

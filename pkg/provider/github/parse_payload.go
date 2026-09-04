@@ -1091,14 +1091,14 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 }
 
 func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*v1alpha1.Repository, error) {
-	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
-		ctx, metav1.ListOptions{},
-	)
+	// Read through cs.ListRepositories so this path benefits from the cached
+	// repository lister when one is configured, matching matcher.MatchEventURLRepo.
+	repoItems, err := cs.ListRepositories(ctx, ns)
 	if err != nil {
 		return nil, err
 	}
-	sort.RepositorySortByCreationOldestTime(repositories.Items)
-	for _, repo := range repositories.Items {
+	sort.RepositorySortByCreationOldestTime(repoItems)
+	for _, repo := range repoItems {
 		repo.Spec.URL = strings.TrimSuffix(repo.Spec.URL, "/")
 		if repo.Spec.URL == event.URL {
 			return &repo, nil

@@ -18,7 +18,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (v *Provider) ParsePayload(ctx context.Context, run *params.Run, request *http.Request,
@@ -215,9 +214,7 @@ func (v *Provider) initGitLabClient(ctx context.Context, event *info.Event) (*in
 	// should check global repository for secrets
 	secretNS := repo.GetNamespace()
 	inheritedGlobalSecret := false
-	globalRepo, err := v.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(v.run.Info.Kube.Namespace).Get(
-		ctx, v.run.Info.Controller.GlobalRepository, metav1.GetOptions{},
-	)
+	globalRepo, err := v.run.GetRepository(ctx, v.run.Info.Kube.Namespace, v.run.Info.Controller.GlobalRepository)
 	if err == nil && globalRepo != nil {
 		if secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo); err != nil {
 			return event, err
