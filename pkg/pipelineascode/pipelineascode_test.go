@@ -51,7 +51,10 @@ func replyString(mux *http.ServeMux, url, body string) {
 	})
 }
 
-func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool) {
+// testSetupCommonGhReplies wires up the common GitHub API replies for a testcase and
+// returns a function reporting whether a "queued" check-run status was received, so
+// callers expecting one (via queuedStatusText) can assert it was actually sent.
+func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText, queuedStatusText string, noReplyOrgPublicMembers bool) func() bool {
 	t.Helper()
 	// Take a directory and generate replies as Github for it
 	replyString(mux,
@@ -81,20 +84,31 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 		fmt.Sprintf("/repos/%s/%s/check-runs", runevent.Organization, runevent.Repository),
 		`{"id": 26}`)
 
+	var queuedStatusReceived bool
 	mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/check-runs/26", runevent.Organization, runevent.Repository),
 		func(_ http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(r.Body)
 			created := github.CreateCheckRunOptions{}
 			err := json.Unmarshal(body, &created)
 			assert.NilError(t, err)
-			// We created multiple status but the last one should be completed.
-			// TODO: we could maybe refine this test
-			if created.GetStatus() == "completed" {
+			// "completed" is asserted unconditionally; "queued" is opt-in via queuedStatusText,
+			// since PipelineRuns left pending by another controller never reach "completed" here.
+			status := created.GetStatus()
+			if status == CompletedStatus {
 				assert.Equal(t, created.GetConclusion(), finalStatus, "we got the status `%s` but we should have get the status `%s`", created.GetConclusion(), finalStatus)
 				assert.Assert(t, strings.Contains(created.GetOutput().GetText(), finalStatusText),
 					"GetStatus/CheckRun %s != %s", created.GetOutput().GetText(), finalStatusText)
 			}
+			if status == queuedStatus {
+				queuedStatusReceived = true
+				if queuedStatusText != "" {
+					assert.Assert(t, strings.Contains(created.GetOutput().GetText(), queuedStatusText),
+						"GetStatus/CheckRun queued text %q does not contain %q", created.GetOutput().GetText(), queuedStatusText)
+				}
+			}
 		})
+
+	return func() bool { return queuedStatusReceived }
 }
 
 func TestRun(t *testing.T) {
@@ -122,6 +136,7 @@ func TestRun(t *testing.T) {
 		wantErr                      string
 		finalStatus                  string
 		finalStatusText              string
+		queuedStatusText             string
 		repositories                 []*v1alpha1.Repository
 		skipReplyingOrgPublicMembers bool
 		expectedNumberofCleanups     int
@@ -496,7 +511,8 @@ func TestRun(t *testing.T) {
 				PullRequestNumber: 666,
 				InstallationID:    1234,
 			},
-			tektondir: "testdata/pending_pipelinerun",
+			tektondir:        "testdata/pending_pipelinerun",
+			queuedStatusText: "has been queued",
 		},
 		{
 			name: "pull request/pipelinerun created in pending state without installationID (state changed by other controller)",
@@ -517,7 +533,8 @@ func TestRun(t *testing.T) {
 				TriggerTarget:     "pull_request",
 				PullRequestNumber: 666,
 			},
-			tektondir: "testdata/pending_pipelinerun",
+			tektondir:        "testdata/pending_pipelinerun",
+			queuedStatusText: "has been queued",
 		},
 	}
 	for _, tt := range tests {
@@ -579,7 +596,7 @@ func TestRun(t *testing.T) {
 				},
 			}
 
-			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.skipReplyingOrgPublicMembers)
+			queuedStatusReceived := testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.queuedStatusText, tt.skipReplyingOrgPublicMembers)
 			if tt.tektondir != "" {
 				ghtesthelper.SetupGitTree(t, mux, tt.tektondir, &tt.runevent, false)
 			}
@@ -684,6 +701,10 @@ func TestRun(t *testing.T) {
 			}
 
 			assert.NilError(t, err)
+
+			if tt.queuedStatusText != "" {
+				assert.Assert(t, queuedStatusReceived(), "expected a queued check-run status update but none was received")
+			}
 
 			if tt.expectedLogSnippet != "" {
 				logmsg := log.FilterMessageSnippet(tt.expectedLogSnippet).TakeAll()
