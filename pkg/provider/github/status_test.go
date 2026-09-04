@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v90/github"
+	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -788,4 +791,395 @@ func TestGetExistingCheckRunIDCache(t *testing.T) {
 			assert.Equal(t, apiHits.Load(), tt.expectedAPIHits)
 		})
 	}
+}
+
+func TestUpdateCheckRunRetryNotFound(t *testing.T) {
+	checkRunID := int64(2026)
+	tests := []struct {
+		name            string
+		retryNotFound   bool
+		notFoundFirstN  int
+		serverErr       bool
+		cancelContext   bool
+		wantErr         bool
+		expectedAPIHits int64
+	}{
+		{
+			name:            "transient 404 after creation recovers",
+			retryNotFound:   true,
+			notFoundFirstN:  2,
+			expectedAPIHits: 3,
+		},
+		{
+			name:            "404 exhausts the retry budget",
+			retryNotFound:   true,
+			notFoundFirstN:  checkRunUpdateMaxRetries + 1,
+			wantErr:         true,
+			expectedAPIHits: checkRunUpdateMaxRetries + 1,
+		},
+		{
+			name:            "404 on a pre-existing check run is not retried",
+			notFoundFirstN:  1,
+			wantErr:         true,
+			expectedAPIHits: 1,
+		},
+		{
+			name:            "non 404 error is not retried",
+			retryNotFound:   true,
+			serverErr:       true,
+			wantErr:         true,
+			expectedAPIHits: 1,
+		},
+		{
+			name:            "cancelled context stops the retry",
+			retryNotFound:   true,
+			notFoundFirstN:  checkRunUpdateMaxRetries + 1,
+			cancelContext:   true,
+			wantErr:         true,
+			expectedAPIHits: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			event := &info.Event{Organization: "check", Repository: "run"}
+
+			var apiHits atomic.Int64
+			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs/%d", event.Organization, event.Repository, checkRunID),
+				func(w http.ResponseWriter, _ *http.Request) {
+					hit := apiHits.Add(1)
+					switch {
+					case tt.serverErr:
+						w.WriteHeader(http.StatusInternalServerError)
+					case int(hit) <= tt.notFoundFirstN:
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprint(w, `{"message": "Not Found"}`)
+					default:
+						fmt.Fprintf(w, `{"id": %d}`, checkRunID)
+					}
+				})
+
+			l, _ := logger.GetLogger()
+			cnx := New()
+			cnx.SetGithubClient(fakeclient)
+			cnx.SetLogger(l)
+
+			fc := clockwork.NewFakeClock()
+			cnx.clock = fc
+			go func() {
+				for range checkRunUpdateMaxRetries {
+					if err := fc.BlockUntilContext(ctx, 1); err != nil {
+						return
+					}
+					if tt.cancelContext {
+						cancel()
+						return
+					}
+					fc.Advance(time.Minute)
+				}
+			}()
+
+			err := cnx.updateCheckRun(ctx, event, checkRunID, github.UpdateCheckRunOptions{Name: "test"}, tt.retryNotFound)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+			} else {
+				assert.NilError(t, err)
+			}
+			assert.Equal(t, tt.expectedAPIHits, apiHits.Load())
+		})
+	}
+}
+
+func TestIsNotFoundError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+		},
+		{
+			name: "plain error",
+			err:  fmt.Errorf("boom"),
+		},
+		{
+			name: "error response without a response",
+			err:  &github.ErrorResponse{Message: "nope"},
+		},
+		{
+			name: "error response with another status",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusInternalServerError}},
+		},
+		{
+			name: "not found error response",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}},
+			want: true,
+		},
+		{
+			name: "wrapped not found error response",
+			err:  fmt.Errorf("update failed: %w", &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}}),
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isNotFoundError(tt.err))
+		})
+	}
+}
+
+func TestGetOrUpdateCheckRunStatusNotFound(t *testing.T) {
+	tests := []struct {
+		name              string
+		annotatedCheckRun bool
+		notFoundFirstN    int
+		wantErr           bool
+		expectedAPIHits   int64
+	}{
+		{
+			name:            "created check run is not updated again",
+			notFoundFirstN:  1,
+			expectedAPIHits: 0,
+		},
+		{
+			name:              "annotated check run retries a transient 404",
+			annotatedCheckRun: true,
+			notFoundFirstN:    1,
+			expectedAPIHits:   2,
+		},
+		{
+			name:              "annotated check run gives up after the last retry",
+			annotatedCheckRun: true,
+			notFoundFirstN:    checkRunUpdateMaxRetries + 1,
+			wantErr:           true,
+			expectedAPIHits:   checkRunUpdateMaxRetries + 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel, _ := rtesting.SetupFakeContextWithCancel(t)
+			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+			defer teardown()
+
+			checkRunID := int64(555)
+			event := &info.Event{Organization: "check", Repository: "info", SHA: "createCheckRunSHA"}
+
+			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA),
+				func(w http.ResponseWriter, _ *http.Request) {
+					fmt.Fprint(w, `{"total_count": 0, "check_runs": []}`)
+				})
+			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs", event.Organization, event.Repository),
+				func(w http.ResponseWriter, _ *http.Request) {
+					fmt.Fprintf(w, `{"id": %d}`, checkRunID)
+				})
+
+			var apiHits atomic.Int64
+			mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs/%d", event.Organization, event.Repository, checkRunID),
+				func(w http.ResponseWriter, _ *http.Request) {
+					hit := apiHits.Add(1)
+					if int(hit) <= tt.notFoundFirstN {
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprint(w, `{"message": "Not Found"}`)
+						return
+					}
+					fmt.Fprintf(w, `{"id": %d}`, checkRunID)
+				})
+
+			l, _ := logger.GetLogger()
+			cnx := New()
+			cnx.SetGithubClient(fakeclient)
+			cnx.SetLogger(l)
+			cnx.Run = params.New()
+			cnx.SetPacInfo(&info.PacOpts{
+				Settings: settings.Settings{ApplicationName: settings.PACApplicationNameDefaultValue},
+			})
+
+			fc := clockwork.NewFakeClock()
+			cnx.clock = fc
+			clockDone := make(chan struct{})
+			go func() {
+				defer close(clockDone)
+				for range checkRunUpdateMaxRetries {
+					if err := fc.BlockUntilContext(ctx, 1); err != nil {
+						return
+					}
+					fc.Advance(time.Minute)
+				}
+			}()
+			defer func() {
+				cancel()
+				<-clockDone
+			}()
+
+			statusOpts := providerstatus.StatusOpts{PipelineRunName: "pr1", Status: "in_progress"}
+			if tt.annotatedCheckRun {
+				statusOpts.PipelineRun = &tektonv1.PipelineRun{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{keys.CheckRunID: strconv.FormatInt(checkRunID, 10)},
+					},
+				}
+			}
+
+			err := cnx.getOrUpdateCheckRunStatus(ctx, event, statusOpts)
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+			} else {
+				assert.NilError(t, err)
+			}
+			assert.Equal(t, tt.expectedAPIHits, apiHits.Load())
+		})
+	}
+}
+
+func TestGetOrUpdateCheckRunStatusCreatesWithFullState(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	checkRunID := int64(777)
+	event := &info.Event{Organization: "check", Repository: "info", SHA: "createCheckRunSHA"}
+
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA),
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, `{"total_count": 0, "check_runs": []}`)
+		})
+
+	var created github.CreateCheckRunOptions
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs", event.Organization, event.Repository),
+		func(w http.ResponseWriter, r *http.Request) {
+			assert.NilError(t, json.NewDecoder(r.Body).Decode(&created))
+			fmt.Fprintf(w, `{"id": %d}`, checkRunID)
+		})
+
+	var updates atomic.Int64
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs/%d", event.Organization, event.Repository, checkRunID),
+		func(w http.ResponseWriter, _ *http.Request) {
+			updates.Add(1)
+			fmt.Fprintf(w, `{"id": %d}`, checkRunID)
+		})
+
+	l, _ := logger.GetLogger()
+	cnx := New()
+	cnx.SetGithubClient(fakeclient)
+	cnx.SetLogger(l)
+	cnx.Run = params.New()
+	cnx.SetPacInfo(&info.PacOpts{
+		Settings: settings.Settings{ApplicationName: settings.PACApplicationNameDefaultValue},
+	})
+
+	err := cnx.getOrUpdateCheckRunStatus(ctx, event, providerstatus.StatusOpts{
+		PipelineRunName: "pr1",
+		Status:          "completed",
+		Conclusion:      providerstatus.ConclusionFailure,
+		Title:           "Failed",
+		Summary:         "it failed",
+		Text:            "the details",
+		DetailsURL:      "https://console/logs",
+	})
+	assert.NilError(t, err)
+
+	assert.Equal(t, int64(0), updates.Load(), "the freshly created check run should not be updated again")
+	assert.Equal(t, "failure", created.GetConclusion())
+	assert.Assert(t, !created.GetCompletedAt().IsZero())
+	assert.Equal(t, "it failed", created.GetOutput().GetSummary())
+	assert.Equal(t, "the details", created.GetOutput().GetText())
+}
+
+func TestCreateCheckRunStatusCarriesAnnotations(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	event := &info.Event{Organization: "check", Repository: "info", SHA: "createCheckRunSHA"}
+
+	var created github.CreateCheckRunOptions
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs", event.Organization, event.Repository),
+		func(w http.ResponseWriter, r *http.Request) {
+			assert.NilError(t, json.NewDecoder(r.Body).Decode(&created))
+			fmt.Fprint(w, `{"id": 779}`)
+		})
+
+	l, _ := logger.GetLogger()
+	cnx := New()
+	cnx.SetGithubClient(fakeclient)
+	cnx.SetLogger(l)
+	cnx.Run = params.New()
+	cnx.SetPacInfo(&info.PacOpts{
+		Settings: settings.Settings{ApplicationName: settings.PACApplicationNameDefaultValue},
+	})
+
+	output := &github.CheckRunOutput{
+		Title:   github.Ptr("Failed"),
+		Summary: github.Ptr("it failed"),
+		Text:    github.Ptr("the details"),
+		Annotations: []*github.CheckRunAnnotation{
+			{
+				Path:            github.Ptr("main.go"),
+				StartLine:       github.Ptr(12),
+				EndLine:         github.Ptr(12),
+				AnnotationLevel: github.Ptr("failure"),
+				Message:         github.Ptr("undefined: foo"),
+			},
+		},
+	}
+
+	id, err := cnx.createCheckRunStatus(ctx, event, providerstatus.StatusOpts{
+		PipelineRunName: "pr1",
+		Status:          "completed",
+		Conclusion:      providerstatus.ConclusionFailure,
+	}, output, "failure")
+	assert.NilError(t, err)
+	assert.Equal(t, int64(779), *id)
+
+	annotations := created.GetOutput().Annotations
+	assert.Equal(t, 1, len(annotations))
+	assert.Equal(t, "main.go", annotations[0].GetPath())
+	assert.Equal(t, "undefined: foo", annotations[0].GetMessage())
+	assert.Equal(t, "failure", created.GetConclusion())
+	assert.Assert(t, !created.GetCompletedAt().IsZero())
+}
+
+func TestGetOrUpdateCheckRunStatusCancelledOnCreate(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
+	defer teardown()
+
+	event := &info.Event{Organization: "check", Repository: "info", SHA: "createCheckRunSHA"}
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/commits/%v/check-runs", event.Organization, event.Repository, event.SHA),
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, `{"total_count": 0, "check_runs": []}`)
+		})
+
+	var created github.CreateCheckRunOptions
+	mux.HandleFunc(fmt.Sprintf("/repos/%v/%v/check-runs", event.Organization, event.Repository),
+		func(w http.ResponseWriter, r *http.Request) {
+			assert.NilError(t, json.NewDecoder(r.Body).Decode(&created))
+			fmt.Fprint(w, `{"id": 778}`)
+		})
+
+	l, _ := logger.GetLogger()
+	cnx := New()
+	cnx.SetGithubClient(fakeclient)
+	cnx.SetLogger(l)
+	cnx.Run = params.New()
+	cnx.SetPacInfo(&info.PacOpts{
+		Settings: settings.Settings{ApplicationName: settings.PACApplicationNameDefaultValue},
+	})
+
+	err := cnx.getOrUpdateCheckRunStatus(ctx, event, providerstatus.StatusOpts{
+		Status:     "completed",
+		Conclusion: providerstatus.ConclusionFailure,
+		PipelineRun: &tektonv1.PipelineRun{
+			Spec: tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusCancelled},
+		},
+	})
+	assert.NilError(t, err)
+	assert.Equal(t, "cancelled", created.GetConclusion())
 }
