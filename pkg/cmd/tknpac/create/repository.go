@@ -153,10 +153,29 @@ func (r *RepoOptions) Create(ctx context.Context) (string, string, error) {
 	return repoName, repoNamespace, err
 }
 
+// checkSystemNamespace returns an error for system namespaces and prints a warning for kube-* prefixes.
+func checkSystemNamespace(ns string, opts *RepoOptions) error {
+	if ns == "openshift-pipelines" || ns == "tekton-pipelines" {
+		return fmt.Errorf("namespace %s is not supported as a target for repositories", ns)
+	}
+	if strings.HasPrefix(ns, "openshift-") {
+		return fmt.Errorf("cannot create a repository in namespace %s as system namespaces are not supported", ns)
+	}
+	if strings.HasPrefix(ns, "kube-") {
+		fmt.Fprintf(opts.IoStreams.Out, "%s Warning: namespace %s has prefix kube- which is a system namespace\n",
+			opts.IoStreams.ColorScheme().WarningIcon(), ns)
+	}
+	if strings.HasPrefix(ns, "tekton-") {
+		fmt.Fprintf(opts.IoStreams.Out, "%s Warning: namespace %s has prefix tekton- which is a system namespace\n",
+			opts.IoStreams.ColorScheme().WarningIcon(), ns)
+	}
+	return nil
+}
+
 // getOrCreateNamespace ask and create namespace or use the default one.
 func getOrCreateNamespace(ctx context.Context, opts *RepoOptions) error {
 	if opts.Repository.Namespace != "" {
-		return nil
+		return checkSystemNamespace(opts.Repository.Namespace, opts)
 	}
 
 	// by default, use the current namespace unless it's default or
@@ -178,6 +197,9 @@ func getOrCreateNamespace(ctx context.Context, opts *RepoOptions) error {
 	// set the namespace as the default one
 	if chosenNS == "" {
 		chosenNS = autoNS
+	}
+	if err := checkSystemNamespace(chosenNS, opts); err != nil {
+		return err
 	}
 	// check if the namespace exists if it does just exit
 	_, err := opts.Run.Clients.Kube.CoreV1().Namespaces().Get(ctx, chosenNS, metav1.GetOptions{})

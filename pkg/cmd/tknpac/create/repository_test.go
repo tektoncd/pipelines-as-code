@@ -187,6 +187,93 @@ func TestGetNamespace(t *testing.T) {
 				Kube: &info.KubeOpts{},
 			},
 		},
+		{
+			name: "error on openshift-pipelines namespace via prompt",
+			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("openshift-pipelines")
+			},
+			wantErrStr: "namespace openshift-pipelines is not supported as a target for repositories",
+			runInfo: info.Info{
+				Kube: &info.KubeOpts{},
+			},
+		},
+		{
+			name: "error on tekton-pipelines namespace via prompt",
+			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("tekton-pipelines")
+			},
+			wantErrStr: "namespace tekton-pipelines is not supported as a target for repositories",
+			runInfo: info.Info{
+				Kube: &info.KubeOpts{},
+			},
+		},
+		{
+			name: "error on openshift system namespace prefix via prompt",
+			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("openshift-foo")
+			},
+			wantErrStr: "cannot create a repository in namespace openshift-foo as system namespaces are not supported",
+			runInfo: info.Info{
+				Kube: &info.KubeOpts{},
+			},
+		},
+		{
+			name: "warn on kube system namespace via prompt",
+			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("kube-system")
+				as.StubOne(true)
+			},
+			wantStdout: "! Warning: namespace kube-system has prefix kube- which is a system namespace\n! Namespace kube-system is not found",
+			runInfo: info.Info{
+				Kube: &info.KubeOpts{},
+			},
+		},
+		{
+			name: "error on openshift-pipelines namespace via flag",
+			repo: apipac.Repository{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "openshift-pipelines"},
+			},
+			wantErrStr: "namespace openshift-pipelines is not supported as a target for repositories",
+		},
+		{
+			name: "warn on kube system namespace via flag",
+			repo: apipac.Repository{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system"},
+			},
+			wantStdout: "! Warning: namespace kube-system has prefix kube- which is a system namespace",
+		},
+		{
+			name: "error on tekton-pipelines namespace via flag",
+			repo: apipac.Repository{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "tekton-pipelines"},
+			},
+			wantErrStr: "namespace tekton-pipelines is not supported as a target for repositories",
+		},
+		{
+			name: "error on openshift system namespace prefix via flag",
+			repo: apipac.Repository{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "openshift-foo"},
+			},
+			wantErrStr: "cannot create a repository in namespace openshift-foo as system namespaces are not supported",
+		},
+		{
+			name: "warn on tekton system namespace prefix via prompt",
+			askStubs: func(as *prompt.AskStubber) {
+				as.StubOne("tekton-foo")
+				as.StubOne(true)
+			},
+			wantStdout: "! Warning: namespace tekton-foo has prefix tekton- which is a system namespace\n! Namespace tekton-foo is not found",
+			runInfo: info.Info{
+				Kube: &info.KubeOpts{},
+			},
+		},
+		{
+			name: "warn on tekton system namespace prefix via flag",
+			repo: apipac.Repository{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "tekton-foo"},
+			},
+			wantStdout: "! Warning: namespace tekton-foo has prefix tekton- which is a system namespace",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
