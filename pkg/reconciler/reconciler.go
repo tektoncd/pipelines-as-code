@@ -218,13 +218,6 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	}
 	logger.Debugf("pipelineRun %s/%s condition not met: reason='%s', startReported=%v", pr.GetNamespace(), pr.GetName(), reason, startReported)
 
-	// if its a GitHub App pipelineRun PR then process only if check run id is added otherwise wait
-	if _, ok := pr.Annotations[keys.InstallationID]; ok {
-		if _, ok := pr.Annotations[keys.CheckRunID]; !ok {
-			return nil
-		}
-	}
-
 	// queue pipelines which are in queued state and pending status
 	// if status is not pending, it could be cancelled so let it be reported, even if state is queued
 	if state == kubeinteraction.StateQueued && pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
