@@ -67,7 +67,7 @@ spec:
               displayName: "Run Unit Tests"
               # we get bumped out when usingh the official image with docker.io
               # ratelimit so workaround this.
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               env:
                 - name: GOCACHE
                   value: $(workspaces.source.path)/go-build-cache/cache

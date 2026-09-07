@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
@@ -33,7 +33,7 @@ func TestGithubGHEPullRequestTest(t *testing.T) {
 	_, _, err := g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test pipeline")})
+		github.IssueCommentRequest{Body: "/test pipeline"})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
@@ -66,7 +66,7 @@ func TestGithubGHEOnCommentAnnotation(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Creating %s custom comment on PullRequest", triggerComment)
 	_, _, err := g.Provider.Client().Issues.CreateComment(ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr(triggerComment)})
+		github.IssueCommentRequest{Body: triggerComment})
 	assert.NilError(t, err)
 	sopt := twait.SuccessOpt{
 		Title:           fmt.Sprintf("Testing %s with Github APPS integration on %s", g.Label, g.TargetNamespace),

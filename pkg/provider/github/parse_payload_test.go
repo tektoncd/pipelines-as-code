@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/jonboulle/clockwork"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
@@ -53,11 +53,11 @@ QsncVExbMiPa9Oclo5qLuTosS8qwHm1MJEytp3/SkB8=
 
 var sampleRepo = &github.Repository{
 	Owner: &github.User{
-		Login: github.Ptr("owner"),
+		Login: new("owner"),
 	},
-	Name:          github.Ptr("reponame"),
-	DefaultBranch: github.Ptr("main"),
-	HTMLURL:       github.Ptr("https://github.com/owner/repo"),
+	Name:          new("reponame"),
+	DefaultBranch: new("main"),
+	HTMLURL:       new("https://github.com/owner/repo"),
 }
 
 var testInstallationID = int64(1)
@@ -65,17 +65,17 @@ var testInstallationID = int64(1)
 var samplePRevent = github.PullRequestEvent{
 	PullRequest: &github.PullRequest{
 		Head: &github.PullRequestBranch{
-			SHA: github.Ptr("sampleHeadsha"),
-			Ref: github.Ptr("headred"),
+			SHA: new("sampleHeadsha"),
+			Ref: new("headred"),
 		},
 		Base: &github.PullRequestBranch{
-			SHA: github.Ptr("basesha"),
-			Ref: github.Ptr("baseref"),
+			SHA: new("basesha"),
+			Ref: new("baseref"),
 		},
 		User: &github.User{
-			Login: github.Ptr("user"),
+			Login: new("user"),
 		},
-		Title: github.Ptr("my first PR"),
+		Title: new("my first PR"),
 	},
 	Repo: sampleRepo,
 }
@@ -87,52 +87,52 @@ func githubSHA256Signature(secret string, payload []byte) string {
 }
 
 var samplePR = github.PullRequest{
-	Number:  github.Ptr(54321),
-	State:   github.Ptr("open"),
-	HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/54321"),
+	Number:  new(54321),
+	State:   new("open"),
+	HTMLURL: new("https://github.com/owner/reponame/pull/54321"),
 	Head: &github.PullRequestBranch{
-		SHA: github.Ptr("samplePRsha"),
-		Ref: github.Ptr("feature-branch"),
+		SHA: new("samplePRsha"),
+		Ref: new("feature-branch"),
 		Repo: &github.Repository{
 			Owner: &github.User{
-				Login: github.Ptr("owner"),
+				Login: new("owner"),
 			},
-			Name:    github.Ptr("reponame"),
-			HTMLURL: github.Ptr("https://github.com/owner/reponame"),
+			Name:    new("reponame"),
+			HTMLURL: new("https://github.com/owner/reponame"),
 		},
 	},
 	Base: &github.PullRequestBranch{
-		Ref:  github.Ptr("main"),
-		SHA:  github.Ptr("samplePRsha"),
+		Ref:  new("main"),
+		SHA:  new("samplePRsha"),
 		Repo: sampleRepo,
 	},
 	User: &github.User{
-		Login: github.Ptr("contributor"),
+		Login: new("contributor"),
 	},
-	Title: github.Ptr("my first PR"),
+	Title: new("my first PR"),
 }
 
 var samplePRAnother = github.PullRequest{
-	Number:  github.Ptr(54321),
-	State:   github.Ptr("open"),
-	HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/54321"),
+	Number:  new(54321),
+	State:   new("open"),
+	HTMLURL: new("https://github.com/owner/reponame/pull/54321"),
 	Head: &github.PullRequestBranch{
-		SHA: github.Ptr("samplePRshanew"),
-		Ref: github.Ptr("feature-branch"),
+		SHA: new("samplePRshanew"),
+		Ref: new("feature-branch"),
 		Repo: &github.Repository{
 			Owner: &github.User{
-				Login: github.Ptr("owner"),
+				Login: new("owner"),
 			},
-			Name:    github.Ptr("reponame"),
-			HTMLURL: github.Ptr("https://github.com/owner/reponame"),
+			Name:    new("reponame"),
+			HTMLURL: new("https://github.com/owner/reponame"),
 		},
 	},
 	Base: &github.PullRequestBranch{
-		Ref:  github.Ptr("main"),
+		Ref:  new("main"),
 		Repo: sampleRepo,
 	},
-	User:  &github.User{Login: github.Ptr("contributor")},
-	Title: github.Ptr("my first PR"),
+	User:  &github.User{Login: new("contributor")},
+	Title: new("my first PR"),
 }
 
 func TestGetPullRequestsWithCommit(t *testing.T) {
@@ -492,8 +492,8 @@ func TestIsCommitPartOfPullRequest(t *testing.T) {
 			repo: "testrepo",
 			prs: []*github.PullRequest{
 				{
-					Number: github.Ptr(42),
-					State:  github.Ptr("open"),
+					Number: new(42),
+					State:  new("open"),
 				},
 			},
 			wantFound: true,
@@ -506,8 +506,8 @@ func TestIsCommitPartOfPullRequest(t *testing.T) {
 			repo: "testrepo",
 			prs: []*github.PullRequest{
 				{
-					Number: github.Ptr(42),
-					State:  github.Ptr("closed"),
+					Number: new(42),
+					State:  new("closed"),
 				},
 			},
 			wantFound: false,
@@ -529,16 +529,16 @@ func TestIsCommitPartOfPullRequest(t *testing.T) {
 			repo: "testrepo",
 			prs: []*github.PullRequest{
 				{
-					Number: github.Ptr(41),
-					State:  github.Ptr("closed"),
+					Number: new(41),
+					State:  new("closed"),
 				},
 				{
-					Number: github.Ptr(42),
-					State:  github.Ptr("open"),
+					Number: new(42),
+					State:  new("open"),
 				},
 				{
-					Number: github.Ptr(43),
-					State:  github.Ptr("closed"),
+					Number: new(43),
+					State:  new("closed"),
 				},
 			},
 			wantFound: true,
@@ -567,21 +567,21 @@ func TestParsePayLoad(t *testing.T) {
 	samplePRNoRepo := samplePRevent
 	samplePRNoRepo.Repo = nil
 	samplePrEventClosed := samplePRevent
-	samplePrEventClosed.Action = github.Ptr("closed")
+	samplePrEventClosed.Action = new("closed")
 
 	sampleGhPRs := []*github.PullRequest{
 		{
-			Number: github.Ptr(41),
-			State:  github.Ptr("closed"),
+			Number: new(41),
+			State:  new("closed"),
 		},
 		{
-			Number: github.Ptr(42),
-			State:  github.Ptr("open"),
+			Number: new(42),
+			State:  new("open"),
 		},
 	}
 	rerunSender := &github.User{
-		Login: github.Ptr("maintainer"),
-		Type:  github.Ptr("User"),
+		Login: new("maintainer"),
+		Type:  new("User"),
 	}
 
 	tests := []struct {
@@ -629,14 +629,14 @@ func TestParsePayLoad(t *testing.T) {
 			wantErrString:      "this event is not supported",
 			eventType:          "pull_request_review_comment",
 			triggerTarget:      "pull_request",
-			payloadEventStruct: github.PullRequestReviewCommentEvent{Action: github.Ptr("created")},
+			payloadEventStruct: github.PullRequestReviewCommentEvent{Action: new("created")},
 		},
 		{
 			name:               "bad/check run only issue recheck supported",
 			wantErrString:      "only issue recheck is supported",
 			eventType:          "check_run",
 			triggerTarget:      "nonopetitrobot",
-			payloadEventStruct: github.CheckRunEvent{Action: github.Ptr("created")},
+			payloadEventStruct: github.CheckRunEvent{Action: new("created")},
 			githubClient:       true,
 		},
 		{
@@ -644,14 +644,14 @@ func TestParsePayLoad(t *testing.T) {
 			wantErrString:      "only supported with github apps",
 			eventType:          "check_run",
 			triggerTarget:      "pull_request",
-			payloadEventStruct: github.CheckRunEvent{Action: github.Ptr("created")},
+			payloadEventStruct: github.CheckRunEvent{Action: new("created")},
 		},
 		{
 			name:               "bad/issue comment not coming from pull request",
 			eventType:          "issue_comment",
 			triggerTarget:      "pull_request",
 			githubClient:       true,
-			payloadEventStruct: github.IssueCommentEvent{Action: github.Ptr("created"), Issue: &github.Issue{}, Repo: sampleRepo},
+			payloadEventStruct: github.IssueCommentEvent{Action: new("created"), Issue: &github.Issue{}, Repo: sampleRepo},
 			wantErrString:      "issue comment is not coming from a pull_request",
 		},
 		{
@@ -661,7 +661,7 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "pull_request",
 			wantErrString: "404",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
@@ -691,11 +691,11 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.Push.String(),
 			payloadEventStruct: github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Owner: &github.User{Login: github.Ptr("foo")},
-					Name:  github.Ptr("pushRepo"),
+					Owner: &github.User{Login: new("foo")},
+					Name:  new("pushRepo"),
 				},
-				Ref:   github.Ptr("test"),
-				After: github.Ptr("0000000000000000000000000000000000000000"),
+				Ref:   new("test"),
+				After: new("0000000000000000000000000000000000000000"),
 			},
 			wantErrString: "branch test has been deleted, exiting",
 		},
@@ -706,7 +706,7 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
@@ -727,7 +727,7 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckSuiteEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckSuite: &github.CheckSuite{
@@ -744,13 +744,13 @@ func TestParsePayLoad(t *testing.T) {
 			eventType:    "check_run",
 			githubClient: true,
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadBranch: github.Ptr("main"),
-						HeadSHA:    github.Ptr("headSHACheckSuite"),
+						HeadBranch: new("main"),
+						HeadSHA:    new("headSHACheckSuite"),
 					},
 				},
 			},
@@ -764,12 +764,12 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("samplePRsha"),
+						HeadSHA: new("samplePRsha"),
 					},
 				},
 			},
@@ -787,13 +787,13 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					PullRequests: []*github.PullRequest{&samplePR},
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("samplePRsha"),
+						HeadSHA: new("samplePRsha"),
 					},
 				},
 			},
@@ -811,7 +811,7 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine pull request for check_run rerequest: found 2 associated pull requests in webhook payload",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					PullRequests: []*github.PullRequest{
@@ -819,7 +819,7 @@ func TestParsePayLoad(t *testing.T) {
 						&samplePRAnother,
 					},
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("samplePRsha"),
+						HeadSHA: new("samplePRsha"),
 					},
 				},
 			},
@@ -831,7 +831,7 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine pull request for check_run rerequest: found 2 associated pull requests in webhook payload",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
@@ -839,7 +839,7 @@ func TestParsePayLoad(t *testing.T) {
 							&samplePR,
 							&samplePRAnother,
 						},
-						HeadSHA: github.Ptr("samplePRsha"),
+						HeadSHA: new("samplePRsha"),
 					},
 				},
 			},
@@ -851,14 +851,14 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine pull request for check_suite rerequest: found 2 associated pull requests in webhook payload",
 			payloadEventStruct: github.CheckSuiteEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckSuite: &github.CheckSuite{
 					PullRequests: []*github.PullRequest{
 						&samplePR,
 						&samplePRAnother,
 					},
-					HeadSHA: github.Ptr("samplePRsha"),
+					HeadSHA: new("samplePRsha"),
 				},
 			},
 			shaRet: "samplePRsha",
@@ -869,12 +869,12 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("forkPRsha"),
+						HeadSHA: new("forkPRsha"),
 					},
 				},
 			},
@@ -882,29 +882,29 @@ func TestParsePayLoad(t *testing.T) {
 				"/repos/owner/reponame/commits/forkPRsha/pulls": []*github.PullRequest{},
 				"/repos/owner/reponame/pulls": []*github.PullRequest{
 					{
-						Number:  github.Ptr(987),
-						State:   github.Ptr("open"),
-						HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/987"),
+						Number:  new(987),
+						State:   new("open"),
+						HTMLURL: new("https://github.com/owner/reponame/pull/987"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("forkPRsha"),
-							Ref: github.Ptr("fork-feature"),
+							SHA: new("forkPRsha"),
+							Ref: new("fork-feature"),
 							Repo: &github.Repository{
 								Owner: &github.User{
-									Login: github.Ptr("fork-owner"),
+									Login: new("fork-owner"),
 								},
-								Name:    github.Ptr("reponame"),
-								HTMLURL: github.Ptr("https://github.com/fork-owner/reponame"),
+								Name:    new("reponame"),
+								HTMLURL: new("https://github.com/fork-owner/reponame"),
 							},
 						},
 						Base: &github.PullRequestBranch{
-							Ref:  github.Ptr("main"),
-							SHA:  github.Ptr("basesha"),
+							Ref:  new("main"),
+							SHA:  new("basesha"),
 							Repo: sampleRepo,
 						},
 						User: &github.User{
-							Login: github.Ptr("fork-contributor"),
+							Login: new("fork-contributor"),
 						},
-						Title: github.Ptr("fork PR"),
+						Title: new("fork PR"),
 					},
 				},
 			},
@@ -921,50 +921,50 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("forkPRsha"),
+						HeadSHA: new("forkPRsha"),
 					},
 				},
 			},
 			muxReplies: map[string]any{
 				"/repos/owner/reponame/commits/forkPRsha/pulls": []*github.PullRequest{
 					{
-						Number: github.Ptr(654),
-						State:  github.Ptr("open"),
+						Number: new(654),
+						State:  new("open"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("newerSHA"),
+							SHA: new("newerSHA"),
 						},
 					},
 				},
 				"/repos/owner/reponame/pulls": []*github.PullRequest{
 					{
-						Number:  github.Ptr(987),
-						State:   github.Ptr("open"),
-						HTMLURL: github.Ptr("https://github.com/owner/reponame/pull/987"),
+						Number:  new(987),
+						State:   new("open"),
+						HTMLURL: new("https://github.com/owner/reponame/pull/987"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("forkPRsha"),
-							Ref: github.Ptr("fork-feature"),
+							SHA: new("forkPRsha"),
+							Ref: new("fork-feature"),
 							Repo: &github.Repository{
 								Owner: &github.User{
-									Login: github.Ptr("fork-owner"),
+									Login: new("fork-owner"),
 								},
-								Name:    github.Ptr("reponame"),
-								HTMLURL: github.Ptr("https://github.com/fork-owner/reponame"),
+								Name:    new("reponame"),
+								HTMLURL: new("https://github.com/fork-owner/reponame"),
 							},
 						},
 						Base: &github.PullRequestBranch{
-							Ref:  github.Ptr("main"),
-							SHA:  github.Ptr("basesha"),
+							Ref:  new("main"),
+							SHA:  new("basesha"),
 							Repo: sampleRepo,
 						},
 						User: &github.User{
-							Login: github.Ptr("fork-contributor"),
+							Login: new("fork-contributor"),
 						},
-						Title: github.Ptr("fork PR"),
+						Title: new("fork PR"),
 					},
 				},
 			},
@@ -981,11 +981,11 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "found 2 open pull requests associated with the commit",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("ambiguousFallbackSHA"),
+						HeadSHA: new("ambiguousFallbackSHA"),
 					},
 				},
 			},
@@ -993,17 +993,17 @@ func TestParsePayLoad(t *testing.T) {
 				"/repos/owner/reponame/commits/ambiguousFallbackSHA/pulls": []*github.PullRequest{},
 				"/repos/owner/reponame/pulls": []*github.PullRequest{
 					{
-						Number: github.Ptr(301),
-						State:  github.Ptr("open"),
+						Number: new(301),
+						State:  new("open"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("ambiguousFallbackSHA"),
+							SHA: new("ambiguousFallbackSHA"),
 						},
 					},
 					{
-						Number: github.Ptr(302),
-						State:  github.Ptr("open"),
+						Number: new(302),
+						State:  new("open"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("ambiguousFallbackSHA"),
+							SHA: new("ambiguousFallbackSHA"),
 						},
 					},
 				},
@@ -1015,11 +1015,11 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			triggerTarget: string(triggertype.PullRequest),
 			payloadEventStruct: github.CheckSuiteEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				Sender: rerunSender,
 				CheckSuite: &github.CheckSuite{
-					HeadSHA: github.Ptr("samplePRsha"),
+					HeadSHA: new("samplePRsha"),
 				},
 			},
 			muxReplies: map[string]any{
@@ -1036,11 +1036,11 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine branch for check_run rerequest",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("orphanSHA"),
+						HeadSHA: new("orphanSHA"),
 					},
 				},
 			},
@@ -1055,10 +1055,10 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine branch for check_suite rerequest",
 			payloadEventStruct: github.CheckSuiteEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckSuite: &github.CheckSuite{
-					HeadSHA: github.Ptr("orphanSHA"),
+					HeadSHA: new("orphanSHA"),
 				},
 			},
 			muxReplies: map[string]any{
@@ -1072,19 +1072,19 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "cannot determine branch for check_run rerequest",
 			payloadEventStruct: github.CheckRunEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckRun: &github.CheckRun{
 					CheckSuite: &github.CheckSuite{
-						HeadSHA: github.Ptr("closedOnlySHA"),
+						HeadSHA: new("closedOnlySHA"),
 					},
 				},
 			},
 			muxReplies: map[string]any{
 				"/repos/owner/reponame/commits/closedOnlySHA/pulls": []*github.PullRequest{
 					{
-						Number: github.Ptr(111),
-						State:  github.Ptr("closed"),
+						Number: new(111),
+						State:  new("closed"),
 					},
 				},
 				"/repos/owner/reponame/pulls": []*github.PullRequest{},
@@ -1096,26 +1096,26 @@ func TestParsePayLoad(t *testing.T) {
 			githubClient:  true,
 			wantErrString: "found 2 open pull requests associated with the commit",
 			payloadEventStruct: github.CheckSuiteEvent{
-				Action: github.Ptr("rerequested"),
+				Action: new("rerequested"),
 				Repo:   sampleRepo,
 				CheckSuite: &github.CheckSuite{
-					HeadSHA: github.Ptr("ambiguousSHA"),
+					HeadSHA: new("ambiguousSHA"),
 				},
 			},
 			muxReplies: map[string]any{
 				"/repos/owner/reponame/commits/ambiguousSHA/pulls": []*github.PullRequest{
 					{
-						Number: github.Ptr(101),
-						State:  github.Ptr("open"),
+						Number: new(101),
+						State:  new("open"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("ambiguousSHA"),
+							SHA: new("ambiguousSHA"),
 						},
 					},
 					{
-						Number: github.Ptr(202),
-						State:  github.Ptr("open"),
+						Number: new(202),
+						State:  new("open"),
 						Head: &github.PullRequestBranch{
-							SHA: github.Ptr("ambiguousSHA"),
+							SHA: new("ambiguousSHA"),
 						},
 					},
 				},
@@ -1127,12 +1127,12 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "pull_request",
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/666"),
+						HTMLURL: new("/666"),
 					},
-					Number: github.Ptr(666),
+					Number: new(666),
 				},
 				Repo: sampleRepo,
 			},
@@ -1160,10 +1160,10 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "push",
 			payloadEventStruct: github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Owner: &github.User{Login: github.Ptr("owner")},
-					Name:  github.Ptr("pushRepo"),
+					Owner: &github.User{Login: new("owner")},
+					Name:  new("pushRepo"),
 				},
-				HeadCommit: &github.HeadCommit{ID: github.Ptr("SHAPush")},
+				HeadCommit: &github.HeadCommit{ID: new("SHAPush")},
 			},
 			shaRet: "SHAPush",
 		},
@@ -1173,16 +1173,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/777"),
+						HTMLURL: new("/777"),
 					},
-					Number: github.Ptr(777),
+					Number: new(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/retest dummy"),
+					Body: new("/retest dummy"),
 				},
 			},
 			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1195,16 +1195,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/777"),
+						HTMLURL: new("/777"),
 					},
-					Number: github.Ptr(777),
+					Number: new(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/pac retest dummy"),
+					Body: new("/pac retest dummy"),
 				},
 			},
 			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1218,16 +1218,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/777"),
+						HTMLURL: new("/777"),
 					},
-					Number: github.Ptr(777),
+					Number: new(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/pac test dummy"),
+					Body: new("/pac test dummy"),
 				},
 			},
 			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1241,16 +1241,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/777"),
+						HTMLURL: new("/777"),
 					},
-					Number: github.Ptr(777),
+					Number: new(777),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/pac cancel dummy"),
+					Body: new("/pac cancel dummy"),
 				},
 			},
 			muxReplies:              map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1264,16 +1264,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/999"),
+						HTMLURL: new("/999"),
 					},
-					Number: github.Ptr(999),
+					Number: new(999),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/cancel"),
+					Body: new("/cancel"),
 				},
 			},
 			muxReplies: map[string]any{"/repos/owner/reponame/pulls/999": samplePR},
@@ -1285,16 +1285,16 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: triggertype.PullRequest.String(),
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/888"),
+						HTMLURL: new("/888"),
 					},
-					Number: github.Ptr(888),
+					Number: new(888),
 				},
 				Repo: sampleRepo,
 				Comment: &github.IssueComment{
-					Body: github.Ptr("/cancel dummy"),
+					Body: new("/cancel dummy"),
 				},
 			},
 			muxReplies:              map[string]any{"/repos/owner/reponame/pulls/888": samplePR},
@@ -1306,7 +1306,7 @@ func TestParsePayLoad(t *testing.T) {
 			wantErrString:      "no github client has been initialized",
 			eventType:          "commit_comment",
 			triggerTarget:      "push",
-			payloadEventStruct: github.CommitCommentEvent{Action: github.Ptr("created"), Repo: sampleRepo},
+			payloadEventStruct: github.CommitCommentEvent{Action: new("created"), Repo: sampleRepo},
 		},
 		{
 			name:               "bad/commit comment for event has no repository reference",
@@ -1325,9 +1325,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test dummy rbanch:test"), // rbanch is wrong word for branch 🙂
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test dummy rbanch:test"), // rbanch is wrong word for branch 🙂
 				},
 			},
 			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1343,9 +1343,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/retest dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy"),
 				},
 			},
 			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1361,9 +1361,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/pac retest dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/pac retest dummy"),
 				},
 			},
 			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1380,9 +1380,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/pac test dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/pac test dummy"),
 				},
 			},
 			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1399,9 +1399,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/pac cancel dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/pac cancel dummy"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1419,9 +1419,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/pac test dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/pac test dummy"),
 				},
 			},
 			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1438,9 +1438,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/retest"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest"),
 				},
 			},
 			muxReplies:       map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1455,9 +1455,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test tag:v1.0.0"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test tag:v1.0.0"),
 				},
 			},
 			shaRet:           "samplePRsha",
@@ -1472,9 +1472,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test dummy tag:v1.0.0"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test dummy tag:v1.0.0"),
 				},
 			},
 			shaRet:            "samplePRsha",
@@ -1490,9 +1490,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test dummy tag:v1.0.0"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test dummy tag:v1.0.0"),
 				},
 			},
 			shaRet:            "samplePRsha",
@@ -1508,9 +1508,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test dummy tag:v1.0.0"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test dummy tag:v1.0.0"),
 				},
 			},
 			shaRet:            "samplePRsha",
@@ -1527,9 +1527,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/test dummy taig:v1.0.0"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/test dummy taig:v1.0.0"),
 				},
 			},
 			shaRet:            "samplePRsha",
@@ -1545,9 +1545,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/999"),
-					Body:     github.Ptr("/cancel"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/999"),
+					Body:     new("/cancel"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/999": samplePR},
@@ -1563,9 +1563,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/888"),
-					Body:     github.Ptr("/cancel dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/888"),
+					Body:     new("/cancel dummy"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/888": samplePR},
@@ -1582,9 +1582,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/retest dummy branch:test1"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy branch:test1"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/7771": samplePR},
@@ -1601,9 +1601,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/999"),
-					Body:     github.Ptr("/cancel branch:test1"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/999"),
+					Body:     new("/cancel branch:test1"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/9991": samplePR},
@@ -1619,9 +1619,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/888"),
-					Body:     github.Ptr("/cancel dummy branch:test1"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/888"),
+					Body:     new("/cancel dummy branch:test1"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/8881": samplePR},
@@ -1638,9 +1638,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/888"),
-					Body:     github.Ptr("/retest dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/888"),
+					Body:     new("/retest dummy"),
 				},
 			},
 			muxReplies: map[string]any{
@@ -1660,9 +1660,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/888"),
-					Body:     github.Ptr("/cancel dummy branch:test2"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/888"),
+					Body:     new("/cancel dummy branch:test2"),
 				},
 			},
 			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/8881": samplePR},
@@ -1680,9 +1680,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRshanew"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/retest dummy"),
+					CommitID: new("samplePRshanew"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy"),
 				},
 			},
 			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePRAnother},
@@ -1699,9 +1699,9 @@ func TestParsePayLoad(t *testing.T) {
 			payloadEventStruct: github.CommitCommentEvent{
 				Repo: sampleRepo,
 				Comment: &github.RepositoryComment{
-					CommitID: github.Ptr("samplePRsha"),
-					HTMLURL:  github.Ptr("/777"),
-					Body:     github.Ptr("/retest dummy"),
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy"),
 				},
 			},
 			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
@@ -1716,12 +1716,12 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "push",
 			githubClient:  true,
 			payloadEventStruct: github.PushEvent{
-				Ref: github.Ptr("refs/heads/main"),
+				Ref: new("refs/heads/main"),
 				Repo: &github.PushEventRepository{
-					Owner: &github.User{Login: github.Ptr("owner")},
-					Name:  github.Ptr("pushRepo"),
+					Owner: &github.User{Login: new("owner")},
+					Name:  new("pushRepo"),
 				},
-				HeadCommit: &github.HeadCommit{ID: github.Ptr("SHAPush")},
+				HeadCommit: &github.HeadCommit{ID: new("SHAPush")},
 			},
 			shaRet:                    "",
 			skipPushEventForPRCommits: true,
@@ -1734,12 +1734,12 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "push",
 			githubClient:  true,
 			payloadEventStruct: github.PushEvent{
-				Ref: github.Ptr("refs/tags/v1.0.0"),
+				Ref: new("refs/tags/v1.0.0"),
 				Repo: &github.PushEventRepository{
-					Owner: &github.User{Login: github.Ptr("owner")},
-					Name:  github.Ptr("pushRepo"),
+					Owner: &github.User{Login: new("owner")},
+					Name:  new("pushRepo"),
 				},
-				HeadCommit: &github.HeadCommit{ID: github.Ptr("SHAPush")},
+				HeadCommit: &github.HeadCommit{ID: new("SHAPush")},
 			},
 			shaRet:                    "SHAPush",
 			skipPushEventForPRCommits: true,
@@ -1751,12 +1751,12 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "pull_request",
 			githubClient:  false,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/666"),
+						HTMLURL: new("/666"),
 					},
-					Number: github.Ptr(666),
+					Number: new(666),
 				},
 				Repo: sampleRepo,
 			},
@@ -1768,12 +1768,12 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget: "pull_request",
 			githubClient:  true,
 			payloadEventStruct: github.IssueCommentEvent{
-				Action: github.Ptr("created"),
+				Action: new("created"),
 				Issue: &github.Issue{
 					PullRequestLinks: &github.PullRequestLinks{
-						HTMLURL: github.Ptr("/666"),
+						HTMLURL: new("/666"),
 					},
-					Number: github.Ptr(666),
+					Number: new(666),
 				},
 				Repo: sampleRepo,
 			},
@@ -1868,8 +1868,8 @@ func TestParsePayLoad(t *testing.T) {
 				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/ref/tags/v1.0.0", "owner", "reponame"), func(rw http.ResponseWriter, _ *http.Request) {
 					ref := &github.Reference{
 						Object: &github.GitObject{
-							SHA:  github.Ptr("samplePRsha"),
-							Type: github.Ptr(tt.objectType),
+							SHA:  new("samplePRsha"),
+							Type: new(tt.objectType),
 						},
 					}
 					bjeez, _ := json.Marshal(ref)
@@ -1878,7 +1878,7 @@ func TestParsePayLoad(t *testing.T) {
 				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/tags/samplePRsha", "owner", "reponame"), func(rw http.ResponseWriter, _ *http.Request) {
 					tag := &github.Tag{
 						Object: &github.GitObject{
-							SHA: github.Ptr("samplePRsha"),
+							SHA: new("samplePRsha"),
 						},
 					}
 					bjeez, _ := json.Marshal(tag)
@@ -1893,10 +1893,10 @@ func TestParsePayLoad(t *testing.T) {
 						email = "noreply@github.com"
 					}
 					commit := &github.Commit{
-						SHA: github.Ptr(tt.shaRet),
+						SHA: new(tt.shaRet),
 						Committer: &github.CommitAuthor{
-							Email: github.Ptr(email),
-							Name:  github.Ptr(name),
+							Email: new(email),
+							Name:  new(name),
 						},
 					}
 					bjeez, _ := json.Marshal(commit)
@@ -2090,7 +2090,7 @@ func TestAppTokenGeneration(t *testing.T) {
 	ghePayloadEvent := samplePRevent
 	ghePayloadEvent.Installation = &github.Installation{ID: &testInstallationID}
 	gheRepository := *sampleRepo
-	gheRepository.HTMLURL = github.Ptr("https://github.example.com/owner/repo")
+	gheRepository.HTMLURL = new("https://github.example.com/owner/repo")
 	ghePayloadEvent.Repo = &gheRepository
 	ghePayload, err := json.Marshal(ghePayloadEvent)
 	assert.NilError(t, err)

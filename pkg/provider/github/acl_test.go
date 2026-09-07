@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -124,9 +124,9 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
-						Number: github.Ptr(1),
+						Number: new(1),
 					},
 				},
 			},
@@ -143,8 +143,8 @@ func TestOkToTestComment(t *testing.T) {
 				EventType:    "issue_comment",
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
-						Number:  github.Ptr(1),
+						HTMLURL: new("http://url.com/owner/repo/1"),
+						Number:  new(1),
 					},
 				},
 			},
@@ -161,7 +161,7 @@ func TestOkToTestComment(t *testing.T) {
 				EventType:    "issue_comment",
 				Event: &github.CheckRunEvent{
 					CheckRun: &github.CheckRun{
-						HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+						HTMLURL: new("http://url.com/owner/repo/1"),
 					},
 				},
 			},
@@ -179,9 +179,9 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
-						Number: github.Ptr(1),
+						Number: new(1),
 					},
 				},
 			},
@@ -199,9 +199,9 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
-						Number: github.Ptr(1),
+						Number: new(1),
 					},
 				},
 			},
@@ -219,7 +219,7 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -237,7 +237,7 @@ func TestOkToTestComment(t *testing.T) {
 				EventType:    "issue_comment",
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+						HTMLURL: new("http://url.com/owner/repo/1"),
 					},
 				},
 			},
@@ -254,7 +254,7 @@ func TestOkToTestComment(t *testing.T) {
 				EventType:    "issue_comment",
 				Event: &github.CheckRunEvent{
 					CheckRun: &github.CheckRun{
-						HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+						HTMLURL: new("http://url.com/owner/repo/1"),
 					},
 				},
 			},
@@ -272,7 +272,7 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -291,7 +291,7 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -311,9 +311,9 @@ func TestOkToTestComment(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
-						Number: github.Ptr(1),
+						Number: new(1),
 					},
 				},
 			},
@@ -334,7 +334,7 @@ func TestOkToTestComment(t *testing.T) {
 				// this will test if pagination works okay
 				if r.URL.Query().Get("page") == "" || r.URL.Query().Get("page") == "1" {
 					rw.Header().Add("Link", `<https://api.github.com/owner/repo/issues/1/comments?page=2&per_page=1>; rel="next"`)
-					fmt.Fprint(rw, `[{"body": "Foo Bar", "user": {"login": "notallowed"}}]`, tt.commentsReply)
+					fmt.Fprint(rw, `[{"body": "Foo Bar", "user": {"login": "notallowed"}}]`)
 				} else {
 					fmt.Fprint(rw, tt.commentsReply)
 				}
@@ -402,7 +402,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -423,7 +423,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -444,7 +444,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -465,7 +465,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -487,7 +487,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				Event: &github.IssueCommentEvent{
 					Issue: &github.Issue{
 						PullRequestLinks: &github.PullRequestLinks{
-							HTMLURL: github.Ptr("http://url.com/owner/repo/1"),
+							HTMLURL: new("http://url.com/owner/repo/1"),
 						},
 					},
 				},
@@ -511,7 +511,7 @@ func TestOkToTestCommentSHA(t *testing.T) {
 				// this will test if pagination works okay
 				if r.URL.Query().Get("page") == "" || r.URL.Query().Get("page") == "1" {
 					rw.Header().Add("Link", `<https://api.github.com/owner/repo/issues/1/comments?page=2&per_page=1>; rel="next"`)
-					fmt.Fprint(rw, `[{"body": "Foo Bar", "user": {"login": "notallowed"}}]`, tt.commentsReply)
+					fmt.Fprint(rw, `[{"body": "Foo Bar", "user": {"login": "notallowed"}}]`)
 				} else {
 					fmt.Fprint(rw, tt.commentsReply)
 				}
@@ -573,7 +573,7 @@ func TestAclCheckAll(t *testing.T) {
 		// this will test if pagination works okay
 		if r.URL.Query().Get("page") == "" || r.URL.Query().Get("page") == "1" {
 			rw.Header().Add("Link", `<https://api.github.com/orgs/`+orgallowed+`/members?page=2&per_page=1>; rel="next"`)
-			fmt.Fprint(rw, `[{"login": "notallowed"}]`, orgallowed)
+			fmt.Fprint(rw, `[{"login": "notallowed"}]`)
 		} else {
 			fmt.Fprintf(rw, `[{"login": "login_%s"}]`, orgallowed)
 		}

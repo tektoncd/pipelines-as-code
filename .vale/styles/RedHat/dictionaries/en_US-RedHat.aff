@@ -1,0 +1,15 @@
+SET UTF-8
+
+# Plural suffix flag
+SFX S Y 6
+SFX S y ies [^aeiou]y
+SFX S 0 s   [aeiou]y
+SFX S 0 es  [sxz]
+SFX S 0 es  [sc]h
+SFX S 0 s   [^sc]h
+SFX S 0 s   [^sxzhy]
+
+# Possessive suffix flag
+SFX P Y 2
+SFX P 0 's [^s]
+SFX P 0 ' [s]

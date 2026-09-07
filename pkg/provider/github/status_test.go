@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -548,7 +548,7 @@ func TestGithubProviderCreateStatus(t *testing.T) {
 func TestGithubProvidercreateStatusCommit(t *testing.T) {
 	issuenumber := 666
 	anevent := &info.Event{
-		Event:             &github.PullRequestEvent{PullRequest: &github.PullRequest{Number: github.Ptr(issuenumber)}},
+		Event:             &github.PullRequestEvent{PullRequest: &github.PullRequest{Number: new(issuenumber)}},
 		Organization:      "owner",
 		Repository:        "repository",
 		SHA:               "createStatusCommitSHA",

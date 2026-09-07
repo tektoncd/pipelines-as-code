@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
@@ -605,7 +604,7 @@ func TestParsePayload(t *testing.T) {
 				run.Clients = clients.Clients{Kube: stdata.Kube, PipelineAsCode: stdata.PipelineAsCode}
 			}
 			v := &Provider{
-				Token:           github.Ptr("tokeneuneu"),
+				Token:           new("tokeneuneu"),
 				targetProjectID: int64(tt.fields.targetProjectID),
 				sourceProjectID: int64(tt.fields.sourceProjectID),
 				userID:          int64(tt.fields.userID),

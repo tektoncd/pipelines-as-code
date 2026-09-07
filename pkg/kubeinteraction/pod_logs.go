@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/google/go-github/v90/github"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -16,7 +15,7 @@ func (k Interaction) GetPodLogs(ctx context.Context, ns, podName, containerName 
 		Container: containerName,
 	}
 	if tailLines > 0 {
-		pdOpts.TailLines = github.Ptr(tailLines)
+		pdOpts.TailLines = new(tailLines)
 	}
 	ios, err := kclient.Pods(ns).GetLogs(podName, pdOpts).Stream(ctx)
 	if err != nil {

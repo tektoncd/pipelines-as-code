@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	pacgithub "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
@@ -22,8 +22,8 @@ func CreateTag(ctx context.Context, t *testing.T, runcnx *params.Run, ghcnx *pac
 			Object:  sha,
 			Type:    "commit",
 			Tagger: &github.CommitAuthor{
-				Name:  github.Ptr("OpenShift Pipelines E2E test"),
-				Email: github.Ptr("e2e-pipeline@redhat.com"),
+				Name:  new("OpenShift Pipelines E2E test"),
+				Email: new("e2e-pipeline@redhat.com"),
 				Date:  &github.Timestamp{Time: time.Now()},
 			},
 		}

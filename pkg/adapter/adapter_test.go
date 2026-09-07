@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -120,7 +120,7 @@ func TestHandleEvent(t *testing.T) {
 	l.run.Info.InitInfo()
 
 	// valid push event
-	testEvent := github.PushEvent{Pusher: &github.CommitAuthor{Name: github.Ptr("user")}}
+	testEvent := github.PushEvent{Pusher: &github.CommitAuthor{Name: new("user")}}
 	event, err := json.Marshal(testEvent)
 	assert.NilError(t, err)
 
@@ -227,7 +227,7 @@ func TestWhichProvider(t *testing.T) {
 				"X-GitHub-Delivery": {"abcd"},
 			},
 			event: github.PushEvent{
-				Pusher: &github.CommitAuthor{Name: github.Ptr("user")},
+				Pusher: &github.CommitAuthor{Name: new("user")},
 			},
 		},
 		{

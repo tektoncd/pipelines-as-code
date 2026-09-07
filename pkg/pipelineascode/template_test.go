@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
@@ -240,7 +240,7 @@ func TestProcessTemplates(t *testing.T) {
 			name:     "params/filter on body",
 			template: `I am {{ params }}`,
 			expected: "I am batman",
-			event:    &info.Event{EventType: "pull_request", Event: github.PullRequestEvent{Number: github.Ptr(42)}},
+			event:    &info.Event{EventType: "pull_request", Event: github.PullRequestEvent{Number: new(42)}},
 			repository: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					Params: &[]v1alpha1.Params{
@@ -257,7 +257,7 @@ func TestProcessTemplates(t *testing.T) {
 			name:     "params/filter on body with bad filter",
 			template: `I am {{ params }}`,
 			expected: "I am {{ params }}",
-			event:    &info.Event{EventType: "pull_request", Event: github.PullRequestEvent{Number: github.Ptr(42)}},
+			event:    &info.Event{EventType: "pull_request", Event: github.PullRequestEvent{Number: new(42)}},
 			repository: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{
 					Params: &[]v1alpha1.Params{

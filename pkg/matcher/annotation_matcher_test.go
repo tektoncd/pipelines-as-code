@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -1624,7 +1624,7 @@ func TestMatchPipelinerunAnnotationAndRepositories(t *testing.T) {
 			fakeclient, mux, ghTestServerURL, teardown := ghtesthelper.SetupGH()
 			defer teardown()
 			vcx := &ghprovider.Provider{
-				Token: github.Ptr("None"),
+				Token: new("None"),
 			}
 			vcx.SetGithubClient(fakeclient)
 			if tt.args.runevent.Request == nil {
@@ -1634,8 +1634,8 @@ func TestMatchPipelinerunAnnotationAndRepositories(t *testing.T) {
 				commitFiles := make([]*github.CommitFile, len(tt.args.fileChanged))
 				for i, v := range tt.args.fileChanged {
 					commitFiles[i] = &github.CommitFile{
-						Filename: github.Ptr(v.FileName),
-						Status:   github.Ptr(v.Status),
+						Filename: new(v.FileName),
+						Status:   new(v.Status),
 					}
 				}
 				if tt.args.runevent.TriggerTarget == "push" {

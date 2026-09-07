@@ -1,0 +1,136 @@
+text := import("text")
+
+suggestions := []
+word := match
+lower := text.to_lower(word)
+
+// Lookup table for verbs where suffix heuristics produce wrong results.
+// Doubled-consonant verbs (strip -ing leaves doubled letter, e.g. Running -> Runn)
+// and silent-e verbs not caught by suffix patterns (e.g. Writing -> Writ).
+lookup := {
+    "running": "run",
+    "getting": "get",
+    "setting": "set",
+    "putting": "put",
+    "planning": "plan",
+    "stopping": "stop",
+    "dropping": "drop",
+    "mapping": "map",
+    "logging": "log",
+    "debugging": "debug",
+    "formatting": "format",
+    "scanning": "scan",
+    "submitting": "submit",
+    "tagging": "tag",
+    "shipping": "ship",
+    "pinning": "pin",
+    "cutting": "cut",
+    "hitting": "hit",
+    "beginning": "begin",
+    "trimming": "trim",
+    "spinning": "spin",
+    "stepping": "step",
+    "wrapping": "wrap",
+    "snapping": "snap",
+    "plugging": "plug",
+    "skipping": "skip",
+    "flagging": "flag",
+    "swapping": "swap",
+    "popping": "pop",
+    "slotting": "slot",
+    "clipping": "clip",
+    "tapping": "tap",
+    "chatting": "chat",
+    "committing": "commit",
+    "occurring": "occur",
+    "referring": "refer",
+    "transferring": "transfer",
+    "deferring": "defer",
+    "preferring": "prefer",
+    "permitting": "permit",
+    "omitting": "omit",
+    "quitting": "quit",
+    "splitting": "split",
+    "sitting": "sit",
+    "plotting": "plot",
+    "spotting": "spot",
+    "betting": "bet",
+    "netting": "net",
+    "writing": "write",
+    "making": "make",
+    "using": "use",
+    "providing": "provide",
+    "upgrading": "upgrade",
+    "including": "include",
+    "excluding": "exclude",
+    "overriding": "override",
+    "guiding": "guide",
+    "deciding": "decide",
+    "taking": "take",
+    "invoking": "invoke",
+    "closing": "close",
+    "browsing": "browse",
+    "composing": "compose",
+    "choosing": "choose",
+    "deleting": "delete",
+    "completing": "complete",
+    "executing": "execute",
+    "defining": "define",
+    "refining": "refine",
+    "combining": "combine",
+    "typing": "type",
+    "shaping": "shape",
+    "piping": "pipe",
+    "changing": "change",
+    "merging": "merge",
+    "purging": "purge",
+    "describing": "describe",
+    "subscribing": "subscribe",
+    "naming": "name",
+    "consuming": "consume",
+    "assuming": "assume",
+    "resuming": "resume",
+    "syncing": "sync",
+    "modeling": "model",
+    "labeling": "label",
+    "leveling": "level",
+    "canceling": "cancel",
+    "traveling": "travel",
+    "channeling": "channel",
+    "signaling": "signal",
+    "tunneling": "tunnel"
+}
+
+result := lookup[lower]
+if result != undefined {
+    suggestions = append(suggestions, text.to_upper(result[0:1]) + result[1:])
+} else if text.has_suffix(word, "ating") {
+    base := text.trim_suffix(word, "ating")
+    suggestions = append(suggestions, base + "ate")
+} else if text.has_suffix(word, "aging") {
+    base := text.trim_suffix(word, "aging")
+    suggestions = append(suggestions, base + "age")
+} else if text.has_suffix(word, "izing") {
+    base := text.trim_suffix(word, "izing")
+    suggestions = append(suggestions, base + "ize")
+} else if text.has_suffix(word, "ising") {
+    base := text.trim_suffix(word, "ising")
+    suggestions = append(suggestions, base + "ise")
+} else if text.has_suffix(word, "uring") {
+    base := text.trim_suffix(word, "uring")
+    suggestions = append(suggestions, base + "ure")
+} else if text.has_suffix(word, "ving") {
+    base := text.trim_suffix(word, "ving")
+    suggestions = append(suggestions, base + "ve")
+} else if text.has_suffix(word, "cing") {
+    base := text.trim_suffix(word, "cing")
+    suggestions = append(suggestions, base + "ce")
+} else if text.has_suffix(word, "ling") && !text.has_suffix(word, "lling") {
+    base := text.trim_suffix(word, "ling")
+    suggestions = append(suggestions, base + "le")
+} else {
+    base := text.trim_suffix(word, "ing")
+    suggestions = append(suggestions, base)
+}
+
+suggestions

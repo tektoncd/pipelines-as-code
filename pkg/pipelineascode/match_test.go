@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
@@ -737,7 +737,7 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 				ConsoleURL: "https://console.url",
 			}
 			vcx := &ghprovider.Provider{
-				Token:  github.Ptr("None"),
+				Token:  new("None"),
 				Logger: logger,
 			}
 			vcx.SetGithubClient(fakeclient)
@@ -1007,7 +1007,7 @@ func TestVerifyRepoAndUser(t *testing.T) {
 				},
 			)
 
-			vcx := &ghprovider.Provider{Token: github.Ptr("token"), Logger: logger}
+			vcx := &ghprovider.Provider{Token: new("token"), Logger: logger}
 			vcx.SetGithubClient(ghClient)
 			vcx.SetPacInfo(pacInfo)
 

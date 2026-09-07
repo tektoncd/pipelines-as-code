@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
@@ -60,18 +60,18 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 
 		event := github.IssueCommentEvent{
 			Comment: &github.IssueComment{
-				Body: github.Ptr(`/ok-to-test`),
+				Body: new(`/ok-to-test`),
 			},
 			Installation: &github.Installation{
 				ID: &installID,
 			},
-			Action: github.Ptr("created"),
+			Action: new("created"),
 			Issue: &github.Issue{
-				State: github.Ptr("open"),
+				State: new("open"),
 				PullRequestLinks: &github.PullRequestLinks{
-					HTMLURL: github.Ptr(fmt.Sprintf("%s/pull/%d", runevent.URL, g.PRNumber)),
+					HTMLURL: new(fmt.Sprintf("%s/pull/%d", runevent.URL, g.PRNumber)),
 				},
-				Number: github.Ptr(g.PRNumber),
+				Number: new(g.PRNumber),
 			},
 			Repo: &github.Repository{
 				DefaultBranch: &runevent.DefaultBranch,
@@ -80,7 +80,7 @@ func TestGithubGHEPullRequestOkToTest(t *testing.T) {
 				Owner:         &github.User{Login: &runevent.Organization},
 			},
 			Sender: &github.User{
-				Login: github.Ptr(sender),
+				Login: new(sender),
 			},
 		}
 

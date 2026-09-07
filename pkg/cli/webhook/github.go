@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
@@ -130,18 +130,18 @@ func (gh *gitHubConfig) askGHWebhookConfig(repoURL, controllerURL, apiURL, perso
 
 func (gh *gitHubConfig) create(ctx context.Context) error {
 	hook := &github.Hook{
-		Name:   github.Ptr("web"),
-		Active: github.Ptr(true),
+		Name:   new("web"),
+		Active: new(true),
 		Events: []string{
 			"issue_comment",
 			triggertype.PullRequest.String(),
 			"push",
 		},
 		Config: &github.HookConfig{
-			URL:         github.Ptr(gh.controllerURL),
-			ContentType: github.Ptr("json"),
-			InsecureSSL: github.Ptr("0"),
-			Secret:      github.Ptr(gh.webhookSecret),
+			URL:         new(gh.controllerURL),
+			ContentType: new("json"),
+			InsecureSSL: new("0"),
+			Secret:      new(gh.webhookSecret),
 		},
 	}
 

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
@@ -59,7 +59,7 @@ func testRetestAfterPruning(ctx context.Context, t *testing.T, g *tgithub.PRTest
 	g.Cnx.Clients.Log.Infof("Posting /retest comment on PR %d", g.PRNumber)
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/retest")})
+		github.IssueCommentRequest{Body: "/retest"})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for retest PipelineRun to finish")

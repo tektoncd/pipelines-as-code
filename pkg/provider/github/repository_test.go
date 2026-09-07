@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -26,7 +26,7 @@ func TestConfigureRepository(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 
-	testEvent := github.RepositoryEvent{Action: github.Ptr("updated")}
+	testEvent := github.RepositoryEvent{Action: new("updated")}
 	repoUpdatedEvent, err := json.Marshal(testEvent)
 	assert.NilError(t, err)
 
@@ -34,7 +34,7 @@ func TestConfigureRepository(t *testing.T) {
 	testRepoOwner := "pac"
 	testURL := fmt.Sprintf("https://github.com/%v/%v", testRepoOwner, testRepoName)
 
-	testCreateEvent := github.RepositoryEvent{Action: github.Ptr("created"), Repo: &github.Repository{HTMLURL: github.Ptr(testURL)}}
+	testCreateEvent := github.RepositoryEvent{Action: new("created"), Repo: &github.Repository{HTMLURL: new(testURL)}}
 	repoCreateEvent, err := json.Marshal(testCreateEvent)
 	assert.NilError(t, err)
 
@@ -187,7 +187,7 @@ func TestGenerateNamespaceAndRepositoryName(t *testing.T) {
 			repoTemplate: "",
 			gitEvent: &github.RepositoryEvent{
 				Repo: &github.Repository{
-					HTMLURL: github.Ptr("https://github.com/user/pac"),
+					HTMLURL: new("https://github.com/user/pac"),
 				},
 			},
 			want:     "pac-pipelines",
@@ -199,7 +199,7 @@ func TestGenerateNamespaceAndRepositoryName(t *testing.T) {
 			repoTemplate: "{{repo_owner}}-{{repo_name}}-repo-cr",
 			gitEvent: &github.RepositoryEvent{
 				Repo: &github.Repository{
-					HTMLURL: github.Ptr("https://github.com/user/pac"),
+					HTMLURL: new("https://github.com/user/pac"),
 				},
 			},
 			want:     "user-pac-ci",
@@ -210,7 +210,7 @@ func TestGenerateNamespaceAndRepositoryName(t *testing.T) {
 			nsTemplate: "{{repo_owner}}-{{repo_name}}-ci",
 			gitEvent: &github.RepositoryEvent{
 				Repo: &github.Repository{
-					HTMLURL: github.Ptr("https://github.com/user/pac"),
+					HTMLURL: new("https://github.com/user/pac"),
 				},
 			},
 			want:     "user-pac-ci",
@@ -221,7 +221,7 @@ func TestGenerateNamespaceAndRepositoryName(t *testing.T) {
 			repoTemplate: "{{repo_owner}}-{{repo_name}}-repo-cr",
 			gitEvent: &github.RepositoryEvent{
 				Repo: &github.Repository{
-					HTMLURL: github.Ptr("https://github.com/user/pac"),
+					HTMLURL: new("https://github.com/user/pac"),
 				},
 			},
 			want:     "pac-pipelines",

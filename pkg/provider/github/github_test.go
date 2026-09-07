@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -378,9 +378,9 @@ func TestGetTektonDir(t *testing.T) {
 					tt.event.Organization, tt.event.Repository, tt.event.DefaultBranch),
 					func(rw http.ResponseWriter, _ *http.Request) {
 						branch := &github.Branch{
-							Name: github.Ptr(tt.event.DefaultBranch),
+							Name: new(tt.event.DefaultBranch),
 							Commit: &github.RepositoryCommit{
-								SHA: github.Ptr(shaDir),
+								SHA: new(shaDir),
 							},
 						}
 						b, _ := json.Marshal(branch)
@@ -467,9 +467,9 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 							SHA: &event.SHA,
 							Entries: []*github.TreeEntry{
 								{
-									Path: github.Ptr(".tekton"),
-									Type: github.Ptr("tree"),
-									SHA:  github.Ptr("tektondirsha"),
+									Path: new(".tekton"),
+									Type: new("tree"),
+									SHA:  new("tektondirsha"),
 								},
 							},
 						}
@@ -485,14 +485,14 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 							SHA: &tektonDirSha,
 							Entries: []*github.TreeEntry{
 								{
-									Path: github.Ptr("pipeline.yaml"),
-									Type: github.Ptr("blob"),
-									SHA:  github.Ptr("pipelinesha"),
+									Path: new("pipeline.yaml"),
+									Type: new("blob"),
+									SHA:  new("pipelinesha"),
 								},
 								{
-									Path: github.Ptr("pipelinerun.yaml"),
-									Type: github.Ptr("blob"),
-									SHA:  github.Ptr("pipelinerunsha"),
+									Path: new("pipelinerun.yaml"),
+									Type: new("blob"),
+									SHA:  new("pipelinerunsha"),
 								},
 							},
 						}
@@ -523,9 +523,9 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 
 				mux.HandleFunc("/repos/tekton/cat/branches/main", func(rw http.ResponseWriter, _ *http.Request) {
 					branch := &github.Branch{
-						Name: github.Ptr("main"),
+						Name: new("main"),
 						Commit: &github.RepositoryCommit{
-							SHA: github.Ptr(resolvedSHA),
+							SHA: new(resolvedSHA),
 						},
 					}
 					b, _ := json.Marshal(branch)
@@ -533,12 +533,12 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 				})
 				mux.HandleFunc("/repos/tekton/cat/git/trees/"+resolvedSHA, func(rw http.ResponseWriter, _ *http.Request) {
 					tree := &github.Tree{
-						SHA: github.Ptr(resolvedSHA),
+						SHA: new(resolvedSHA),
 						Entries: []*github.TreeEntry{
 							{
-								Path: github.Ptr(".tekton"),
-								Type: github.Ptr("tree"),
-								SHA:  github.Ptr(tektonDirSHA),
+								Path: new(".tekton"),
+								Type: new("tree"),
+								SHA:  new(tektonDirSHA),
 							},
 						},
 					}
@@ -547,17 +547,17 @@ func TestGetTektonDirGraphQL(t *testing.T) {
 				})
 				mux.HandleFunc("/repos/tekton/cat/git/trees/"+tektonDirSHA, func(rw http.ResponseWriter, _ *http.Request) {
 					tree := &github.Tree{
-						SHA: github.Ptr(tektonDirSHA),
+						SHA: new(tektonDirSHA),
 						Entries: []*github.TreeEntry{
 							{
-								Path: github.Ptr("pipeline.yaml"),
-								Type: github.Ptr("blob"),
-								SHA:  github.Ptr("pipeline-sha"),
+								Path: new("pipeline.yaml"),
+								Type: new("blob"),
+								SHA:  new("pipeline-sha"),
 							},
 							{
-								Path: github.Ptr("pipelinerun.yaml"),
-								Type: github.Ptr("blob"),
-								SHA:  github.Ptr("pipelinerun-sha"),
+								Path: new("pipelinerun.yaml"),
+								Type: new("blob"),
+								SHA:  new("pipelinerun-sha"),
 							},
 						},
 					}
@@ -2730,11 +2730,11 @@ func TestSkipPushEventForPRCommits(t *testing.T) {
 			pacInfoEnabled: true,
 			pushEvent: &github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Name:  github.Ptr("testRepo"),
-					Owner: &github.User{Login: github.Ptr("testOrg")},
+					Name:  new("testRepo"),
+					Owner: &github.User{Login: new("testOrg")},
 				},
 				HeadCommit: &github.HeadCommit{
-					ID: github.Ptr("abc123"),
+					ID: new("abc123"),
 				},
 			},
 			mockAPIs: map[string]func(rw http.ResponseWriter, r *http.Request){
@@ -2752,19 +2752,19 @@ func TestSkipPushEventForPRCommits(t *testing.T) {
 			pacInfoEnabled: true,
 			pushEvent: &github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Name:          github.Ptr("testRepo"),
-					Owner:         &github.User{Login: github.Ptr("testOrg")},
-					DefaultBranch: github.Ptr("main"),
-					HTMLURL:       github.Ptr("https://github.com/testOrg/testRepo"),
-					ID:            github.Ptr(iid),
+					Name:          new("testRepo"),
+					Owner:         &github.User{Login: new("testOrg")},
+					DefaultBranch: new("main"),
+					HTMLURL:       new("https://github.com/testOrg/testRepo"),
+					ID:            new(iid),
 				},
 				HeadCommit: &github.HeadCommit{
-					ID:      github.Ptr("abc123"),
-					URL:     github.Ptr("https://github.com/testOrg/testRepo/commit/abc123"),
-					Message: github.Ptr("Test commit message"),
+					ID:      new("abc123"),
+					URL:     new("https://github.com/testOrg/testRepo/commit/abc123"),
+					Message: new("Test commit message"),
 				},
-				Ref:    github.Ptr("refs/heads/main"),
-				Sender: &github.User{Login: github.Ptr("testUser")},
+				Ref:    new("refs/heads/main"),
+				Sender: &github.User{Login: new("testUser")},
 			},
 			mockAPIs: map[string]func(rw http.ResponseWriter, r *http.Request){
 				"/repos/testOrg/testRepo/pulls": func(rw http.ResponseWriter, r *http.Request) {
@@ -2785,19 +2785,19 @@ func TestSkipPushEventForPRCommits(t *testing.T) {
 			pacInfoEnabled: false,
 			pushEvent: &github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Name:          github.Ptr("testRepo"),
-					Owner:         &github.User{Login: github.Ptr("testOrg")},
-					DefaultBranch: github.Ptr("main"),
-					HTMLURL:       github.Ptr("https://github.com/testOrg/testRepo"),
-					ID:            github.Ptr(iid),
+					Name:          new("testRepo"),
+					Owner:         &github.User{Login: new("testOrg")},
+					DefaultBranch: new("main"),
+					HTMLURL:       new("https://github.com/testOrg/testRepo"),
+					ID:            new(iid),
 				},
 				HeadCommit: &github.HeadCommit{
-					ID:      github.Ptr("abc123"),
-					URL:     github.Ptr("https://github.com/testOrg/testRepo/commit/abc123"),
-					Message: github.Ptr("Test commit message"),
+					ID:      new("abc123"),
+					URL:     new("https://github.com/testOrg/testRepo/commit/abc123"),
+					Message: new("Test commit message"),
 				},
-				Ref:    github.Ptr("refs/heads/main"),
-				Sender: &github.User{Login: github.Ptr("testUser")},
+				Ref:    new("refs/heads/main"),
+				Sender: &github.User{Login: new("testUser")},
 			},
 			isPartOfPR: false, // This should not be checked when feature is disabled
 			wantErr:    false,
@@ -2807,11 +2807,11 @@ func TestSkipPushEventForPRCommits(t *testing.T) {
 			pacInfoEnabled: true,
 			pushEvent: &github.PushEvent{
 				Repo: &github.PushEventRepository{
-					Name:  github.Ptr("testRepo"),
-					Owner: &github.User{Login: github.Ptr("testOrg")},
+					Name:  new("testRepo"),
+					Owner: &github.User{Login: new("testOrg")},
 				},
 				HeadCommit: &github.HeadCommit{
-					ID: github.Ptr("1234"),
+					ID: new("1234"),
 				},
 			},
 			mockAPIs: map[string]func(rw http.ResponseWriter, r *http.Request){
