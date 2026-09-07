@@ -173,6 +173,12 @@ func (l *listener) Start(ctx context.Context) error {
 
 func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
+		start := time.Now()
+		eventID := getProviderEventIDFromHeader(request.Header)
+		eventLogger := l.logger.With("event-id", eventID)
+		defer func() {
+			eventLogger.Infof("controller responded to event %s in %dms", eventID, time.Since(start).Milliseconds())
+		}()
 		if request.Method != http.MethodPost {
 			l.writeResponse(response, http.StatusOK, "ok")
 			return
@@ -270,7 +276,11 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		localRequest := request.Clone(request.Context())
 
 		go func() {
-			defer span.End()
+			eventHandlerStart := time.Now()
+			defer func() {
+				logger.Infof("event %s processed in %dms", eventID, time.Since(eventHandlerStart).Milliseconds())
+				span.End()
+			}()
 			err := s.handleEvent(tracedCtx, localRequest)
 			if err != nil {
 				span.RecordError(err)
@@ -279,6 +289,30 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 
 		l.writeResponse(response, http.StatusAccepted, "accepted")
 	}
+}
+
+func getProviderEventIDFromHeader(header http.Header) string {
+	if header.Get("X-GitHub-Delivery") != "" {
+		return header.Get("X-GitHub-Delivery")
+	}
+	// For Gitea/Forgejo
+	if header.Get("X-Gitea-Delivery") != "" {
+		return header.Get("X-Gitea-Delivery")
+	}
+	// For GitLab
+	if header.Get("X-Gitlab-Event-UUID") != "" {
+		return header.Get("X-Gitlab-Event-UUID")
+	}
+	// For Bitbucket cloud
+	if header.Get("X-Request-UUID") != "" {
+		return header.Get("X-Request-UUID")
+	}
+	// For Bitbucket data center
+	if header.Get("X-Request-Id") != "" {
+		return header.Get("X-Request-Id")
+	}
+	// return nil UUID to indicate that git provider is unknown
+	return "00000000-0000-0000-0000-000000000000"
 }
 
 func (l listener) processRes(processEvent bool, provider provider.Interface, logger *zap.SugaredLogger, skipReason string, err error) (provider.Interface, *zap.SugaredLogger, error) {
