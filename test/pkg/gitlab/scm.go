@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const forkImportTimeout = 10 * time.Minute
+
 // CreateGitLabProject creates a new GitLab project inside a group and adds
 // a webhook pointing to the given hookURL (for example, a smee channel URL
 // used to forward events to the controller). The project is initialised with
@@ -105,7 +107,43 @@ func ForkGitLabProject(client *gitlab.Client, projectID int, namespacePath strin
 
 	logger.Infof("Forked GitLab project into %s (ID %d)", project.PathWithNamespace, project.ID)
 
+	if err := waitForForkRepositoryReady(client, int(project.ID), logger); err != nil {
+		return nil, err
+	}
+
 	return project, nil
+}
+
+// waitForForkRepositoryReady polls the forked project until GitLab reports
+// its repository import as finished. Forking is asynchronous: the API call
+// that creates the fork returns before the underlying git repository is
+// necessarily clonable, so callers that immediately fetch from the fork (for
+// example via "git remote add -f") can otherwise race GitLab and see
+// "repository does not exist yet".
+func waitForForkRepositoryReady(client *gitlab.Client, projectID int, logger *zap.SugaredLogger) error {
+	deadline := time.Now().Add(forkImportTimeout)
+	for {
+		project, _, err := client.Projects.GetProject(projectID, nil)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timed out waiting to check fork import status for project %d: %w", projectID, err)
+			}
+			logger.Warnf("Failed to check fork import status for project %d: %v; retrying", projectID, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		switch project.ImportStatus {
+		case "", "none", "finished":
+			return nil
+		case "failed":
+			return fmt.Errorf("fork import failed for project %d: %s", projectID, project.ImportError)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for fork import to finish for project %d (last status: %q)", projectID, project.ImportStatus)
+		}
+		logger.Infof("Waiting for fork import to finish for project %d (status: %q)", projectID, project.ImportStatus)
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func AddGitLabProjectMember(client *gitlab.Client, projectID int, userID int64, accessLevel gitlab.AccessLevelValue, logger *zap.SugaredLogger) error {
