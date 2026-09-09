@@ -144,8 +144,9 @@ func TestProviderDetect(t *testing.T) {
 
 			header := http.Header{}
 			header.Set("X-Event-Key", tt.eventType)
+			header.Set("X-Request-UUID", "1234567890")
 			req := &http.Request{Header: header}
-			isBS, processReq, _, reason, err := bprovider.Detect(req, string(jeez), logger)
+			isBS, processReq, logger, reason, err := bprovider.Detect(req, string(jeez), logger)
 			if tt.wantErrString != "" {
 				assert.ErrorContains(t, err, tt.wantErrString)
 				return
@@ -160,6 +161,17 @@ func TestProviderDetect(t *testing.T) {
 
 			if tt.wantLogSnippet != "" {
 				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantLogSnippet).Len() > 0, logCatcher.All())
+			}
+
+			logger.Info("generate a log message to check if event-id is added to the logger")
+
+			logs := logCatcher.All()
+			for _, entry := range logs {
+				for _, field := range entry.Context {
+					if field.Key == "event-id" {
+						assert.Equal(t, field.String, "1234567890")
+					}
+				}
 			}
 		})
 	}
