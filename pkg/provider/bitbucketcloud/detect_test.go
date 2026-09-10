@@ -163,16 +163,23 @@ func TestProviderDetect(t *testing.T) {
 				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantLogSnippet).Len() > 0, logCatcher.All())
 			}
 
+			if !tt.isBC {
+				return
+			}
+
 			logger.Info("generate a log message to check if event-id is added to the logger")
 
+			found := false
 			logs := logCatcher.All()
 			for _, entry := range logs {
 				for _, field := range entry.Context {
 					if field.Key == "event-id" {
 						assert.Equal(t, field.String, "1234567890")
+						found = true
 					}
 				}
 			}
+			assert.Assert(t, found, "event-id not found in the logs")
 		})
 	}
 }
