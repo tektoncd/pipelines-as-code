@@ -6,6 +6,7 @@
 [![E2E Tests](https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml/badge.svg)](https://github.com/tektoncd/pipelines-as-code/actions/workflows/e2e.yaml)
 [![codecov](https://codecov.io/gh/tektoncd/pipelines-as-code/branch/main/graph/badge.svg)](https://codecov.io/gh/tektoncd/pipelines-as-code)
 [![License](https://img.shields.io/github/license/tektoncd/pipelines-as-code)](LICENSE)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code?ref=badge_shield)
 
 <img src="docs/static/images/pac-logo-with-tagline-small.png" alt="PAC LOGO" width="300" align="right"/>
 
@@ -102,3 +103,6 @@ Releases: <https://github.com/tektoncd/pipelines-as-code/releases>
 ## License
 
 [Apache 2.0](LICENSE)
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Ftektoncd%2Fpipelines-as-code?ref=badge_large)
