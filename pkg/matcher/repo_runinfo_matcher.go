@@ -17,16 +17,17 @@ import (
 var ErrRepositoryNameConflict = errors.New("multiple repositories exist with the given name")
 
 func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*apipac.Repository, error) {
-	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
-		ctx, metav1.ListOptions{},
-	)
+	repoItems, err := cs.ListRepositories(ctx, ns)
 	if err != nil {
 		return nil, err
 	}
-	sort.RepositorySortByCreationOldestTime(repositories.Items)
-	for _, repo := range repositories.Items {
-		repo.Spec.URL = strings.TrimSuffix(repo.Spec.URL, "/")
-		if repo.Spec.URL == event.URL {
+
+	sort.RepositorySortByCreationOldestTime(repoItems)
+	eventURL := strings.TrimSuffix(event.URL, "/")
+
+	for _, repo := range repoItems {
+		repoURL := strings.TrimSuffix(repo.Spec.URL, "/")
+		if repoURL == eventURL {
 			return &repo, nil
 		}
 	}
@@ -37,20 +38,42 @@ func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, n
 // GetRepoByName get a repo by name anywhere on a cluster.
 // Parameter 'ns' may optionally be supplied in case of a naming conflict.
 func GetRepoByName(ctx context.Context, cs *params.Run, repoName, ns string) (*apipac.Repository, error) {
-	repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
-		ctx, metav1.ListOptions{
-			FieldSelector: "metadata.name==" + repoName,
-		},
-	)
+	// No namespace: the direct API path filters by name server-side, which the
+	// lister cannot do, so keep it as a dedicated branch.
+	if cs.RepositoryLister == nil {
+		repositories, err := cs.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(
+			ctx, metav1.ListOptions{
+				FieldSelector: "metadata.name==" + repoName,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return repoByUniqueName(repositories.Items)
+	}
+
+	// Use the lister with the provided namespace (empty means all namespaces).
+	allRepos, err := cs.ListRepositories(ctx, ns)
 	if err != nil {
 		return nil, err
 	}
+	var matching []apipac.Repository
+	for _, repo := range allRepos {
+		if repo.Name == repoName {
+			matching = append(matching, repo)
+		}
+	}
+	return repoByUniqueName(matching)
+}
 
-	switch len(repositories.Items) {
+// repoByUniqueName returns the sole repository in repos, nil when there are
+// none, or ErrRepositoryNameConflict when more than one share the name.
+func repoByUniqueName(repos []apipac.Repository) (*apipac.Repository, error) {
+	switch len(repos) {
 	case 0:
 		return nil, nil
 	case 1:
-		return &repositories.Items[0], nil
+		return &repos[0], nil
 	default:
 		return nil, ErrRepositoryNameConflict
 	}

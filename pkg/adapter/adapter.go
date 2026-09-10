@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/system"
@@ -201,15 +200,6 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		event := info.NewEvent()
 		pacInfo := l.run.Info.GetPacOpts()
 
-		globalRepo, err := l.run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(l.run.Info.Kube.Namespace).Get(
-			ctx, l.run.Info.Controller.GlobalRepository, metav1.GetOptions{},
-		)
-		if err == nil && globalRepo != nil {
-			l.logger.Infof("detected global repository settings named %s in namespace %s", l.run.Info.Controller.GlobalRepository, l.run.Info.Kube.Namespace)
-		} else {
-			globalRepo = &v1alpha1.Repository{}
-		}
-
 		detected, configuring, err := github.ConfigureRepository(ctx, l.run, request, string(payload), &pacInfo, l.logger)
 		if detected {
 			if configuring && err == nil {
@@ -254,6 +244,16 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 			tracedCtx, "PipelinesAsCode:ProcessEvent",
 			trace.WithSpanKind(trace.SpanKindServer),
 		)
+
+		globalRepo, err := l.run.GetRepository(ctx, l.run.Info.Kube.Namespace, l.run.Info.Controller.GlobalRepository)
+		if err == nil && globalRepo != nil {
+			l.logger.Infof("detected global repository settings named %s in namespace %s", l.run.Info.Controller.GlobalRepository, l.run.Info.Kube.Namespace)
+		} else {
+			if err != nil {
+				logger.Infof("global repository lookup failed: %v, continuing with empty global config", err)
+			}
+			globalRepo = &v1alpha1.Repository{}
+		}
 
 		s := sinker{
 			run:        l.run,

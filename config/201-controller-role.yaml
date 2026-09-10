@@ -79,7 +79,7 @@ rules:
     verbs: ["get", "update"]
   - apiGroups: ["pipelinesascode.tekton.dev"]
     resources: ["repositories"]
-    verbs: ["get", "create", "list"]
+    verbs: ["get", "create", "list", "watch"]
   - apiGroups: ["tekton.dev"]
     resources: ["pipelineruns"]
     verbs: ["get", "list", "create", "patch"]

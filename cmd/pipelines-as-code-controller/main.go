@@ -5,13 +5,18 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/adapter"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/informer/transform"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	evadapter "knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/pkg/client/injection/kube/client"
+	"knative.dev/pkg/controller"
+	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/signals"
@@ -31,9 +36,30 @@ func main() {
 		log.Fatal("failed to init clients : ", err)
 	}
 
+	// Set up injection context for informers, same way as the watcher does.
+	cfg := injection.ParseAndGetRESTConfigOrDie()
+	ctx = controller.WithResyncPeriod(ctx, 10*time.Minute)
+	ctx, informers := injection.Default.SetupInformers(ctx, cfg)
+
+	// Register the informer and set the cache transform before starting informers.
+	// SetTransform must happen before the informer starts. Trim cached objects
+	// the same way the watcher does to keep the cache footprint small.
+	repoInformer := repository.Get(ctx)
+	if err := repoInformer.Informer().SetTransform(transform.RepositoryForCache); err != nil {
+		log.Fatal("failed to set transform on repository informer: ", err)
+	}
+	run.RepositoryLister = repoInformer.Lister()
+
 	kinteract, err := kubeinteraction.NewKubernetesInteraction(run)
 	if err != nil {
 		log.Fatal("failed to init kinit client : ", err)
+	}
+
+	// Start all informers and wait for cache sync before processing webhooks.
+	// controller.StartInformers starts each informer in its own goroutine and waits
+	// for all caches to sync, ensuring RepositoryLister has an up-to-date view.
+	if err := controller.StartInformers(ctx.Done(), informers...); err != nil {
+		log.Fatalf("failed to start and sync informers: %v", err)
 	}
 
 	loggerConfiguratorOpt := evadapter.WithLoggerConfiguratorConfigMapName(logging.ConfigMapName())
