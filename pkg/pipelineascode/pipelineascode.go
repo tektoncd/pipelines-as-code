@@ -116,8 +116,8 @@ func (p *PacRun) Run(ctx context.Context) error {
 	// Defensive skip-CI check: this is a safety net in case events bypass the early check in sinker.
 	// Primary skip detection happens in sinker.processEvent() for performance, but this ensures
 	// nothing slips through (e.g., tests that call Run() directly, or edge cases).
-	// Skip only for non-GitOps events (GitOps commands can override skip-CI).
-	if p.event.HasSkipCommand && !opscomments.IsAnyOpsEventType(p.event.EventType) {
+	// Skip only for non-GitOps events (GitOps commands can override skip-CI) and incoming webhook triggers/events.
+	if p.event.HasSkipCommand && !opscomments.IsAnyOpsEventType(p.event.EventType) && p.event.EventType != triggertype.Incoming.String() {
 		p.logger.Infof("CI skipped: commit contains skip command in message (secondary check)")
 		return nil
 	}
