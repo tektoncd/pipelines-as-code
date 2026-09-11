@@ -35,7 +35,8 @@ func CreateCRD(ctx context.Context, t *testing.T, bprovider bitbucketcloud.Provi
 			Name: targetNS,
 		},
 		Spec: v1alpha1.RepositorySpec{
-			URL: links.HTML.HRef,
+			URL:      links.HTML.HRef,
+			Settings: opts.Settings,
 		},
 	}
 	err = pacrepo.CreateNS(ctx, targetNS, run)

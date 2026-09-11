@@ -26,7 +26,7 @@ func TestBitbucketDataCenterCELPathChangeOnPush(t *testing.T) {
 	ctx, runcnx, opts, client, err := tbbs.Setup(ctx)
 	assert.NilError(t, err)
 
-	repo := tbbs.CreateCRD(ctx, t, client, runcnx, bitbucketWSOwner, targetNS)
+	repo := tbbs.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
 	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
 	defer tbbs.TearDownNs(ctx, t, runcnx, targetNS)
 

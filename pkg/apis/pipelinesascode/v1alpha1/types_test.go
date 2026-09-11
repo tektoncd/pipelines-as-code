@@ -343,6 +343,92 @@ func TestMergeSpecs(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "status check from global",
+			local: &RepositorySpec{
+				Settings:    &Settings{},
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
+		{
+			name: "local status check takes precedence",
+			local: &RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "neutral",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "skipped",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
+		{
+			name: "nil local settings inherits global status check",
+			local: &RepositorySpec{
+				GitProvider: &GitProvider{},
+			},
+			global: RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "success",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+			expected: &RepositorySpec{
+				Settings: &Settings{
+					StatusChecks: &StatusChecks{
+						Enabled:             true,
+						Mode:                "per_pipelinerun",
+						UnmatchedConclusion: "success",
+					},
+				},
+				GitProvider: &GitProvider{},
+			},
+		},
 	}
 
 	for _, tt := range tests {

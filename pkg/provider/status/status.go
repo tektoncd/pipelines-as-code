@@ -34,4 +34,5 @@ type StatusOpts struct {
 	Title                    string
 	InstanceCountForCheckRun int
 	AccessDenied             bool
+	IsUnmatchedReport        bool // if true, the status is reported for unmatched pipelineruns
 }

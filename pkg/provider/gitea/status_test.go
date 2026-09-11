@@ -163,6 +163,7 @@ func TestProviderCreateStatus(t *testing.T) {
 }
 
 func TestProviderCreateStatusCommit(t *testing.T) {
+	commentCreationAPICalled := false
 	type args struct {
 		event   *info.Event
 		pacopts *info.PacOpts
@@ -172,6 +173,7 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 		name                            string
 		args                            args
 		wantErr                         bool
+		wantCommentCreationAPICalled    bool
 		wantCommentJSON, wantStatusJSON string
 	}{
 		{
@@ -252,8 +254,9 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 					SHA:               "123456",
 				},
 			},
-			wantStatusJSON:  `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
-			wantCommentJSON: `{"body":"\ntime to get started"}`,
+			wantCommentCreationAPICalled: true,
+			wantStatusJSON:               `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
+			wantCommentJSON:              `{"body":"\ntime to get started"}`,
 		},
 		{
 			name: "cancel",
@@ -274,8 +277,9 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 					SHA:               "123456",
 				},
 			},
-			wantStatusJSON:  `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
-			wantCommentJSON: `{"body":"\ntime to get started"}`,
+			wantCommentCreationAPICalled: true,
+			wantStatusJSON:               `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
+			wantCommentJSON:              `{"body":"\ntime to get started"}`,
 		},
 		{
 			name: "retest",
@@ -296,12 +300,57 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 					SHA:               "123456",
 				},
 			},
-			wantStatusJSON:  `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
-			wantCommentJSON: `{"body":"\ntime to get started"}`,
+			wantCommentCreationAPICalled: true,
+			wantStatusJSON:               `{"state":"pending","target_url":"","description":"Pipeline run for myapp has been triggered","context":"myapp"}`,
+			wantCommentJSON:              `{"body":"\ntime to get started"}`,
+		},
+		{
+			name: "skipped",
+			args: args{
+				status: status.StatusOpts{
+					Conclusion: status.ConclusionSkipped,
+					Title:      "Skipped",
+					Text:       "has <b>skipped</b>.",
+				},
+				pacopts: &info.PacOpts{Settings: settings.Settings{
+					ApplicationName: "myapp",
+				}},
+				event: &info.Event{
+					Organization:      "myorg",
+					Repository:        "myrepo",
+					PullRequestNumber: 1,
+					TriggerTarget:     "pull_request",
+					SHA:               "123456",
+				},
+			},
+			wantCommentCreationAPICalled: true,
+			wantStatusJSON:               `{"state":"success","target_url":"","description":"Skipped","context":"myapp"}`,
+			wantCommentJSON:              `{"body":"\nhas \u003cb\u003eskipped\u003c/b\u003e."}`,
+		},
+		{
+			name: "unmatched report",
+			args: args{
+				pacopts: &info.PacOpts{Settings: settings.Settings{
+					ApplicationName: "myapp",
+				}},
+				event: &info.Event{
+					Organization:      "myorg",
+					Repository:        "myrepo",
+					PullRequestNumber: 1,
+					TriggerTarget:     "pull_request",
+					SHA:               "123456",
+				},
+				status: status.StatusOpts{
+					Conclusion:        status.ConclusionSkipped,
+					IsUnmatchedReport: true,
+				},
+			},
+			wantStatusJSON: `{"state":"success","target_url":"","description":"","context":"myapp"}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			commentCreationAPICalled = false
 			fakeclient, mux, teardown := tgitea.Setup(t)
 			defer teardown()
 
@@ -322,6 +371,7 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 
 			// Mock the CreateIssueComment API
 			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/issues/%d/comments", tt.args.event.Organization, tt.args.event.Repository, tt.args.event.PullRequestNumber), func(rw http.ResponseWriter, r *http.Request) {
+				commentCreationAPICalled = true
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					http.Error(rw, "Failed to read request body", http.StatusInternalServerError)
@@ -341,6 +391,7 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 			if err := v.createStatusCommit(context.Background(), tt.args.event, tt.args.pacopts, tt.args.status); (err != nil) != tt.wantErr {
 				t.Errorf("Provider.createStatusCommit() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			assert.Equal(t, tt.wantCommentCreationAPICalled, commentCreationAPICalled)
 		})
 	}
 }

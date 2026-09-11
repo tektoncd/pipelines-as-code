@@ -4,6 +4,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	StatusCheckModePerPipelineRun = "per_pipelinerun"
+)
+
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -135,6 +139,10 @@ type Settings struct {
 	// AIAnalysis contains AI/LLM analysis configuration for automated CI/CD pipeline analysis.
 	// +optional
 	AIAnalysis *AIAnalysisConfig `json:"ai,omitempty"`
+
+	// StatusChecks configures the status checks for the repository.
+	// +optional
+	StatusChecks *StatusChecks `json:"status_checks,omitempty"`
 }
 
 type GitlabSettings struct {
@@ -182,6 +190,30 @@ type ForgejoSettings struct {
 	CommentStrategy string `json:"comment_strategy,omitempty"`
 }
 
+// StatusChecks configures the status checks for the repository.
+type StatusChecks struct {
+	// Enabled defines if the status checks should be reported. Default is false.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Mode defines how the status checks should be reported when is enabled.
+	// Options:
+	// - 'per_pipelinerun': Report the status check of each PipelineRun separately.
+	// +optional
+	// +kubebuilder:validation:Enum="";per_pipelinerun
+	Mode string `json:"mode,omitempty"`
+
+	// UnmatchedConclusion defines the conclusion to report when pipeline run is not matched. Default is 'skipped'.
+	// this will be used only if mode is 'per_pipelinerun'.
+	// Options:
+	// - 'success': Report as success.
+	// - 'neutral': Report as neutral.
+	// - 'skipped': Report as skipped. Default.
+	// +optional
+	// +kubebuilder:validation:Enum="";success;neutral;skipped
+	UnmatchedConclusion string `json:"unmatched_conclusion,omitempty"`
+}
+
 func (s *Settings) Merge(newSettings *Settings) {
 	if newSettings.PipelineRunProvenance != "" && s.PipelineRunProvenance == "" {
 		s.PipelineRunProvenance = newSettings.PipelineRunProvenance
@@ -210,6 +242,10 @@ func (s *Settings) Merge(newSettings *Settings) {
 
 	if newSettings.GitOpsCommandPrefix != "" && s.GitOpsCommandPrefix == "" {
 		s.GitOpsCommandPrefix = newSettings.GitOpsCommandPrefix
+	}
+
+	if newSettings.StatusChecks != nil && s.StatusChecks == nil {
+		s.StatusChecks = newSettings.StatusChecks
 	}
 }
 
