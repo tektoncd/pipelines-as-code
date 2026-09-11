@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
 
 import requests
+
 from config import Config
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -32,18 +33,18 @@ class GitHubClient:
             f"/{self.config.repo_name}/{endpoint}"
         )
 
-    def get_paginated(self, url: str) -> List[dict]:
+    def get_paginated(self, url: str) -> list[dict]:
         """Fetch all pages from a GitHub API endpoint."""
-        all_data: List[dict] = []
+        all_data: list[dict] = []
         headers = self._headers()
-        current_url: Optional[str] = url
+        current_url: str | None = url
 
         while current_url:
             response = requests.get(current_url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             if not isinstance(data, list):
-                raise ValueError(
+                raise TypeError(
                     "Expected list response from GitHub API, got"
                     f" {type(data).__name__} instead"
                 )
@@ -59,7 +60,7 @@ class GitHubClient:
 
         return all_data
 
-    def get_pr_info(self) -> Optional[dict]:
+    def get_pr_info(self) -> dict | None:
         """Get pull request information."""
         url = self._build_url(f"pulls/{self.config.pr_number}")
         headers = self._headers()
@@ -72,12 +73,12 @@ class GitHubClient:
             print(f"Error fetching PR info: {exc}")
             return None
 
-    def get_pr_files(self) -> List[str]:
+    def get_pr_files(self) -> list[str]:
         """Get list of files changed in the PR."""
         url = self._build_url(f"pulls/{self.config.pr_number}/files")
         try:
             files_data = self.get_paginated(url)
-            files_changed: List[str] = []
+            files_changed: list[str] = []
             for file_info in files_data:
                 status = file_info.get("status", "modified")[0].upper()
                 filename = file_info.get("filename", "")
@@ -87,7 +88,7 @@ class GitHubClient:
             print(f"Error fetching PR files: {exc}")
             return []
 
-    def get_pr_commits(self) -> List[dict]:
+    def get_pr_commits(self) -> list[dict]:
         """Get all commits in the PR."""
         url = self._build_url(f"pulls/{self.config.pr_number}/commits")
         try:
@@ -96,7 +97,7 @@ class GitHubClient:
             print(f"Error fetching PR commits: {exc}")
             return []
 
-    def get_available_labels(self) -> List[dict]:
+    def get_available_labels(self) -> list[dict]:
         """Get all available labels in the repository."""
         url = self._build_url("labels")
         try:
@@ -113,8 +114,8 @@ class GitHubClient:
             return []
 
     def create_issue(
-        self, title: str, body: str, labels: Optional[List[str]] = None
-    ) -> Optional[dict]:
+        self, title: str, body: str, labels: list[str] | None = None
+    ) -> dict | None:
         """Create a new GitHub issue."""
         url = self._build_url("issues")
         headers = self._headers()

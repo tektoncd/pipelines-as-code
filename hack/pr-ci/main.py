@@ -9,16 +9,16 @@
 """Main entry point for PR CI utilities."""
 
 import argparse
-from typing import List
 
 from comments import CommentManager
-from config import Config
 from gemini import GeminiAnalyzer, GeminiIssueGenerator
 from github import GitHubClient
 from jira import GeminiJiraGenerator, JiraClient
 from linter import PRLinter
 from pr_data import PRData
 from utils import check_file_categories, detect_modified_providers
+
+from config import Config
 
 
 def run_lint() -> None:
@@ -111,7 +111,7 @@ def run_update() -> None:
         detect_modified_providers(pr_data.files_changed) if has_provider else set()
     )
 
-    filtered_labels: List[str] = []
+    filtered_labels: list[str] = []
     for label in valid_labels:
         if label == "documentation" and not has_docs:
             print("Skipping 'documentation' label - no docs/ files modified")

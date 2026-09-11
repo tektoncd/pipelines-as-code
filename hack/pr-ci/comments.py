@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import requests
 from github import GitHubClient
 
@@ -17,7 +15,7 @@ class CommentManager:
         self.github = github
         self.marker = PR_TITLE_COMMENT_MARKER
 
-    def find_lint_comment(self) -> Optional[dict]:
+    def find_lint_comment(self) -> dict | None:
         """Find existing lint comment on the PR."""
         url = self.github._build_url(f"issues/{self.github.config.pr_number}/comments")
         try:
@@ -30,7 +28,7 @@ class CommentManager:
             print(f"Error fetching existing comments: {exc}")
         return None
 
-    def delete_comment(self, comment_id: Optional[int]) -> None:
+    def delete_comment(self, comment_id: int | None) -> None:
         """Delete a comment by ID."""
         if comment_id is None:
             return
@@ -48,9 +46,7 @@ class CommentManager:
         except requests.exceptions.RequestException as exc:
             print(f"Error deleting lint comment: {exc}")
 
-    def upsert_comment(
-        self, body: str, existing_comment: Optional[dict] = None
-    ) -> None:
+    def upsert_comment(self, body: str, existing_comment: dict | None = None) -> None:
         """Create or update lint comment."""
         if existing_comment is None:
             existing_comment = self.find_lint_comment()

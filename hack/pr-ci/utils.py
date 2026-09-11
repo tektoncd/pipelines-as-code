@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
 
 
-def detect_modified_providers(files_changed: List[str]) -> set[str]:
+def detect_modified_providers(files_changed: list[str]) -> set[str]:
     """Detect which provider subdirectories were modified."""
     providers = set()
     provider_pattern = re.compile(r"pkg/provider/(github|gitlab|gitea|bitbucket\w*)/")
@@ -24,7 +23,7 @@ def detect_modified_providers(files_changed: List[str]) -> set[str]:
     return providers
 
 
-def check_file_categories(files_changed: List[str]) -> Tuple[bool, bool, bool]:
+def check_file_categories(files_changed: list[str]) -> tuple[bool, bool, bool]:
     """Check which file categories are present in the changes.
 
     Returns:

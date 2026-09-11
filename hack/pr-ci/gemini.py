@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import List
 
 from google import genai
-from config import DEFAULT_MODEL
 from pr_data import PRData
+
+from config import DEFAULT_MODEL
 
 
 class GeminiAnalyzer:
@@ -20,9 +20,9 @@ class GeminiAnalyzer:
     def suggest_labels(
         self,
         pr_data: PRData,
-        available_labels: List[dict],
+        available_labels: list[dict],
         excluded_labels: set[str],
-    ) -> List[str]:
+    ) -> list[str]:
         """Analyze PR and suggest appropriate labels."""
         try:
             prompt = self._build_prompt(pr_data, available_labels, excluded_labels)
@@ -30,14 +30,14 @@ class GeminiAnalyzer:
                 model=self.model_name, contents=prompt
             )
             return self._parse_response(response)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:  # noqa: BLE001
             print(f"Error with Gemini API: {exc}")
             return []
 
     def _build_prompt(
         self,
         pr_data: PRData,
-        available_labels: List[dict],
+        available_labels: list[dict],
         excluded_labels: set[str],
     ) -> str:
         """Build the prompt for Gemini."""
@@ -45,7 +45,7 @@ class GeminiAnalyzer:
         files_text = "\n".join(pr_data.files_changed)
 
         # Format labels with descriptions
-        labels_with_descriptions: List[str] = []
+        labels_with_descriptions: list[str] = []
         for label in available_labels:
             if label["name"] in excluded_labels:
                 continue
@@ -86,7 +86,7 @@ IMPORTANT RESTRICTIONS:
 Respond with only a JSON array of label names that exist in the available labels list, like: ["enhancement", "backend"]
 """
 
-    def _parse_response(self, response) -> List[str]:
+    def _parse_response(self, response) -> list[str]:
         """Parse Gemini response to extract labels."""
         try:
             response_text = response.text.strip()
@@ -117,7 +117,7 @@ class GeminiIssueGenerator:
                 model=self.model_name, contents=prompt
             )
             return self._parse_response(response)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:  # noqa: BLE001
             print(f"Error with Gemini API: {exc}")
             return {}
 

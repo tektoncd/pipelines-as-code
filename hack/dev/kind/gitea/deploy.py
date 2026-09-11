@@ -18,7 +18,7 @@ GITEA_URL = os.environ.get("GITEA_URL", f"http://{GITEA_HOST}")
 GITEA_NS = os.environ.get("GITEA_NS", "gitea")
 GITEA_REPO_NAME_E2E = os.environ.get("GITEA_REPO_NAME", "pac-e2e")
 GITEA_REPO_NAME_PERSO = os.environ.get("GITEA_REPO_NAME_PERSO", "pac")
-OPENSHIFT_ROUTE_FORCE_HTTP = os.environ.get("OPENSHIFT_ROUTE_FORCE_HTTP", False)
+OPENSHIFT_ROUTE_FORCE_HTTP = os.environ.get("OPENSHIFT_ROUTE_FORCE_HTTP", "")
 PAC_CONTROLLER_NAMESPACE = os.environ.get(
     "PAC_CONTROLLER_NAMESPACE", "pipelines-as-code"
 )
@@ -45,8 +45,10 @@ class ProvisionGitea:
     gitea_host = GITEA_HOST
     gitea_url = GITEA_URL
     namespace = PAC_CONTROLLER_NAMESPACE
-    headers = {"Content-Type": "application/json"}
     token_name = "token"
+
+    def __init__(self):
+        self.headers = {"Content-Type": "application/json"}
 
     def apply_deployment_template(self):
         tmpl = os.path.join(os.path.dirname(__file__), "gitea-deployment.yaml")
@@ -116,7 +118,7 @@ class ProvisionGitea:
         resp.raise_for_status()
 
     def create_repo(self, reponame: str):
-        jeez = """ {"auto_init": true, "name": "%s"} """ % (reponame)
+        jeez = f""" {{"auto_init": true, "name": "{reponame}"}} """
         resp = requests.post(
             url=f"{self.gitea_url}/api/v1/user/repos",
             headers=self.headers,
@@ -128,10 +130,7 @@ class ProvisionGitea:
         resp.raise_for_status()
 
     def create_repo_hook(self, reponame: str):
-        jeez = (
-            """{"type": "gitea", "config": { "url": "%s", "content_type": "json"}, "events": ["push", "pull_request", "issue_comments"], "active": true}"""
-            % (GITEA_SMEE_HOOK_URL)
-        )
+        jeez = f"""{{"type": "gitea", "config": {{ "url": "{GITEA_SMEE_HOOK_URL}", "content_type": "json"}}, "events": ["push", "pull_request", "issue_comments"], "active": true}}"""
         resp = requests.post(
             url=f"{self.gitea_url}/api/v1/repos/{GITEA_USER}/{reponame}/hooks",
             headers=self.headers,
@@ -150,7 +149,7 @@ class ProvisionGitea:
             timeout=300,
             auth=(GITEA_USER, GITEA_PASSWORD),
         )
-        jeez = """{"name": "%s"}""" % (self.token_name)
+        jeez = f"""{{"name": "{self.token_name}"}}"""
         resp = requests.post(
             url=f"{self.gitea_url}/api/v1/users/{GITEA_USER}/tokens",
             headers=self.headers,
@@ -279,7 +278,7 @@ def main():
     m.create_user_in_pod()
     m.create_user_in_gitea()
     token = m.create_token_for_user()
-    for _, config in GITEA_REPOS.items():
+    for config in GITEA_REPOS.values():
         m.create_repo(config["name"])
         m.create_repo_hook(config["name"])
         if config["create_crd"]:

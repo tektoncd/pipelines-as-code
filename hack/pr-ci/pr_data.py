@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from github import GitHubClient
 
@@ -16,13 +15,13 @@ class PRData:
 
     title: str
     description: str
-    files_changed: List[str]
-    commit_messages: List[str]
-    pr_info: Optional[dict]
-    current_labels: List[str] = field(default_factory=list)
+    files_changed: list[str]
+    commit_messages: list[str]
+    pr_info: dict | None
+    current_labels: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_github(cls, github: GitHubClient) -> Optional["PRData"]:
+    def from_github(cls, github: GitHubClient) -> PRData | None:
         """Fetch PR data from GitHub API."""
         pr_info = github.get_pr_info()
         if not pr_info:
@@ -68,7 +67,7 @@ class PRData:
         return self.pr_info.get("html_url", "") if self.pr_info else ""
 
     @property
-    def comments(self) -> List[dict]:
+    def comments(self) -> list[dict]:
         """Get PR comments. Currently returns empty list - would need GitHub API extension."""
         # This would require additional GitHub API calls to fetch comments
         # For now, return empty list as comments aren't currently fetched in from_github

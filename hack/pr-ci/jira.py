@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
-from google import genai
 import requests
-from config import DEFAULT_MODEL, Config
+from google import genai
 from pr_data import PRData
+
+from config import DEFAULT_MODEL, Config
 
 
 class JiraClient:
@@ -31,8 +32,8 @@ class JiraClient:
         self,
         summary: str,
         description: str,
-        custom_fields: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        custom_fields: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """Create a new issue in JIRA."""
         api_url = f"{self.endpoint}/rest/api/2/issue"
 
@@ -75,7 +76,7 @@ class GeminiJiraGenerator:
         self,
         pr_data: PRData,
         user_query: str = "",
-    ) -> Optional[Dict[str, str]]:
+    ) -> dict[str, str] | None:
         """Generate JIRA ticket content for a PR."""
         # Use SRVKP JIRA template from the project rules
         jira_template = """h1. Story (Required)
@@ -213,7 +214,7 @@ Respond only with the JSON object."""
             print(f"Failed to parse Gemini JSON response: {e}")
             print(f"Response was: {response.text}")
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Error generating JIRA ticket: {e}")
             return None
 
@@ -233,7 +234,7 @@ Respond only with the JSON object."""
                 category = "Documentation Changes"
             elif file.endswith((".yaml", ".yml")):
                 category = "Configuration Changes"
-            elif file.endswith((".go")):
+            elif file.endswith(".go"):
                 category = "Go Code Changes"
             else:
                 category = "Other Changes"
@@ -269,7 +270,7 @@ Respond only with the JSON object."""
 
         return "\n".join(formatted)
 
-    def generate_release_note(self, pr_data: PRData) -> Optional[str]:
+    def generate_release_note(self, pr_data: PRData) -> str | None:
         """Generate a Red Hat style release note from PR data."""
         prompt = f"""Generate a concise 3-line release note for this pull request following Red Hat documentation style.
 
@@ -313,7 +314,7 @@ Generate a release note that clearly communicates the value of this change to en
 
             return release_note
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Error generating release note: {e}")
             # Fallback to PR title if generation fails
             return f"Updated functionality in {pr_data.title}"

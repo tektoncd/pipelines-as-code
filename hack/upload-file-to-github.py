@@ -25,8 +25,8 @@ import http.client
 import json
 import os.path
 import re
-import urllib
 import time
+import urllib
 
 RE_RELEASE = re.compile(r"(\d+\.\d+)\.\d+")
 GIT_NAME = "Openshift Pipeline Release Team"

@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from comments import PR_TITLE_COMMENT_MARKER, CommentManager
 from github import GitHubClient
@@ -41,7 +40,7 @@ AI_KEYWORDS = (
 )
 
 # Conventional commit types we accept in PR titles
-CONVENTIONAL_TYPES: Tuple[str, ...] = (
+CONVENTIONAL_TYPES: tuple[str, ...] = (
     "build",
     "chore",
     "ci",
@@ -74,7 +73,7 @@ class PRLinter:
         self.pr_data = pr_data
         self.github = github
         self.comment_manager = CommentManager(github)
-        self.warnings: List[Tuple[str, List[str]]] = []
+        self.warnings: list[tuple[str, list[str]]] = []
 
     def check_all(self) -> None:
         """Run all lint checks."""
@@ -167,7 +166,7 @@ class PRLinter:
     def check_ai_attribution(self) -> None:
         """Check if commits have AI attribution footers."""
         commits_data = self.github.get_pr_commits()
-        missing_ai_commits: List[Tuple[str, str]] = []
+        missing_ai_commits: list[tuple[str, str]] = []
 
         for commit in commits_data:
             sha = (commit.get("sha") or "")[:7]
@@ -186,7 +185,7 @@ class PRLinter:
                 f"AI attribution warning: {len(missing_ai_commits)} commit(s) missing "
                 "Assisted-by/Co-authored-by footers"
             )
-            ai_lines: List[str] = [
+            ai_lines: list[str] = [
                 "The following commits lack an explicit AI attribution footer:",
             ]
             for sha, summary in missing_ai_commits:
@@ -239,7 +238,7 @@ class PRLinter:
 
             # Add content in a nice blockquote or code block format
             for line in lines:
-                if line.startswith("**") or line.startswith("-"):
+                if line.startswith(("**", "-")):
                     comment_lines.append(line)
                 elif line == "":
                     comment_lines.append("")
@@ -281,11 +280,11 @@ class PRLinter:
         self.comment_manager.upsert_comment(body, existing_comment)
 
 
-def _sanitize_template_lines(text: str) -> List[str]:
+def _sanitize_template_lines(text: str) -> list[str]:
     if not text:
         return []
     without_comments = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-    cleaned_lines: List[str] = []
+    cleaned_lines: list[str] = []
     for line in without_comments.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -307,7 +306,7 @@ def get_default_pr_template() -> str:
         return ""
 
 
-def is_conventional_title(title: str) -> Tuple[bool, Optional[str]]:
+def is_conventional_title(title: str) -> tuple[bool, str | None]:
     """Validate PR title against the conventional commit format."""
     if not title:
         return False, "PR title is empty"
@@ -316,8 +315,7 @@ def is_conventional_title(title: str) -> Tuple[bool, Optional[str]]:
         expected_types = ", ".join(CONVENTIONAL_TYPES)
         return (
             False,
-            "Expected format `<type>(<scope>): <subject>` with `<type>` one of "
-            f"[{expected_types}].",
+            f"Expected format `<type>(<scope>): <subject>` with `<type>` one of [{expected_types}].",
         )
 
     subject = title.split(":", maxsplit=1)[1].strip()
@@ -343,9 +341,10 @@ def commit_has_ai_footer(message: str) -> bool:
     lines = [line.strip() for line in message.splitlines() if line.strip()]
     for line in lines:
         lower = line.lower()
-        if lower.startswith("assisted-by:") or lower.startswith("ai-assisted-by:"):
-            if any(keyword in lower for keyword in AI_KEYWORDS):
-                return True
+        if lower.startswith(("assisted-by:", "ai-assisted-by:")) and any(
+            keyword in lower for keyword in AI_KEYWORDS
+        ):
+            return True
         if lower.startswith("co-authored-by:") and any(
             keyword in lower for keyword in AI_KEYWORDS
         ):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
@@ -42,7 +41,7 @@ class Config:
     jira_issuetype: str = "Story"
 
     @classmethod
-    def from_env(cls, require_gemini: bool = False) -> Optional["Config"]:
+    def from_env(cls, require_gemini: bool = False) -> Config | None:
         """Create config from environment variables."""
         github_token = os.environ.get("GITHUB_TOKEN", "")
         repo_owner = os.environ.get("REPO_OWNER", "")
