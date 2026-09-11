@@ -15,8 +15,10 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	versioned2 "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"knative.dev/pkg/logging"
 )
 
 const (
@@ -24,16 +26,20 @@ const (
 )
 
 type Manager struct {
-	queueMap map[string]Semaphore
-	lock     *sync.Mutex
-	logger   *zap.SugaredLogger
+	queueMap   map[string]Semaphore
+	admissions map[string]map[string]*admissionState
+	claims     map[string]map[string]*admissionState
+	lock       *sync.Mutex
+	logger     *zap.SugaredLogger
 }
 
 func NewManager(logger *zap.SugaredLogger) *Manager {
 	return &Manager{
-		queueMap: make(map[string]Semaphore),
-		lock:     &sync.Mutex{},
-		logger:   logger,
+		queueMap:   make(map[string]Semaphore),
+		admissions: make(map[string]map[string]*admissionState),
+		claims:     make(map[string]map[string]*admissionState),
+		lock:       &sync.Mutex{},
+		logger:     logger,
 	}
 }
 
@@ -105,7 +111,7 @@ func (qm *Manager) AddListToRunningQueue(repo *v1alpha1.Repository, list []strin
 
 	acquiredList := []string{}
 	for i := 0; i < *repo.Spec.ConcurrencyLimit; i++ {
-		acquired := sema.acquireLatest()
+		acquired := qm.acquireUnowned(RepoKey(repo), sema)
 		if acquired != "" {
 			qm.logger.Infof("moved (%s) to running for repository (%s)", acquired, RepoKey(repo))
 			acquiredList = append(acquiredList, acquired)
@@ -146,6 +152,10 @@ func (qm *Manager) removeFromQueue(repoKey, prKey string) bool {
 		return false
 	}
 
+	if state := qm.claims[repoKey][prKey]; state != nil {
+		state.done = true
+	}
+	qm.forgetCandidate(repoKey, prKey)
 	sema.release(prKey)
 	sema.removeFromQueue(prKey)
 	qm.logger.Infof("removed (%s) for repository (%s)", prKey, repoKey)
@@ -166,7 +176,7 @@ func (qm *Manager) RemoveAndTakeItemFromQueue(repo *v1alpha1.Repository, run *te
 		return ""
 	}
 
-	if next := sema.acquireLatest(); next != "" {
+	if next := qm.acquireUnowned(repoKey, sema); next != "" {
 		qm.logger.Infof("moved (%s) to running for repository (%s)", next, repoKey)
 		return next
 	}
@@ -178,13 +188,24 @@ func (qm *Manager) RemoveAndTakeItemFromQueue(repo *v1alpha1.Repository, run *te
 // from the Tekton API and checks their annotations and status to determine if they should be included.
 //
 // Returns A list of PipelineRun names that are in a "queued" state and have a pending status.
-func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, orderList []string, wantedStatus, wantedState string) []string {
+func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, orderList []string, wantedStatus, wantedState string) ([]string, error) {
 	orderedList := []string{}
 	for _, prName := range orderList {
-		prKey := strings.Split(prName, "/")
-		pr, err := tekton.TektonV1().PipelineRuns(prKey[0]).Get(ctx, prKey[1], v1.GetOptions{})
-		if err != nil {
+		// The list comes straight from a user-editable annotation, so a
+		// malformed entry must be skipped, not indexed: a panic here takes
+		// down the whole watcher, and from InitQueues it does so on every
+		// restart.
+		namespace, name, ok := SplitPrKey(prName)
+		if !ok {
+			logging.FromContext(ctx).Warnf("ignoring malformed execution-order entry %q", prName)
 			continue
+		}
+		pr, err := tekton.TektonV1().PipelineRuns(namespace).Get(ctx, name, v1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return nil, fmt.Errorf("cannot read execution-order pipelineRun %s: %w", prName, err)
 		}
 
 		state, exist := pr.GetAnnotations()[keys.State]
@@ -196,15 +217,21 @@ func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, 
 			if wantedStatus != "" && pr.Spec.Status != tektonv1.PipelineRunSpecStatus(wantedStatus) {
 				continue
 			}
-			orderedList = append(orderedList, prName)
+			orderedList = append(orderedList, namespace+"/"+name)
 		}
 	}
-	return orderedList
+	return orderedList, nil
 }
 
 // InitQueues rebuild all the queues for all repository if concurrency is defined before
 // reconciler started reconciling them.
 func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, pac versioned.Interface) error {
+	// Reconstruction runs before workers start; no old ownership survives it.
+	qm.lock.Lock()
+	qm.queueMap = make(map[string]Semaphore)
+	qm.admissions = make(map[string]map[string]*admissionState)
+	qm.claims = make(map[string]map[string]*admissionState)
+	qm.lock.Unlock()
 	// fetch all repos
 	repos, err := pac.PipelinesascodeV1alpha1().Repositories("").List(ctx, v1.ListOptions{})
 	if err != nil {
@@ -238,7 +265,10 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 				// and repositories.
 				continue
 			}
-			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), "", kubeinteraction.StateStarted)
+			orderedList, err := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), "", kubeinteraction.StateStarted)
+			if err != nil {
+				return err
+			}
 
 			_, err = qm.AddListToRunningQueue(&repo, orderedList)
 			if err != nil {
@@ -266,7 +296,10 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 				// and repositories.
 				continue
 			}
-			orderedList := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+			orderedList, err := FilterPipelineRunByState(ctx, tekton, strings.Split(order, ","), tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+			if err != nil {
+				return err
+			}
 			if err := qm.AddToPendingQueue(&repo, orderedList); err != nil {
 				qm.logger.Error("failed to init queue for repo: ", repo.GetName())
 			}
@@ -282,6 +315,8 @@ func (qm *Manager) RemoveRepository(repo *v1alpha1.Repository) {
 
 	repoKey := RepoKey(repo)
 	delete(qm.queueMap, repoKey)
+	delete(qm.admissions, repoKey)
+	delete(qm.claims, repoKey)
 }
 
 func (qm *Manager) QueuedPipelineRuns(repo *v1alpha1.Repository) []string {

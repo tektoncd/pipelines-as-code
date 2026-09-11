@@ -3,13 +3,13 @@ package reconciler
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	queuepkg "github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +33,8 @@ func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 	// of a running PipelineRun would silently stop reporting.
 	ctx = info.StoreNS(ctx, system.Namespace())
 	state, exist := pr.GetAnnotations()[keys.State]
-	if !exist || state == kubeinteraction.StateCompleted {
+	if !exist || state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed {
+		r.qm.ForgetAdmission(pr.Namespace+"/"+pr.Annotations[keys.Repository], pr)
 		return nil
 	}
 	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
@@ -72,20 +73,15 @@ func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 			}
 		}
 		logger = logger.With("namespace", repo.Namespace)
-		next := r.qm.RemoveAndTakeItemFromQueue(repo, pr)
-		if next != "" {
-			key := strings.Split(next, "/")
-			pr, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(key[0]).Get(ctx, key[1], metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			if err := r.
-				updatePipelineRunToInProgress(ctx, logger, repo, pr); err != nil {
-				logger.Errorf("failed to update status: %w", err)
-				return err
-			}
-			return nil
+		// This releases the slot the deleted PipelineRun held and promotes the
+		// next candidate, retrying past a malformed or already-gone queue key
+		// instead of leaving it stuck in the running set forever with no real
+		// PipelineRun ever completing to free it.
+		if err := r.startNextPipelineRunInQueue(ctx, logger, repo, pr); err != nil {
+			return err
 		}
+		r.qm.ForgetAdmission(queuepkg.RepoKey(repo), pr)
+		return nil
 	}
 	return nil
 }

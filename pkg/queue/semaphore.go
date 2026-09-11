@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"container/heap"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ type prioritySemaphore struct {
 	name      string
 	limit     int
 	pending   *priorityQueue
-	running   map[string]bool
+	running   map[string]*item
 	semaphore *sema.Weighted
 	lock      *sync.Mutex
 }
@@ -24,7 +25,7 @@ func newSemaphore(name string, limit int) *prioritySemaphore {
 		limit:     limit,
 		pending:   &priorityQueue{itemByKey: make(map[string]*item)},
 		semaphore: sema.NewWeighted(int64(limit)),
-		running:   make(map[string]bool),
+		running:   make(map[string]*item),
 		lock:      &sync.Mutex{},
 	}
 }
@@ -108,12 +109,37 @@ func (s *prioritySemaphore) acquireLatest() string {
 
 	ready := s.pending.peek()
 
-	if s.semaphore.TryAcquire(1) {
-		_ = s.pending.pop()
-		s.running[ready.key] = true
+	if s.limit == 0 || s.semaphore.TryAcquire(1) {
+		s.running[ready.key] = s.pending.pop()
 		return ready.key
 	}
+
 	return ""
+}
+
+func (s *prioritySemaphore) nextPending() string {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.pending.Len() == 0 {
+		return ""
+	}
+	return s.pending.peek().key
+}
+
+// requeue restores the original priority and tie-breaker, not the retry time.
+func (s *prioritySemaphore) requeue(key string) bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	entry, ok := s.running[key]
+	if !ok {
+		return false
+	}
+	delete(s.running, key)
+	if s.limit > 0 && len(s.running) < s.limit {
+		s.semaphore.Release(1)
+	}
+	heap.Push(s.pending, entry)
+	return true
 }
 
 func (s *prioritySemaphore) release(key string) bool {

@@ -5,6 +5,7 @@ import (
 
 	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	pacVersionedClient "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	tektonVersionedClient "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 )
@@ -31,8 +32,43 @@ type TestQMI struct {
 	// RepeatNext makes RemoveAndTakeItemFromQueue hand out the same key
 	// forever, modelling a queue that never releases a slot, so a test can
 	// check the caller gives up instead of looping.
-	RepeatNext string
+	RepeatNext       string
+	AdmissionRepoKey string
 }
+
+func (t TestQMI) AcquireAdmission(repo *pacv1alpha1.Repository, owner *tektonv1.PipelineRun, list []string, mode queue.AdmissionMode) (*queue.Admission, error) {
+	if mode == queue.AdmissionResume {
+		return nil, nil
+	}
+	var acquired []string
+	if mode == queue.AdmissionPromotion {
+		if next := t.RemoveAndTakeItemFromQueue(repo, owner); next != "" {
+			acquired = []string{next}
+		}
+	} else {
+		var err error
+		acquired, err = t.AddListToRunningQueue(repo, list)
+		if err != nil {
+			return nil, err
+		}
+	}
+	work := &queue.Admission{}
+	for _, key := range acquired {
+		work.Candidates = append(work.Candidates, queue.StartCandidate{Key: key})
+	}
+	return work, nil
+}
+
+func (t TestQMI) FinishAdmission(work *queue.Admission) error {
+	for _, candidate := range work.Candidates {
+		if candidate.Outcome == queue.StartGone {
+			t.RemoveFromQueue(t.AdmissionRepoKey, candidate.Key)
+		}
+	}
+	return nil
+}
+
+func (TestQMI) ForgetAdmission(string, *tektonv1.PipelineRun) {}
 
 func (TestQMI) InitQueues(_ context.Context, _ tektonVersionedClient.Interface, _ pacVersionedClient.Interface) error {
 	// TODO implement me

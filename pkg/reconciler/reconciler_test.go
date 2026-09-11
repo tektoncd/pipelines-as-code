@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"maps"
@@ -602,6 +603,7 @@ func TestReconcileKindControllerInfoHandling(t *testing.T) {
 						Controller: controller,
 					},
 				},
+				qm: queuepkg.NewManager(logger),
 			}
 
 			err := r.ReconcileKind(ctx, pr)
@@ -614,6 +616,552 @@ func TestReconcileKindControllerInfoHandling(t *testing.T) {
 				assert.DeepEqual(t, r.run.Info.Controller, tt.wantControl)
 				assert.Assert(t, r.run.Info.Controller == controller, "reconcile must keep the shared controller pointer")
 			}
+		})
+	}
+}
+
+// TestReconcileKindReturnsErrorWhenDetectProviderFailsTransiently asserts that
+// a done PipelineRun whose git-provider annotation names a real provider, but
+// whose provider client fails to initialize for what could be a transient
+// reason (here: the GitHub App private key secret is missing), makes
+// ReconcileKind return an error instead of nil. Swallowing the error here
+// used to forget the workqueue key: reportFinalStatus never ran, the
+// finished PipelineRun's concurrency slot was never released, and nothing
+// ever retried.
+func TestReconcileKindReturnsErrorWhenDetectProviderFailsTransiently(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "github",
+				// A non-zero InstallationID routes detectProvider through
+				// InitAppClient, which fails here because no GitHub App
+				// private key secret was seeded -- a stand-in for any
+				// transient client-initialization failure. CheckRunID must
+				// also be set, or reconcileKind returns early before ever
+				// reaching detectProvider.
+				keys.InstallationID: "123",
+				keys.CheckRunID:     "456",
+			},
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionTrue,
+						Reason: string(tektonv1.PipelineRunReasonSuccessful),
+					},
+				},
+			},
+		},
+	}
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	metrics, err := prmetrics.NewRecorder()
+	assert.NilError(t, err)
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         queuepkg.NewManager(logger),
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{},
+				},
+				Kube: &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{
+					Name:             "default",
+					Secret:           "default-secret",
+					GlobalRepository: "default-global",
+				},
+			},
+		},
+		metrics:      metrics,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.ErrorContains(t, err, "detect provider")
+	assert.Assert(t, !stderrors.Is(err, ErrProviderNotConfigured),
+		"a transient client-init failure must not be classified as permanent")
+}
+
+// TestReconcileKindAbandonsDoneRunWhenProviderNotConfigured asserts that a
+// done PipelineRun whose git-provider annotation can never be resolved (a
+// permanent condition: retrying detectProvider can never succeed, whether
+// the annotation is missing or names an unsupported provider) is marked
+// failed and has its concurrency slot released and handed to the next
+// queued candidate, and that ReconcileKind returns nil rather than an error
+// that would otherwise be retried forever while still holding the slot.
+func TestReconcileKindAbandonsDoneRunWhenProviderNotConfigured(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+	}{
+		{
+			name: "missing git-provider annotation",
+			annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+			},
+		},
+		{
+			name: "unknown git-provider annotation",
+			annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "batman",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pr",
+					Namespace:   "test-ns",
+					Annotations: tt.annotations,
+				},
+				Status: tektonv1.PipelineRunStatus{
+					Status: knativeduckv1.Status{
+						Conditions: knativeduckv1.Conditions{
+							{
+								Type:   knativeapi.ConditionSucceeded,
+								Status: corev1.ConditionTrue,
+								Reason: string(tektonv1.PipelineRunReasonSuccessful),
+							},
+						},
+					},
+				},
+			}
+			nextPR := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "next-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State: kubeinteraction.StateQueued,
+					},
+				},
+				Spec: tektonv1.PipelineRunSpec{
+					Status: tektonv1.PipelineRunSpecStatusPending,
+				},
+			}
+			limit := 1
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-repo",
+					Namespace: "test-ns",
+				},
+				Spec: v1alpha1.RepositorySpec{
+					ConcurrencyLimit: &limit,
+				},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr, nextPR},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			metrics, err := prmetrics.NewRecorder()
+			assert.NilError(t, err)
+
+			qm := queuepkg.NewManager(logger)
+			_, err = qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+			assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, qm.AddToPendingQueue(repo, []string{queuepkg.PrKey(nextPR)}))
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Kube:   stdata.Kube,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac: &info.PacOpts{
+							Settings: settings.Settings{},
+						},
+						Kube: &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{
+							Name:             "default",
+							Secret:           "default-secret",
+							GlobalRepository: "default-global",
+						},
+					},
+				},
+				metrics:      metrics,
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			err = r.ReconcileKind(ctx, pr)
+			assert.NilError(t, err, "a permanent detectProvider failure must not be retried forever")
+			assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(nextPR)})
+			assert.Assert(t, len(qm.QueuedPipelineRuns(repo)) == 0, "the promoted candidate must no longer be pending")
+
+			updated, err := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+			assert.NilError(t, err)
+			assert.Equal(t, updated.GetAnnotations()[keys.State], kubeinteraction.StateFailed)
+		})
+	}
+}
+
+// TestReconcileKindAbandonsDoneRunReleasesQueueEvenWhenStatePatchFails proves
+// the ordering in abandonDoneWithoutProvider: the concurrency slot must be
+// released before the terminal state is written, not after. If the state
+// patch fails (here: the PipelineRun was deleted from the fake client
+// between detectProvider failing and the patch), ReconcileKind must still
+// return an error (so this reconcile is retried), but the queue release must
+// already have happened. The manager remembers the handoff while the state
+// write is retried, rather than acquiring another successor.
+func TestReconcileKindAbandonsDoneRunReleasesQueueEvenWhenStatePatchFails(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				// keys.GitProvider deliberately absent: detectProvider fails
+				// permanently.
+			},
+		},
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionTrue,
+						Reason: string(tektonv1.PipelineRunReasonSuccessful),
+					},
+				},
+			},
+		},
+	}
+	limit := 1
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "test-ns",
+		},
+		Spec: v1alpha1.RepositorySpec{
+			ConcurrencyLimit: &limit,
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	metrics, err := prmetrics.NewRecorder()
+	assert.NilError(t, err)
+
+	qm := queuepkg.NewManager(logger)
+	_, err = qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+	assert.NilError(t, err)
+
+	// Make the terminal-state patch fail while leaving reads (including the
+	// "fetch latest" Get at the top of reconcileKind) unaffected, so the
+	// failure is isolated to abandonDoneWithoutProvider's state write.
+	stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("injected patch failure")
+	})
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         qm,
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{},
+				},
+				Kube: &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{
+					Name:             "default",
+					Secret:           "default-secret",
+					GlobalRepository: "default-global",
+				},
+			},
+		},
+		metrics:      metrics,
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.ErrorContains(t, err, "cannot update state")
+	assert.Assert(t, len(qm.RunningPipelineRuns(repo)) == 0, "the concurrency slot must already be released even though the state patch failed")
+
+	// A second attempt (simulating a retry after the failed patch) must not
+	// find another reservation to release or promote: the queue step is
+	// already done and must not run twice.
+	assert.NilError(t, r.startNextPipelineRunInQueue(ctx, logger, repo, pr))
+	assert.Assert(t, len(qm.RunningPipelineRuns(repo)) == 0, "retrying the queue release must stay a no-op")
+}
+
+// TestReconcileKindDeletedRepositoryWithDoneRun asserts that a PipelineRun
+// whose Repository CR has been deleted stops being reconciled once it reached
+// a terminal PAC state. Dropping the repository clears every queue entry it
+// held, so there is nothing left to recover, and retrying could never make the
+// deleted Repository reappear. A run that is not done keeps returning the
+// error so the reconcile is retried.
+func TestReconcileKindDeletedRepositoryWithDoneRun(t *testing.T) {
+	tests := []struct {
+		name    string
+		state   string
+		wantErr bool
+	}{
+		{name: "completed run", state: kubeinteraction.StateCompleted},
+		{name: "failed run", state: kubeinteraction.StateFailed},
+		{name: "started run", state: kubeinteraction.StateStarted, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pr",
+					Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:         tt.state,
+						keys.Repository:    "deleted-repo",
+						keys.SecretCreated: "true",
+					},
+				},
+			}
+			// Never seeded in the lister: the Repository CR is gone, but the
+			// queue manager still holds the entries it had for it.
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "deleted-repo", Namespace: "test-ns"},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+			})
+			qm := queuepkg.NewManager(logger)
+			_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{
+						Tekton: stdata.Pipeline,
+						Kube:   stdata.Kube,
+						Log:    logger,
+					},
+					Info: info.Info{
+						Pac:        &info.PacOpts{Settings: settings.Settings{}},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+					},
+				},
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			err = r.ReconcileKind(ctx, pr)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "failed to get repository CR")
+			} else {
+				assert.NilError(t, err, "a done pipelineRun must not be retried forever for a deleted repository")
+			}
+			assert.Equal(t, len(qm.RunningPipelineRuns(repo)), 0, "the queue of a deleted repository must be dropped")
+		})
+	}
+}
+
+// TestReconcileKindRetriesUnconfirmedStartOfRunningPipelineRun asserts that a
+// failed state patch on an already running PipelineRun is retried. The patch
+// only carries metadata for such a run, so a readback showing it is not
+// pending proves nothing: without the state and reporting annotations the
+// write did not land and the reconcile has to be retried.
+func TestReconcileKindRetriesUnconfirmedStartOfRunningPipelineRun(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pr",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateQueued,
+				keys.Repository:    "test-repo",
+				keys.SecretCreated: "true",
+				keys.GitProvider:   "github",
+			},
+		},
+		// Tekton already started it, so it is no longer pending before the
+		// patch and the patch carries no spec change.
+		Status: tektonv1.PipelineRunStatus{
+			Status: knativeduckv1.Status{
+				Conditions: knativeduckv1.Conditions{
+					{
+						Type:   knativeapi.ConditionSucceeded,
+						Status: corev1.ConditionUnknown,
+						Reason: string(tektonv1.PipelineRunReasonRunning),
+					},
+				},
+			},
+		},
+	}
+	limit := 1
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+		Spec:       v1alpha1.RepositorySpec{ConcurrencyLimit: &limit},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+	})
+	qm := queuepkg.NewManager(logger)
+	_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+	assert.NilError(t, err)
+
+	stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.NewConflict(tektonv1.Resource("pipelineruns"), "test-pr", fmt.Errorf("stale start"))
+	})
+
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		qm:         qm,
+		run: &params.Run{
+			Clients: clients.Clients{
+				Tekton: stdata.Pipeline,
+				Kube:   stdata.Kube,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Pac:        &info.PacOpts{Settings: settings.Settings{}},
+				Kube:       &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+			},
+		},
+		eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+	}
+
+	err = r.ReconcileKind(ctx, pr)
+	assert.Assert(t, stderrors.Is(err, ErrPipelineRunNotStarted), "got %v", err)
+	updated, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
+	assert.NilError(t, getErr)
+	assert.Equal(t, updated.GetAnnotations()[keys.State], kubeinteraction.StateQueued)
+	_, reported := updated.GetAnnotations()[keys.SCMReportingPLRStarted]
+	assert.Assert(t, !reported, "the reporting marker was never written")
+	assert.DeepEqual(t, qm.RunningPipelineRuns(repo), []string{queuepkg.PrKey(pr)})
+}
+
+// TestReconcileKindDropsUnstartableRunningPipelineRun covers a PipelineRun that
+// Tekton still reports as Running while its spec has already been cancelled or
+// gracefully stopped, and whose start was never reported to the provider.
+//
+// Such a run can never be started, so the promotion path deliberately treats
+// errPipelineRunGone as "nothing to do" and returns nil. Returning it here
+// instead would requeue forever over a condition no retry can change. Graceful
+// stop makes that window wide: Tekton lets running tasks drain, so the Running
+// condition legitimately survives for as long as those tasks take.
+func TestReconcileKindDropsUnstartableRunningPipelineRun(t *testing.T) {
+	tests := []struct {
+		name   string
+		status tektonv1.PipelineRunSpecStatus
+	}{
+		{name: "cancelled", status: tektonv1.PipelineRunSpecStatusCancelled},
+		{name: "cancelled run finally", status: tektonv1.PipelineRunSpecStatusCancelledRunFinally},
+		{name: "stopped run finally", status: tektonv1.PipelineRunSpecStatusStoppedRunFinally},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pr", Namespace: "test-ns",
+					Annotations: map[string]string{
+						keys.State:         kubeinteraction.StateStarted,
+						keys.Repository:    "test-repo",
+						keys.SecretCreated: "true",
+						keys.GitProvider:   "github",
+					},
+				},
+				Spec: tektonv1.PipelineRunSpec{Status: tt.status},
+				Status: tektonv1.PipelineRunStatus{
+					Status: knativeduckv1.Status{
+						Conditions: knativeduckv1.Conditions{{
+							Type:   knativeapi.ConditionSucceeded,
+							Status: corev1.ConditionUnknown,
+							Reason: string(tektonv1.PipelineRunReasonRunning),
+						}},
+					},
+				},
+			}
+			limit := 1
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
+				Spec:       v1alpha1.RepositorySpec{ConcurrencyLimit: &limit},
+			}
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				Repositories: []*v1alpha1.Repository{repo},
+			})
+			qm := queuepkg.NewManager(logger)
+			_, err := qm.AddListToRunningQueue(repo, []string{queuepkg.PrKey(pr)})
+			assert.NilError(t, err)
+
+			r := &Reconciler{
+				repoLister: informers.Repository.Lister(),
+				qm:         qm,
+				run: &params.Run{
+					Clients: clients.Clients{Tekton: stdata.Pipeline, Kube: stdata.Kube, Log: logger},
+					Info: info.Info{
+						Pac:        &info.PacOpts{Settings: settings.Settings{}},
+						Kube:       &info.KubeOpts{Namespace: "global"},
+						Controller: &info.ControllerInfo{Name: "default", GlobalRepository: "default-global"},
+					},
+				},
+				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
+			}
+
+			assert.NilError(t, r.ReconcileKind(ctx, pr),
+				"an unstartable run must not be retried forever")
 		})
 	}
 }
@@ -802,6 +1350,7 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 				repoLister: informers.Repository.Lister(),
 				run:        cs,
 				kinteract:  kinterfaceTest,
+				qm:         queuepkg.NewManager(logger),
 			}
 
 			err := r.ReconcileKind(ctx, tt.pipelineRun)
@@ -1106,6 +1655,7 @@ func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
 				"pac-provider-secret": "test-token",
 			},
 		},
+		qm: queuepkg.NewManager(logger),
 	}
 
 	err := r.ReconcileKind(ctx, pr)
