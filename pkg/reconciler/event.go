@@ -108,5 +108,8 @@ func buildEventFromPipelineRun(pr *tektonv1.PipelineRun) *info.Event {
 		id, _ := strconv.ParseInt(projectID, 10, 64)
 		event.TargetProjectID = id
 	}
+	if projectKey, ok := prAnno[keys.BitbucketProjectKey]; ok {
+		event.BBDCProjectKey = projectKey
+	}
 	return event
 }

@@ -102,8 +102,13 @@ func AddLabelsAndAnnotations(ctx context.Context, event *info.Event, pipelineRun
 		annotations[keys.TargetProjectID] = strconv.Itoa(int(event.TargetProjectID))
 	}
 
+	// Bitbucket Data Center
 	if event.CloneURL != "" {
 		annotations[keys.CloneURL] = event.CloneURL
+	}
+
+	if event.BBDCProjectKey != "" {
+		annotations[keys.BitbucketProjectKey] = event.BBDCProjectKey
 	}
 
 	if value, ok := pipelineRun.GetObjectMeta().GetAnnotations()[keys.CancelInProgress]; ok {
