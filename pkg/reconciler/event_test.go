@@ -29,6 +29,7 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 		SourceProjectID:   1234,
 		TargetProjectID:   2345,
 		CloneURL:          "https://url/clone",
+		BBDCProjectKey:    "project-key",
 	}
 	tests := []struct {
 		name        string
@@ -67,6 +68,9 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 						keys.Branch:          "branch",
 						keys.State:           kubeinteraction.StateStarted,
 						keys.PullRequest:     "1234",
+
+						// bitbucket
+						keys.BitbucketProjectKey: "project-key",
 					},
 				},
 			},
@@ -81,6 +85,7 @@ func TestBuildEventFromPipelineRun(t *testing.T) {
 			assert.Equal(t, event.SHATitle, tt.event.SHATitle)
 			assert.Equal(t, event.SourceProjectID, tt.event.SourceProjectID)
 			assert.Equal(t, event.TargetProjectID, tt.event.TargetProjectID)
+			assert.Equal(t, event.BBDCProjectKey, tt.event.BBDCProjectKey)
 			assert.Equal(t, event.PullRequestNumber, tt.event.PullRequestNumber)
 			assert.Equal(t, event.CloneURL, tt.event.CloneURL)
 		})
