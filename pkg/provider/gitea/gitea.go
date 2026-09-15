@@ -470,6 +470,11 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 		v.Logger.Infof("Using PipelineRun definition from source %s commit SHA: %s", event.TriggerTarget.String(), event.SHA)
 	}
 
+	if revision == "" {
+		return "", fmt.Errorf("cannot fetch %s directory: no revision to resolve (provenance %q, sha %q, default branch %q)",
+			path, provenance, event.SHA, event.DefaultBranch)
+	}
+
 	tektonDirSha := ""
 	opt := forgejo.GetTreesOptions{
 		Recursive: false,
@@ -624,6 +629,21 @@ func (v *Provider) GetCommitInfo(_ context.Context, runevent *info.Event) error 
 		}
 	}
 	runevent.HasSkipCommand = provider.SkipCI(commit.RepoCommit.Message)
+
+	// Incoming webhooks carry no payload to parse the default branch from, so
+	// fetch it from the API when it is missing.
+	if runevent.DefaultBranch == "" {
+		repoInfo, _, err := v.Client().GetRepo(runevent.Organization, runevent.Repository)
+		if err != nil {
+			return fmt.Errorf("getting default branch for %s/%s: %w",
+				runevent.Organization, runevent.Repository, err)
+		}
+		if repoInfo.DefaultBranch == "" {
+			return fmt.Errorf("repository %s/%s reports no default branch",
+				runevent.Organization, runevent.Repository)
+		}
+		runevent.DefaultBranch = repoInfo.DefaultBranch
+	}
 
 	return nil
 }

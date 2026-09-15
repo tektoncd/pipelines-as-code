@@ -199,6 +199,7 @@ func TestGetTektonDir(t *testing.T) {
 		provenance           string
 		filterMessageSnippet string
 		wantErr              string
+		skipTreeSetup        bool
 	}{
 		{
 			name: "test with badly formatted yaml",
@@ -209,6 +210,19 @@ func TestGetTektonDir(t *testing.T) {
 			},
 			treepath: "testdata/tree/badyaml",
 			wantErr:  "error unmarshalling yaml file badyaml.yaml: yaml: line 2: did not find expected key",
+		},
+		{
+			name: "default_branch provenance without a default branch fails loudly",
+			event: &info.Event{
+				Organization: "tekton",
+				Repository:   "cat",
+				// DefaultBranch empty, as for an incoming event that was never
+				// backfilled: must not reach the SDK with an empty path segment.
+			},
+			provenance:    "default_branch",
+			treepath:      "testdata/tree/badyaml",
+			skipTreeSetup: true,
+			wantErr:       "cannot fetch .tekton directory: no revision to resolve",
 		},
 	}
 	for _, tt := range testGetTektonDir {
@@ -229,7 +243,9 @@ func TestGetTektonDir(t *testing.T) {
 				tt.event.SHA = shaDir
 			}
 
-			tgitea.SetupGitTree(t, mux, tt.treepath, tt.event, false)
+			if !tt.skipTreeSetup {
+				tgitea.SetupGitTree(t, mux, tt.treepath, tt.event, false)
+			}
 			got, err := gvcs.GetTektonDir(ctx, tt.event, ".tekton", tt.provenance)
 			if tt.wantErr != "" {
 				assert.Assert(t, err != nil, "we should have get an error here")
@@ -243,11 +259,22 @@ func TestGetTektonDir(t *testing.T) {
 }
 
 func TestGetCommitInfo(t *testing.T) {
+	const commitAbc123 = `{
+		"sha": "abc123",
+		"html_url": "https://gitea.com/owner/repo/commit/abc123",
+		"commit": {
+			"message": "fix: nothing"
+		}
+	}`
 	tests := []struct {
 		name                string
 		event               *info.Event
 		mockCommitResponse  string
+		mockBranchResponse  string
+		mockRepoResponse    string
+		mockRepoStatus      int
 		wantErr             bool
+		wantErrContains     string
 		wantSHATitle        string
 		wantSHAURL          string
 		wantSHAMessage      string
@@ -257,6 +284,8 @@ func TestGetCommitInfo(t *testing.T) {
 		wantCommitterName   string
 		wantCommitterEmail  string
 		wantCommitterDate   string
+		wantDefaultBranch   string
+		wantRepoCalls       int
 		checkExtendedFields bool
 		noClient            bool
 	}{
@@ -293,6 +322,8 @@ func TestGetCommitInfo(t *testing.T) {
 			wantCommitterName:   "Gitea",
 			wantCommitterEmail:  "noreply@gitea.com",
 			wantCommitterDate:   "2024-01-15T10:31:00Z",
+			wantDefaultBranch:   "main",
+			wantRepoCalls:       1,
 			checkExtendedFields: true,
 		},
 		{
@@ -309,9 +340,75 @@ func TestGetCommitInfo(t *testing.T) {
 					"message": "fix: simple fix"
 				}
 			}`,
-			wantSHATitle:   "fix: simple fix",
-			wantSHAURL:     "https://gitea.com/owner/repo/commit/def456",
-			wantSHAMessage: "fix: simple fix",
+			wantSHATitle:      "fix: simple fix",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/def456",
+			wantSHAMessage:    "fix: simple fix",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "incoming event resolves branch head and backfills default branch",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				EventType:    "incoming",
+				HeadBranch:   "incoming-target",
+				// SHA and DefaultBranch intentionally empty, as built by
+				// pkg/adapter/incoming.go which has no payload to parse.
+			},
+			mockBranchResponse: `{"name": "incoming-target", "commit": {"id": "head123"}}`,
+			mockCommitResponse: `{
+				"sha": "head123",
+				"html_url": "https://gitea.com/owner/repo/commit/head123",
+				"commit": {
+					"message": "feat: incoming"
+				}
+			}`,
+			mockRepoResponse:  `{"default_branch": "trunk"}`,
+			wantSHATitle:      "feat: incoming",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/head123",
+			wantSHAMessage:    "feat: incoming",
+			wantDefaultBranch: "trunk",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "already populated default branch is not refetched",
+			event: &info.Event{
+				Organization:  "owner",
+				Repository:    "repo",
+				SHA:           "abc123",
+				DefaultBranch: "already-set",
+			},
+			mockCommitResponse: commitAbc123,
+			wantSHATitle:       "fix: nothing",
+			wantSHAURL:         "https://gitea.com/owner/repo/commit/abc123",
+			wantSHAMessage:     "fix: nothing",
+			wantDefaultBranch:  "already-set",
+			wantRepoCalls:      0,
+		},
+		{
+			name: "repository lookup failure is wrapped",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				SHA:          "abc123",
+			},
+			mockCommitResponse: commitAbc123,
+			mockRepoStatus:     http.StatusInternalServerError,
+			wantErr:            true,
+			wantErrContains:    "getting default branch for owner/repo",
+		},
+		{
+			name: "repository reporting an empty default branch errors",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				SHA:          "abc123",
+			},
+			mockCommitResponse: commitAbc123,
+			mockRepoResponse:   `{"default_branch": ""}`,
+			wantErr:            true,
+			wantErrContains:    "repository owner/repo reports no default branch",
 		},
 		{
 			name: "no client error",
@@ -330,14 +427,43 @@ func TestGetCommitInfo(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 
 			var provider *Provider
+			repoCalls := 0
 			if !tt.noClient {
 				client, mux, tearDown := tgitea.Setup(t)
 				defer tearDown()
 
-				// Mock the GetSingleCommit API endpoint
-				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/commits/%s", tt.event.Organization, tt.event.Repository, tt.event.SHA),
+				// Mock the GetSingleCommit API endpoint. The SHA is only known
+				// upfront when the event carries one; otherwise it comes from
+				// the branch lookup below.
+				commitSHA := tt.event.SHA
+				if commitSHA == "" {
+					commitSHA = "head123"
+				}
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/commits/%s", tt.event.Organization, tt.event.Repository, commitSHA),
 					func(rw http.ResponseWriter, _ *http.Request) {
 						fmt.Fprint(rw, tt.mockCommitResponse)
+					})
+
+				if tt.mockBranchResponse != "" {
+					mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/branches/%s", tt.event.Organization, tt.event.Repository, tt.event.HeadBranch),
+						func(rw http.ResponseWriter, _ *http.Request) {
+							fmt.Fprint(rw, tt.mockBranchResponse)
+						})
+				}
+
+				// Mock the repo endpoint so GetCommitInfo can resolve DefaultBranch.
+				repoResponse := tt.mockRepoResponse
+				if repoResponse == "" {
+					repoResponse = `{"default_branch": "main"}`
+				}
+				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s", tt.event.Organization, tt.event.Repository),
+					func(rw http.ResponseWriter, _ *http.Request) {
+						repoCalls++
+						if tt.mockRepoStatus != 0 {
+							rw.WriteHeader(tt.mockRepoStatus)
+							return
+						}
+						fmt.Fprint(rw, repoResponse)
 					})
 
 				provider = &Provider{giteaClient: client}
@@ -349,6 +475,9 @@ func TestGetCommitInfo(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Assert(t, err != nil, "expected error but got nil")
+				if tt.wantErrContains != "" {
+					assert.ErrorContains(t, err, tt.wantErrContains)
+				}
 				return
 			}
 
@@ -356,6 +485,8 @@ func TestGetCommitInfo(t *testing.T) {
 			assert.Equal(t, tt.wantSHATitle, tt.event.SHATitle, "SHATitle should match")
 			assert.Equal(t, tt.wantSHAURL, tt.event.SHAURL, "SHAURL should match")
 			assert.Equal(t, tt.wantSHAMessage, tt.event.SHAMessage, "SHAMessage should match")
+			assert.Equal(t, tt.wantDefaultBranch, tt.event.DefaultBranch, "DefaultBranch should match")
+			assert.Equal(t, tt.wantRepoCalls, repoCalls, "unexpected number of calls to the repository endpoint")
 
 			if tt.checkExtendedFields {
 				assert.Equal(t, tt.wantAuthorName, tt.event.SHAAuthorName, "SHAAuthorName should match")
@@ -417,6 +548,11 @@ func TestGetCommitInfoPRLookupPopulatesURLs(t *testing.T) {
 				"message": "feat: test commit"
 			}
 		}`)
+	})
+
+	// Mock the repo endpoint so GetCommitInfo can resolve DefaultBranch.
+	mux.HandleFunc("/repos/owner/repo", func(rw http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(rw, `{"default_branch": "main"}`)
 	})
 
 	provider := &Provider{giteaClient: client}
