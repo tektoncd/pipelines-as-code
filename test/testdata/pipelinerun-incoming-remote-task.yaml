@@ -1,0 +1,18 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: "pipelinerun-incoming-remote-task"
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+    # a repository-local path (it contains a "/") is what routes the resolution
+    # through the provider's GetFileInsideRepo, which is the code path under test
+    pipelinesascode.tekton.dev/task: "[.tasks/incoming-task.yaml]"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: provenance-marker
+        taskRef:
+          name: provenance-marker

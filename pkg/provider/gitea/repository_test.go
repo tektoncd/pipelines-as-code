@@ -247,6 +247,9 @@ func TestGetTektonDir(t *testing.T) {
 				tgitea.SetupGitTree(t, mux, tt.treepath, tt.event, false)
 			}
 			got, err := gvcs.GetTektonDir(ctx, tt.event, ".tekton", tt.provenance)
+			// GetTektonDir must record the provenance for GetFileInsideRepo to
+			// resolve repository-local task references from the same branch.
+			assert.Equal(t, tt.provenance, gvcs.provenance)
 			if tt.wantErr != "" {
 				assert.Assert(t, err != nil, "we should have get an error here")
 				assert.ErrorContains(t, err, tt.wantErr)

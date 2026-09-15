@@ -338,3 +338,36 @@ spec:
 ```
 
 As described above, you must also create the `repo-incoming-secret` Secret containing the shared password.
+
+### Using incoming webhooks with `default_branch` provenance
+
+When a Repository sets `pipelinerun_provenance: default_branch`, the PipelineRun
+definition is read from the repository's default branch rather than from the
+branch the event targets:
+
+```yaml
+apiVersion: "pipelinesascode.tekton.dev/v1alpha1"
+kind: Repository
+metadata:
+  name: repo
+  namespace: ns
+spec:
+  url: "https://gitea.example.com/owner/repo"
+  settings:
+    pipelinerun_provenance: default_branch
+  incoming:
+    - targets:
+        - release-branch
+      secret:
+        name: repo-incoming-secret
+      type: webhook-url
+```
+
+An incoming webhook carries no payload to read the branch from, so
+Pipelines-as-Code asks the provider for it. The targeted branch therefore does
+not need a `.tekton/` directory at all.
+
+On GitHub, Bitbucket Cloud and Gitea/Forgejo this also covers tasks and
+pipelines that the definition pulls in by path, such as
+`pipelinesascode.tekton.dev/task: "[.tasks/mytask.yaml]"`. Those are read from
+the default branch too, so nothing on the targeted branch can change what runs.

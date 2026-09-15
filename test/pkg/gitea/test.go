@@ -71,6 +71,7 @@ type TestOpts struct {
 	CreateSecret          []corev1.Secret
 	ProviderType          string // defaults to "forgejo" if empty
 	SecondUserName        string
+	Incomings             *[]v1alpha1.Incoming
 }
 
 func PostCommentOnPullRequest(t *testing.T, topt *TestOpts, body string) {
@@ -233,6 +234,7 @@ func TestPR(t *testing.T, topts *TestOpts) (context.Context, func()) {
 		ConcurrencyLimit: topts.ConcurrencyLimit,
 		Params:           topts.RepoCRParams,
 		Settings:         topts.Settings,
+		Incomings:        topts.Incomings,
 	}
 	if topts.GlobalRepoCRParams == nil {
 		spec.GitProvider = gp

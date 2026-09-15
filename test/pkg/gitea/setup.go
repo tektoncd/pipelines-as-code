@@ -65,7 +65,7 @@ func Setup(ctx context.Context) (*params.Run, options.E2E, gitea.Provider, error
 		return nil, options.E2E{}, gitea.Provider{}, fmt.Errorf("cannot create new client: %w", err)
 	}
 	// Repo is actually not used
-	e2eoptions := options.E2E{Organization: split[0], Repo: split[1]}
+	e2eoptions := options.E2E{Organization: split[0], Repo: split[1], ControllerURL: os.Getenv("TEST_EL_URL")}
 	gprovider, err := CreateProvider(ctx, giteaURL, split[0], giteaPassword)
 	if err != nil {
 		return nil, options.E2E{}, gitea.Provider{}, fmt.Errorf("cannot set client: %w", err)

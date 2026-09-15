@@ -128,52 +128,90 @@ func TestProviderValidate(t *testing.T) {
 
 // forgejo-sdk can return 200 with content:null (e.g. for non-file paths); error must contain "cannot find".
 func TestProviderGetFileInsideRepo(t *testing.T) {
+	const validContent = `{"name":"OWNERS","path":"OWNERS","type":"file","content":"YXBwcm92ZXJzOgogIC0gdXNlcgo="}`
+	const wantOwners = "approvers:\n  - user\n"
 	tests := []struct {
 		name         string
 		contentsResp string
+		target       string
+		provenance   string
 		wantContent  string
+		wantRef      string
 		errContains  string
 	}{
 		{
 			name:         "content field is null does not panic",
 			contentsResp: `{"name":"OWNERS","path":"OWNERS","type":"dir","content":null}`,
+			target:       "default-branch",
 			errContains:  "cannot find",
 		},
 		{
 			name:         "null response body yields content nil without panic",
 			contentsResp: `null`,
+			target:       "default-branch",
 			errContains:  "cannot find",
 		},
 		{
 			name:         "valid file content is decoded",
-			contentsResp: `{"name":"OWNERS","path":"OWNERS","type":"file","content":"YXBwcm92ZXJzOgogIC0gdXNlcgo="}`,
-			wantContent:  "approvers:\n  - user\n",
+			contentsResp: validContent,
+			target:       "default-branch",
+			wantContent:  wantOwners,
+			wantRef:      "default-branch",
+		},
+		{
+			name:         "an explicit target wins over everything else",
+			contentsResp: validContent,
+			target:       "explicit-target",
+			provenance:   "default_branch",
+			wantContent:  wantOwners,
+			wantRef:      "explicit-target",
+		},
+		{
+			name:         "default_branch provenance resolves from the default branch",
+			contentsResp: validContent,
+			provenance:   "default_branch",
+			wantContent:  wantOwners,
+			wantRef:      "default-branch",
+		},
+		{
+			name:         "without provenance it falls back to the event SHA",
+			contentsResp: validContent,
+			wantContent:  wantOwners,
+			wantRef:      "sha123",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeclient, mux, teardown := tgitea.Setup(t)
 			defer teardown()
-			provider := &Provider{giteaClient: fakeclient}
+			provider := &Provider{giteaClient: fakeclient, provenance: tt.provenance}
 
 			event := info.NewEvent()
 			event.Organization = "myorg"
 			event.Repository = "myrepo"
-			event.DefaultBranch = "main"
-			event.BaseBranch = "main"
+			event.SHA = "sha123"
+			event.DefaultBranch = "default-branch"
+			// deliberately distinct from every expected ref so a regression to
+			// the old `ref = runevent.BaseBranch` cannot pass
+			event.BaseBranch = "base-branch"
 
+			gotRef := ""
 			mux.HandleFunc("/repos/myorg/myrepo/contents/OWNERS",
-				func(rw http.ResponseWriter, _ *http.Request) {
+				func(rw http.ResponseWriter, r *http.Request) {
+					// forgejo puts the ref in the query string, not the path:
+					// /repos/%s/%s/contents/%s?ref=%s
+					gotRef = r.URL.Query().Get("ref")
 					fmt.Fprint(rw, tt.contentsResp)
 				})
 
-			got, err := provider.GetFileInsideRepo(context.Background(), event, "OWNERS", event.DefaultBranch)
+			got, err := provider.GetFileInsideRepo(context.Background(), event, "OWNERS", tt.target)
 			if tt.errContains != "" {
 				assert.ErrorContains(t, err, tt.errContains)
-			} else {
-				assert.NilError(t, err)
-				assert.Equal(t, tt.wantContent, got)
+				return
 			}
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantContent, got)
+			assert.Equal(t, tt.wantRef, gotRef, "unexpected ref sent to the contents API")
 		})
 	}
 }
