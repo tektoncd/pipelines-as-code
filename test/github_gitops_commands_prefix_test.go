@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
@@ -41,7 +41,7 @@ func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
 	_, _, err := g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr(customTestComment)})
+		github.IssueCommentRequest{Body: customTestComment})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRuns to succeed with custom prefix command")
@@ -63,7 +63,7 @@ func TestGithubPullRequestCustomGitOpsCommandPrefix(t *testing.T) {
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr(customTestComment)})
+		github.IssueCommentRequest{Body: customTestComment})
 	assert.NilError(t, err)
 
 	twait.Succeeded(ctx, t, g.Cnx, g.Options, twait.SuccessOpt{
@@ -106,7 +106,7 @@ func TestGithubPullRequestCustomPrefixCancel(t *testing.T) {
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr(customCancelComment)})
+		github.IssueCommentRequest{Body: customCancelComment})
 	assert.NilError(t, err)
 
 	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)

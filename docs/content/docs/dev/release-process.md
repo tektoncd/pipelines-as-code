@@ -24,7 +24,7 @@ git tag v1.2.3
 Push it directly to the repository (you need write access):
 
 ```shell
-% git push --no-verify git@github.com:openshift-pipelines/pipelines-as-code refs/tags/1.2.3
+% git push --no-verify git@github.com:tektoncd/pipelines-as-code refs/tags/v1.2.3
 ```
 
 ## Monitoring the Release

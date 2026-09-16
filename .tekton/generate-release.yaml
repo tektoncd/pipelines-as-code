@@ -68,7 +68,7 @@ spec:
                   value: $(workspaces.source.path)
             - name: unittest
               displayName: "Run Unit Tests"
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               workingDir: $(workspaces.source.path)
               env:
                 - name: GOCACHE
@@ -90,7 +90,7 @@ spec:
                 exit "${test_status}"
             - name: upload-release
               displayName: "Upload Release YAML"
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               workingDir: $(workspaces.source.path)
               env:
                 - name: HUB_TOKEN

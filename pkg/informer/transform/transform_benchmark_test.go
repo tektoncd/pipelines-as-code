@@ -35,7 +35,7 @@ func createRealisticRepository(name string) *pacv1alpha1.Repository {
 					APIVersion: "pipelinesascode.tekton.dev/v1alpha1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data1},
+					FieldsV1:   metav1.NewFieldsV1(string(fieldsV1Data1)),
 				},
 			},
 			Annotations: map[string]string{
@@ -271,7 +271,7 @@ func createRealisticPipelineRun(name string) *tektonv1.PipelineRun {
 					APIVersion: "tekton.dev/v1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data1},
+					FieldsV1:   metav1.NewFieldsV1(string(fieldsV1Data1)),
 				},
 				{
 					Manager:    "tekton-pipelines-controller",
@@ -279,7 +279,7 @@ func createRealisticPipelineRun(name string) *tektonv1.PipelineRun {
 					APIVersion: "tekton.dev/v1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data2},
+					FieldsV1:   metav1.NewFieldsV1(string(fieldsV1Data2)),
 				},
 			},
 		},

@@ -33,7 +33,7 @@ The following fields are available inside CEL expressions:
 | `event_title` | The title of the event. For `push`, this is the commit title. For pull requests, this is the pull request title. Supported on GitHub, GitLab, and Bitbucket Cloud only. |
 | `body` | The full webhook payload body from the Git provider. Example: `body.pull_request.number` retrieves the pull request number on GitHub. |
 | `headers` | The full set of webhook headers from the Git provider. Example: `headers['x-github-event']` retrieves the event type on GitHub. |
-| `.pathChanged` | A suffix function you append to a glob string to check whether matching paths changed. Supported on GitHub and GitLab only. |
+| `.pathChanged` | A suffix function you append to a glob string to check whether matching paths changed. Not supported on Bitbucket Cloud. |
 | `files` | The list of files that changed in the event (`all`, `added`, `deleted`, `modified`, and `renamed`). Example: `files.all` or `files.deleted`. For pull requests, this includes every file in the pull request. |
 | Custom params | Any [custom parameters]({{< relref "/docs/advanced/custom-parameters" >}}) you define in the Repository CR `spec.params` are available as CEL variables. Example: `enable_ci == "true"`. See [Custom parameters in CEL expressions limitations](#custom-parameters-in-cel-expressions-limitations) below for important details. |
 
@@ -116,6 +116,10 @@ Path-based matching lets you run a PipelineRun only when specific files change -
 
 {{< callout type="info" >}}
 Pipelines-as-Code supports two ways to match files changed in a particular event. The `.pathChanged` suffix function supports [glob pattern](https://github.com/gobwas/glob#example) and does not support different types of "changes" (added, modified, deleted, and so on). The other option is the `files.` property (`files.all`, `files.added`, `files.deleted`, `files.modified`, `files.renamed`) which can target specific types of changed files and supports CEL expressions, for example `files.all.exists(x, x.matches('renamed.go'))`.
+{{< /callout >}}
+
+{{< callout type="warning" >}}
+Both `.pathChanged` and the `files.` properties read the list of changed files from your Git provider. A changed Git submodule appears there as a single path, with none of the files inside it. See [Git submodules]({{< relref "/docs/guides/event-matching/path-matching#git-submodules" >}}). Bitbucket Cloud does not report changed files at all, so `.pathChanged` is always false and `files.` is always empty there.
 {{< /callout >}}
 
 To run a PipelineRun only when certain paths change, use the `.pathChanged` suffix function with a [glob pattern](https://github.com/gobwas/glob#example). The following example matches every `.md` file in the `docs` directory:

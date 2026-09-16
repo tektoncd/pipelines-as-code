@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
@@ -108,7 +108,7 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 		_, _, err = ghcnx.Client().Repositories.CreateComment(ctx,
 			opts.Organization,
 			opts.Repo, sha, // this is the commit sha of the tag v1.0.0
-			&github.RepositoryComment{Body: github.Ptr(comment)})
+			&github.RepositoryComment{Body: new(comment)})
 		assert.NilError(t, err)
 
 		waitOpts := twait.Opts{

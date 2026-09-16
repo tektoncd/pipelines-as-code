@@ -13,7 +13,6 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 
-	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
@@ -151,7 +150,7 @@ func TestGitlabOnComment(t *testing.T) {
 	defer cleanup()
 
 	note, _, err := topts.GLProvider.Client().Notes.CreateMergeRequestNote(topts.ProjectID, int64(topts.MRNumber), &clientGitlab.CreateMergeRequestNoteOptions{
-		Body: github.Ptr(triggerComment),
+		Body: new(triggerComment),
 	})
 	assert.NilError(t, err)
 	topts.ParamsRun.Clients.Log.Infof("Note %s/-/merge_requests/%d/notes/%d has been created", topts.GitHTMLURL, int64(topts.MRNumber), note.ID)

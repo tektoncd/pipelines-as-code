@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
@@ -50,7 +50,7 @@ func TestGithubGHEPushRequestGitOpsCommentOnComment(t *testing.T) {
 	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.SHA,
-		&github.RepositoryComment{Body: github.Ptr(opsComment)})
+		&github.RepositoryComment{Body: new(opsComment)})
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
@@ -107,7 +107,7 @@ func TestGithubGHEPushRequestGitOpsCommentRetest(t *testing.T) {
 	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.SHA,
-		&github.RepositoryComment{Body: github.Ptr(comment)})
+		&github.RepositoryComment{Body: new(comment)})
 	assert.NilError(t, err)
 
 	waitOpts := twait.Opts{
@@ -161,7 +161,7 @@ func TestGithubGHEPushRequestGitOpsCommentCancel(t *testing.T) {
 	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.SHA,
-		&github.RepositoryComment{Body: github.Ptr("/test pipelinerun-on-push branch:" + g.TargetNamespace)})
+		&github.RepositoryComment{Body: new("/test pipelinerun-on-push branch:" + g.TargetNamespace)})
 	assert.NilError(t, err)
 	numberOfStatus := 3
 	waitOpts := twait.Opts{
@@ -178,7 +178,7 @@ func TestGithubGHEPushRequestGitOpsCommentCancel(t *testing.T) {
 	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.SHA,
-		&github.RepositoryComment{Body: github.Ptr(comment)})
+		&github.RepositoryComment{Body: new(comment)})
 	assert.NilError(t, err)
 
 	cancelWaitOpts := waitOpts
@@ -296,7 +296,7 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 
 	mergedSHA := mergeResult.GetSHA()
 
-	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx, opts.Organization, opts.Repo, mergedSHA, &github.RepositoryComment{Body: github.Ptr("/retest pipelinerun-pr-number-variable branch:" + tempBaseBranch)})
+	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx, opts.Organization, opts.Repo, mergedSHA, &github.RepositoryComment{Body: new("/retest pipelinerun-pr-number-variable branch:" + tempBaseBranch)})
 	assert.NilError(t, err)
 	g.Logger.Infof("Comment %s has been created", mergedSHA)
 

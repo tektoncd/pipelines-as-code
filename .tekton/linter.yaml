@@ -184,7 +184,7 @@ spec:
 
             - name: check-e2e-tests-naming
               displayName: "Check e2e tests naming convention"
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               workingDir: $(workspaces.source.path)
               script: |
                 git config --global --add safe.directory $(workspaces.source.path)
@@ -192,7 +192,7 @@ spec:
 
             - name: check-test-conventions
               displayName: "Check Go test naming and assertion conventions"
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               workingDir: $(workspaces.source.path)
               script: |
                 #!/usr/bin/env bash
@@ -243,7 +243,7 @@ spec:
 
             - name: check-generated-schemas
               displayName: "Check generated OpenAPI schemas"
-              image: docker.io/golang:1.26
+              image: docker.io/golang:1.27
               workingDir: $(workspaces.source.path)
               env:
                 - name: HUB_TOKEN

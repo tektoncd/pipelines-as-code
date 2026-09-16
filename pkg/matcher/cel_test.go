@@ -3,9 +3,9 @@ package matcher
 import (
 	"testing"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/decls"
-	"github.com/google/cel-go/common/types"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/decls"
+	"cel.dev/cel-go/common/types"
 	"gotest.tools/v3/assert"
 )
 

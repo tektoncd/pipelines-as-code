@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
@@ -126,7 +126,7 @@ func TestGithubGHESkipCITestCommand(t *testing.T) {
 		g.Options.Organization,
 		g.Options.Repo,
 		g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test")})
+		github.IssueCommentRequest{Body: "/test"})
 	assert.NilError(t, err)
 
 	// Wait for PipelineRun to be created

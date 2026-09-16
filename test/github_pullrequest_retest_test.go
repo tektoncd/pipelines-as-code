@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
@@ -36,7 +36,7 @@ func TestGithubGHEPullRequestGitopsCommentRetest(t *testing.T) {
 	_, _, err := g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/retest")})
+		github.IssueCommentRequest{Body: "/retest"})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for PipelineRun to succeed")
@@ -75,7 +75,7 @@ func TestGithubGHEPullRequestGitopsCommentCancel(t *testing.T) {
 		g.Options.Organization,
 		g.Options.Repo,
 		g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test pr-gitops-comment")},
+		github.IssueCommentRequest{Body: "/test pr-gitops-comment"},
 	)
 	waitOpts := twait.Opts{
 		Namespace:       g.TargetNamespace,
@@ -91,7 +91,7 @@ func TestGithubGHEPullRequestGitopsCommentCancel(t *testing.T) {
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/cancel pr-gitops-comment")})
+		github.IssueCommentRequest{Body: "/cancel pr-gitops-comment"})
 	assert.NilError(t, err)
 
 	cancelWaitOpts := twait.Opts{
@@ -167,7 +167,7 @@ func TestGithubGHERetestWithMultipleFailedPipelineRuns(t *testing.T) {
 		g.Options.Organization,
 		g.Options.Repo,
 		g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/retest")},
+		github.IssueCommentRequest{Body: "/retest"},
 	)
 	assert.NilError(t, err)
 

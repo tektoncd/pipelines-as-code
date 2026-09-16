@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	celTypes "github.com/google/cel-go/common/types"
+	celTypes "cel.dev/cel-go/common/types"
 	"go.uber.org/zap"
 
 	apincoming "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/incoming"

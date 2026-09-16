@@ -43,7 +43,7 @@ swap:
   'ActiveMQ\sArtemis|ActiveMQ(?!\sArtemis)': built-in messaging|JBoss EAP built-in messaging|JBoss EAP messaging
   'Admin\sPortal|webadmin\sportal|webadmin|Administrator\sPortal|Administration\sportal': Administration Portal
   'BRMS\sengine': inference engine
-  'dotNet': .NET
+  'dotNet|dotnet': .NET
   'GUI\seditor|Business\sCentral\seditor': guided editor
   'JBoss\.org': JBoss Community
   'JBoss\sAMQ': AMQ
@@ -56,6 +56,7 @@ swap:
   'RHVM|RHV-M|RHV\sManager': Red Hat Virtualization Manager
   'self-hosted\sengine\svirtual\smachine|engine\sVM': Manager virtual machine
   (?<!Ansible )Playbook: playbook
+  ansible: Ansible
   Ansible playbook: Ansible Playbook
   Ansible rulebook: Ansible Rulebook
   Appliance Console: Appliance console
@@ -77,6 +78,7 @@ swap:
   Capsule server: Capsule Server
   CD 1: "CD #1"
   CDS|Cds: CDs
+  ceph(?!fs|-): Ceph
   Ceph Ansible: ceph-ansible
   Ceph block device|Ceph block devices: Ceph Block Device
   Ceph filesystem|Ceph file system: Ceph File System
@@ -86,6 +88,7 @@ swap:
   cephfs: CephFS
   CGroup|c group: cgroup
   cidr|Classless Interdomain Routing|Classless Inter-domain Routing: CIDR
+  Classloader: class loader
   classic mode: GNOME Classic
   CloudForms Management Engine|CFME: Red Hat CloudForms|Red Hat CloudForms Appliance
   command prompt: shell prompt|Command Prompt (Windows product)
@@ -140,7 +143,7 @@ swap:
   Greenboot|green boots: greenboot
   grpc|GRPC: gRPC
   Grub: GRUB
-  GTK|Gtk|gtk: GTK+
+  Gtk|gtk: GTK+
   hot rod|HotRod|hotrod: Hot Rod
   HP Proliant: HP ProLiant
   HTTP interface: management console
@@ -160,6 +163,8 @@ swap:
   ipv4|IPV4|Ipv4: IPv4
   ipv6|IPV6|Ipv6: IPv6
   iSeries: ISeries
+  Intellij(?! IDEA): IntelliJ
+  Intellij IDEA: IntelliJ IDEA
   iso: ISO
   Istio Service Mesh: Istio service mesh
   Itanium2: Itanium 2
@@ -172,6 +177,7 @@ swap:
   Jvm|jvm: JVM
   kbase: KIE base
   kernel-based virtual machine: Kernel-based Virtual Machine
+  kibana: Kibana
   kernelspace: kernel space
   key store: keystore
   kickstart: Kickstart
@@ -202,11 +208,12 @@ swap:
   MS-dos|Ms-Dos|ms-dos|MSDOS|msdos: MS-DOS
   MTLS|m-TLS: mTLS
   mutual tls|Mutual tls|Mutual TLS: mutual TLS
-  MYSQL|mySQL: MySQL
+  MYSQL|mySQL|Mysql|mysql: MySQL
   native interface: management CLI
   network interface card: network interface controller (NIC)
   objectclass: objectClass
   Objective-C: Objective C
+  Oauth: OAuth
   oci|Oci: OCI
   OCP: Red Hat OpenShift Container Platform
   ODF: Red Hat OpenShift Data Foundation
@@ -216,6 +223,7 @@ swap:
   Open Telemetry: OpenTelemetry (OTel)
   openid connect|Openid Connect: OpenID Connect
   openrewrite|Openrewrite|Open Rewrite: OpenRewrite
+  Openshift(?! online| Kubernetes| Origin): OpenShift
   Openshift online|OO: Red Hat OpenShift Online
   Operating Environment: operating environment
   Operator Hub|Operator hub|Operatorhub|operatorhub: OperatorHub
@@ -225,10 +233,12 @@ swap:
   OS|Operating System: operating system
   Overcloud: overcloud
   P-PC|PPC64: PowerPC
+  php: PHP
   Podman desktop: Podman Desktop
   podman: Podman
   popup|Pop-up: pop-up
   Posix|posix: POSIX
+  postgres|Postgresql: PostgreSQL
   Postscript: PostScript
   Powershell|powershell: PowerShell
   Ppp|ppp: PPP
@@ -256,6 +266,7 @@ swap:
   RedFish: Redfish
   redis: Redis
   RESTEASY|(?<!-)resteasy|Resteasy: RESTEasy
+  restic: Restic
   RHDS: Red Hat Directory Server
   RHEL host|RHEL-H: Red Hat Enterprise Linux host
   RHV: Red Hat Virtualization
@@ -269,6 +280,7 @@ swap:
   s-record|S-Record|s-Record|SREC: S-record
   samba|SAMBA: Samba
   Satellite server: Satellite Server
+  Sbt: sbt
   SE-Linux|S-E Linux|SE Linux|selinux: SELinux
   Shadow Man|ShadowMan: Shadowman
   Shadow passwords: shadow passwords
@@ -304,6 +316,7 @@ swap:
   Unix|unix: UNIX
   uri: URI
   url: URL
+  velero: Velero
   urn: URN
   VCPU|vcpu: vCPU
   VI: vi
@@ -312,6 +325,7 @@ swap:
   virtual-console|Virtual Console: virtual console
   vlan|vLAN: VLAN
   VM portal|vm portal|Virtual Machine Portal|User Portal: VM Portal
+  VMWare: VMware
   vnic|VNIC|Virtual Network Interface Card: vNIC
   vnuma|VNUMA: vNUMA node
   vpn: VPN

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v90/github"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,7 +61,7 @@ func TestGiteaConcurrencyExclusivenessMultiplePipelines(t *testing.T) {
 		YAMLFiles:            yamlFiles,
 		CheckForStatus:       "success",
 		CheckForNumberStatus: numPipelines,
-		ConcurrencyLimit:     github.Ptr(1),
+		ConcurrencyLimit:     new(1),
 		ExpectEvents:         false,
 	}
 	_, f := tgitea.TestPR(t, topts)
@@ -78,7 +77,7 @@ func TestGiteaConcurrencyExclusivenessMultipleRuns(t *testing.T) {
 		TargetEvent:          triggertype.PullRequest.String(),
 		YAMLFiles:            map[string]string{".tekton/pr.yaml": "testdata/pipelinerun.yaml"},
 		CheckForNumberStatus: numPipelines,
-		ConcurrencyLimit:     github.Ptr(1),
+		ConcurrencyLimit:     new(1),
 		ExpectEvents:         false,
 	}
 	_, f := tgitea.TestPR(t, topts)
@@ -154,7 +153,7 @@ func TestGiteaConcurrencyOrderedExecution(t *testing.T) {
 		},
 		CheckForStatus:       "success",
 		CheckForNumberStatus: 3,
-		ConcurrencyLimit:     github.Ptr(1),
+		ConcurrencyLimit:     new(1),
 		ExpectEvents:         false,
 	}
 	_, f := tgitea.TestPR(t, topts)
@@ -232,7 +231,7 @@ func TestGiteaGlobalRepoConcurrencyLimit(t *testing.T) {
 		CheckForStatus:       "success",
 	}
 
-	tgitea.VerifyConcurrency(t, topts, github.Ptr(2))
+	tgitea.VerifyConcurrency(t, topts, new(2))
 }
 
 // TestGiteaGlobalAndLocalRepoConcurrencyLimit verifies the concurrency_limit feature of the PipelineRun,
@@ -248,11 +247,11 @@ func TestGiteaGlobalAndLocalRepoConcurrencyLimit(t *testing.T) {
 		TargetEvent:          triggertype.PullRequest.String(),
 		YAMLFiles:            yamlFiles,
 		CheckForNumberStatus: numPipelines,
-		ConcurrencyLimit:     github.Ptr(3),
+		ConcurrencyLimit:     new(3),
 		CheckForStatus:       "success",
 	}
 
-	tgitea.VerifyConcurrency(t, topts, github.Ptr(2))
+	tgitea.VerifyConcurrency(t, topts, new(2))
 }
 
 // TestGiteaConcurrencyLimitChangeTakesEffect raises the concurrency limit of a
@@ -275,7 +274,7 @@ func TestGiteaConcurrencyLimitChangeTakesEffect(t *testing.T) {
 		TargetEvent:      triggertype.PullRequest.String(),
 		YAMLFiles:        yamlFiles,
 		ExtraArgs:        map[string]string{"Command": "sleep 600"},
-		ConcurrencyLimit: github.Ptr(1),
+		ConcurrencyLimit: new(1),
 		ExpectEvents:     false,
 	}
 	ctx, f := tgitea.TestPR(t, topts)
@@ -289,7 +288,7 @@ func TestGiteaConcurrencyLimitChangeTakesEffect(t *testing.T) {
 
 	health := tkubestuff.SnapshotWatcherHealth(ctx, t, topts.ParamsRun)
 
-	pacrepo.SetConcurrencyLimit(ctx, t, topts.ParamsRun, topts.TargetNS, topts.TargetNS, github.Ptr(raisedLimit))
+	pacrepo.SetConcurrencyLimit(ctx, t, topts.ParamsRun, topts.TargetNS, topts.TargetNS, new(raisedLimit))
 
 	counts, _ := twait.UntilCounts(ctx, t, topts.ParamsRun.Clients, topts.TargetNS,
 		"at least 4 running pipelineruns after raising the limit",
@@ -320,7 +319,7 @@ func TestGiteaConcurrencyLimitRemoval(t *testing.T) {
 		TargetEvent:      triggertype.PullRequest.String(),
 		YAMLFiles:        yamlFiles,
 		ExtraArgs:        map[string]string{"Command": "sleep 20"},
-		ConcurrencyLimit: github.Ptr(1),
+		ConcurrencyLimit: new(1),
 		ExpectEvents:     false,
 	}
 	ctx, f := tgitea.TestPR(t, topts)
@@ -360,7 +359,7 @@ func TestGiteaConcurrencyLimitHoldsWhenStartFails(t *testing.T) {
 		TargetEvent:      triggertype.PullRequest.String(),
 		YAMLFiles:        yamlFiles,
 		ExtraArgs:        map[string]string{"Command": "sleep 30"},
-		ConcurrencyLimit: github.Ptr(1),
+		ConcurrencyLimit: new(1),
 		ExpectEvents:     false,
 	}
 	ctx, f := tgitea.TestPR(t, topts)
@@ -416,7 +415,7 @@ func TestGiteaConcurrencyQueueRebuildSurvivesBadPipelineRun(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: poisonNS, Namespace: poisonNS},
 		Spec: v1alpha1.RepositorySpec{
 			URL:              "https://forge.invalid/never/matched",
-			ConcurrencyLimit: github.Ptr(1),
+			ConcurrencyLimit: new(1),
 		},
 	}))
 
@@ -460,7 +459,7 @@ func TestGiteaConcurrencyQueueRebuildSurvivesBadPipelineRun(t *testing.T) {
 		TargetNS:         targetRef,
 		YAMLFiles:        yamlFiles,
 		ExtraArgs:        map[string]string{"Command": "sleep 60"},
-		ConcurrencyLimit: github.Ptr(1),
+		ConcurrencyLimit: new(1),
 		ExpectEvents:     false,
 	}
 	_, f := tgitea.TestPR(t, topts)
@@ -519,7 +518,7 @@ func TestGiteaConcurrencyWatcherSurvivesParallelRepos(t *testing.T) {
 			TargetEvent:      triggertype.PullRequest.String(),
 			YAMLFiles:        yamlFiles,
 			ExtraArgs:        map[string]string{"Command": "sleep 20"},
-			ConcurrencyLimit: github.Ptr(1),
+			ConcurrencyLimit: new(1),
 			ExpectEvents:     false,
 		}
 		_, f := tgitea.TestPR(t, topts)
@@ -584,7 +583,7 @@ func TestGiteaConcurrencyTransientAPIFailureDoesNotWedgeQueue(t *testing.T) {
 		TargetEvent:      triggertype.PullRequest.String(),
 		YAMLFiles:        yamlFiles,
 		ExtraArgs:        map[string]string{"Command": "sleep 20"},
-		ConcurrencyLimit: github.Ptr(1),
+		ConcurrencyLimit: new(1),
 		ExpectEvents:     false,
 	}
 	_, f := tgitea.TestPR(t, topts)

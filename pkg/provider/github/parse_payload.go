@@ -16,7 +16,7 @@ import (
 	// ghinstallation.Transport.InstallationTokenOptions is typed against this
 	// specific go-github major version; keep in sync with its go.mod.
 	githubv88 "github.com/google/go-github/v88/github"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/gitclient"
@@ -130,7 +130,7 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 	if err != nil {
 		return "", err
 	}
-	v.Token = github.Ptr(token)
+	v.Token = new(token)
 
 	return token, err
 }

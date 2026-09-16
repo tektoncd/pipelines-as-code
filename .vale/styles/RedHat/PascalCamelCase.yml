@@ -84,7 +84,6 @@ exceptions:
   - HdrHistogram
   - Helm
   - HyperCLOVAX
-  - HyperShift
   - IaaS
   - IBoE
   - IconBurst

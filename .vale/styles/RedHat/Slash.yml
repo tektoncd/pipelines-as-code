@@ -11,6 +11,8 @@ tokens:
 exceptions:
   # numbers/dates
   - '\d{1,4}/\d{1,4}'
+  # units of measurement
+  - '[KMGT][Bb]/s'
   # URLs and schemes
   - 'https?://\S+'
   # common technical terms

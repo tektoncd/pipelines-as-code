@@ -5,6 +5,10 @@ weight: 1
 
 Path-based matching lets you run PipelineRuns only when specific files change in a pull request or push -- for example, running documentation tests only when files under `docs/` change, or skipping CI entirely when only markdown files are modified. This page covers the `on-path-change` and `on-path-change-ignore` annotations.
 
+{{< callout type="warning" >}}
+Bitbucket Cloud does not report changed files to Pipelines-as-Code, so neither annotation behaves as written there. A PipelineRun with `on-path-change` never runs, and one with `on-path-change-ignore` always runs, since there are no paths to exclude.
+{{< /callout >}}
+
 {{< tech_preview "Matching a PipelineRun to specific path changes via annotation" >}}
 
 ## Triggering on path changes
@@ -37,6 +41,39 @@ tkn pac info globbing "[PATTERN]"
 
 matches files against `[PATTERN]` in the current directory.
 
+{{< /callout >}}
+
+### Git submodules
+
+{{< callout type="warning" >}}
+Git providers report a changed submodule as one path, the submodule directory, and do not list the files inside it. You can match a submodule change, but not the individual files it brings in.
+{{< /callout >}}
+
+Git stores a submodule as a pointer to a commit in another repository, so a submodule update is a single entry in the provider's list of changed files. Match the submodule as if it were a file.
+
+Take this repository, where `test-submodule` is a submodule:
+
+```text
+.
+├── README.md
+└── test-submodule
+    └── README.md
+```
+
+If a pull request bumps `test-submodule` to a revision that adds a `new-file`, the provider reports one changed path: `test-submodule`. Your local checkout shows `test-submodule/new-file`; the provider never mentions it.
+
+| Pattern | Matches | Why |
+| --------- | --------- | ----- |
+| `test-submodule/new-file` | No | The provider does not report paths inside the submodule. |
+| `test-submodule/**` | No | Nothing follows `test-submodule` in the reported path. |
+| `test-submodule` | Yes | This is the path you get. |
+
+Avoid `test-submodule*`. It matches, but it also catches unrelated siblings such as `test-submodule-other/config.yaml`.
+
+The same applies to `on-path-change-ignore` and to the [`.pathChanged()` function and the `files.` properties]({{< relref "/docs/guides/event-matching/cel-expressions#matching-by-path-change" >}}) in CEL expressions, which read the same list of changed files.
+
+{{< callout type="info" >}}
+`tkn pac info globbing` matches against your local filesystem, which has the submodule checked out. It reports matches for patterns such as `test-submodule/**` that Pipelines-as-Code will not make. See [Test Globbing Pattern]({{< relref "/docs/cli/info#test-globbing-pattern" >}}).
 {{< /callout >}}
 
 ## Ignoring specific path changes

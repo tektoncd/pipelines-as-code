@@ -27,7 +27,7 @@ func (v *Provider) Detect(req *http.Request, payload string, logger *zap.Sugared
 	setLoggerAndProceed := func(processEvent bool, reason string, err error) (bool, bool, *zap.SugaredLogger,
 		string, error,
 	) {
-		logger = logger.With("provider", "gitlab", "event-id", req.Header.Get("X-Request-Id"))
+		logger = logger.With("provider", "gitlab", "event-id", req.Header.Get("X-Gitlab-Event-UUID"))
 		return isGL, processEvent, logger, reason, err
 	}
 

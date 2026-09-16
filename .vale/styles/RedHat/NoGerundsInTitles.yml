@@ -1,0 +1,53 @@
+---
+extends: existence
+message: "Where possible, avoid using gerunds in topic titles. Use the imperative form instead."
+level: suggestion
+scope: heading
+tokens:
+  - '^\w+ing\b'
+exceptions:
+  # Root words ending in -ing (not gerunds)
+  - String
+  - Spring
+  - Ring
+  - Bring
+  - Thing
+  - Swing
+  - Ping
+  - Cling
+  - Fling
+  - Sling
+  - Sting
+  - Wing
+  - Wring
+  - King
+  # Compound -thing words
+  - Everything
+  - Something
+  - Nothing
+  - Anything
+  # Prepositions and conjunctions ending in -ing
+  - During
+  # Participial adjectives commonly used as modifiers in titles
+  - Existing
+  - Underlying
+  - Corresponding
+  - Remaining
+  - Outstanding
+  - Preceding
+  - Overarching
+  - Forthcoming
+  - Longstanding
+  - Following
+  - Interesting
+  - Competing
+  - Overwhelming
+  - Overlapping
+  - Lingering
+  - Missing
+  - Leading
+  - Pending
+action:
+  name: suggest
+  params:
+    - actions/NoGerundsInTitles.tengo

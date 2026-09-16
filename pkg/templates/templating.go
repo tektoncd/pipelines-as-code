@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/traits"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/traits"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cel"
 	"google.golang.org/protobuf/encoding/protojson"

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -189,7 +189,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -213,7 +213,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -237,7 +237,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -261,7 +261,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -288,7 +288,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -481,7 +481,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -503,7 +503,7 @@ func TestRun(t *testing.T) {
 			runevent: info.Event{
 				Event: &github.PullRequestEvent{
 					PullRequest: &github.PullRequest{
-						Number: github.Ptr(666),
+						Number: new(666),
 					},
 				},
 				SHA:               "fromwebhook",
@@ -670,7 +670,7 @@ func TestRun(t *testing.T) {
 			}
 			vcx := &ghprovider.Provider{
 				Run:    cs,
-				Token:  github.Ptr("None"),
+				Token:  new("None"),
 				Logger: logger,
 			}
 			vcx.SetGithubClient(fakeclient)

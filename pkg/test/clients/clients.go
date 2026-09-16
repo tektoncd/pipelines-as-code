@@ -17,9 +17,12 @@ import (
 	fakepipelineruninformer "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1/pipelinerun/fake"
 	pipelinelisterv1 "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	fakekubeclientset "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	fakekubeclient "knative.dev/pkg/client/injection/kube/client/fake"
 )
 
@@ -39,14 +42,15 @@ type Informers struct {
 }
 
 type Data struct {
-	TaskRuns     []*pipelinev1.TaskRun
-	PipelineRuns []*pipelinev1.PipelineRun
-	Repositories []*v1alpha1.Repository
-	Namespaces   []*corev1.Namespace
-	Secret       []*corev1.Secret
-	Events       []*corev1.Event
-	ConfigMap    []*corev1.ConfigMap
-	Deployments  []*appsv1.Deployment
+	TaskRuns             []*pipelinev1.TaskRun
+	PipelineRuns         []*pipelinev1.PipelineRun
+	Repositories         []*v1alpha1.Repository
+	Namespaces           []*corev1.Namespace
+	Secret               []*corev1.Secret
+	Events               []*corev1.Event
+	ConfigMap            []*corev1.ConfigMap
+	Deployments          []*appsv1.Deployment
+	SubjectAccessReviews []*authorizationv1.SubjectAccessReview
 }
 
 // SeedTestData returns Clients and Informers populated with the
@@ -118,6 +122,30 @@ func SeedTestData(t *testing.T, ctx context.Context, d Data) (Clients, Informers
 		if _, err := c.Kube.AppsV1().Deployments(cm.Namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
 		}
+	}
+
+	if len(d.SubjectAccessReviews) > 0 {
+		c.Kube.PrependReactor("create", "subjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, ok := action.(k8stesting.CreateAction)
+			if !ok {
+				return false, nil, nil
+			}
+			sar, ok := createAction.GetObject().(*authorizationv1.SubjectAccessReview)
+			if !ok {
+				return false, nil, nil
+			}
+			for _, seeded := range d.SubjectAccessReviews {
+				if seeded.Spec.User == sar.Spec.User &&
+					seeded.Spec.ResourceAttributes.Namespace == sar.Spec.ResourceAttributes.Namespace &&
+					seeded.Spec.ResourceAttributes.Verb == sar.Spec.ResourceAttributes.Verb &&
+					seeded.Spec.ResourceAttributes.Group == sar.Spec.ResourceAttributes.Group &&
+					seeded.Spec.ResourceAttributes.Resource == sar.Spec.ResourceAttributes.Resource {
+					sar.Status = seeded.Status
+					return true, sar, nil
+				}
+			}
+			return true, sar, nil
+		})
 	}
 
 	c.PipelineAsCode.ClearActions()

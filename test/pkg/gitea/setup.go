@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea"
@@ -24,7 +23,7 @@ func CreateProvider(ctx context.Context, giteaURL, user, password string) (gitea
 	}
 	gprovider := gitea.Provider{
 		Password: password,
-		Token:    github.Ptr(password),
+		Token:    new(password),
 	}
 	gprovider.SetLogger(run.Clients.Log)
 	event := info.NewEvent()

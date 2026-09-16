@@ -17,7 +17,6 @@ import (
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	testprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 
-	"github.com/google/go-github/v90/github"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
@@ -1348,7 +1347,7 @@ func TestCancelInProgressMatchingPipelineRun(t *testing.T) {
 				},
 				Spec: v1alpha1.RepositorySpec{
 					URL:              "https://github.com/fooorg/foo",
-					ConcurrencyLimit: github.Ptr(1),
+					ConcurrencyLimit: new(1),
 				},
 			},
 			cancelledPipelineRuns: map[string]bool{},

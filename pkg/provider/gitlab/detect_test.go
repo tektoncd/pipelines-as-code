@@ -259,12 +259,13 @@ func TestProviderDetect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gprovider := Provider{}
-			logger, _ := logger.GetLogger()
+			logger, logCatcher := logger.GetLogger()
 
 			header := http.Header{}
 			header.Set("X-Gitlab-Event", string(tt.eventType))
+			header.Set("X-Gitlab-Event-UUID", "1234567890")
 			req := &http.Request{Header: header}
-			isGL, processReq, _, reason, err := gprovider.Detect(req, tt.event, logger)
+			isGL, processReq, logger, reason, err := gprovider.Detect(req, tt.event, logger)
 			if tt.wantErrString != "" {
 				assert.ErrorContains(t, err, tt.wantErrString)
 				return
@@ -276,6 +277,24 @@ func TestProviderDetect(t *testing.T) {
 			}
 			assert.Equal(t, tt.isGL, isGL)
 			assert.Equal(t, tt.processReq, processReq)
+
+			if !tt.isGL {
+				return
+			}
+
+			logger.Info("generate a log message to check if event-id is added to the logger")
+
+			found := false
+			logs := logCatcher.All()
+			for _, entry := range logs {
+				for _, field := range entry.Context {
+					if field.Key == "event-id" {
+						assert.Equal(t, field.String, "1234567890")
+						found = true
+					}
+				}
+			}
+			assert.Assert(t, found, "event-id not found in the logs")
 		})
 	}
 }

@@ -41,25 +41,27 @@ func (p *CustomParams) makeStandardParamsFromEvent(ctx context.Context) (map[str
 		gitTag = strings.TrimPrefix(p.event.BaseBranch, "refs/tags/")
 	}
 
-	return map[string]string{
-			"revision":            p.event.SHA,
-			"repo_url":            repoURL,
-			"repo_owner":          strings.ToLower(p.event.Organization),
-			"repo_name":           strings.ToLower(p.event.Repository),
-			"target_branch":       formatting.SanitizeBranch(p.event.BaseBranch),
-			"source_branch":       formatting.SanitizeBranch(p.event.HeadBranch),
-			"git_tag":             gitTag,
-			"source_url":          p.event.HeadURL,
-			"sender":              strings.ToLower(p.event.Sender),
-			"target_namespace":    p.repo.GetNamespace(),
-			"event_type":          opscomments.EventTypeBackwardCompat(p.eventEmitter, p.repo, p.event.EventType),
-			"trigger_comment":     triggerCommentAsSingleLine,
-			"pull_request_labels": pullRequestLabels,
-		}, map[string]any{
-			"all":      changedFiles.All,
-			"added":    changedFiles.Added,
-			"deleted":  changedFiles.Deleted,
-			"modified": changedFiles.Modified,
-			"renamed":  changedFiles.Renamed,
-		}
+	standardParams := map[string]string{
+		"revision":            p.event.SHA,
+		"repo_url":            repoURL,
+		"repo_owner":          strings.ToLower(p.event.Organization),
+		"repo_name":           strings.ToLower(p.event.Repository),
+		"target_branch":       formatting.SanitizeBranch(p.event.BaseBranch),
+		"source_branch":       formatting.SanitizeBranch(p.event.HeadBranch),
+		"git_tag":             gitTag,
+		"source_url":          p.event.HeadURL,
+		"sender":              strings.ToLower(p.event.Sender),
+		"target_namespace":    p.repo.GetNamespace(),
+		"event_type":          opscomments.EventTypeBackwardCompat(p.eventEmitter, p.repo, p.event.EventType),
+		"trigger_comment":     triggerCommentAsSingleLine,
+		"pull_request_labels": pullRequestLabels,
+	}
+	changedFilesParams := map[string]any{
+		"all":      changedFiles.All,
+		"added":    changedFiles.Added,
+		"deleted":  changedFiles.Deleted,
+		"modified": changedFiles.Modified,
+		"renamed":  changedFiles.Renamed,
+	}
+	return standardParams, changedFilesParams
 }

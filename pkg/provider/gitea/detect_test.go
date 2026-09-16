@@ -191,10 +191,16 @@ func TestProviderDetect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			observer, _ := zapobserver.New(zap.InfoLevel)
+			observer, logCatcher := zapobserver.New(zap.InfoLevel)
 			logger := zap.New(observer).Sugar()
 			v := &Provider{}
-			isGitea, processEvent, _, gotReason, err := v.Detect(tt.args.req, tt.args.payload, logger)
+			if tt.args.req != nil {
+				if tt.args.req.Header == nil {
+					tt.args.req.Header = http.Header{}
+				}
+				tt.args.req.Header.Set("X-Gitea-Delivery", "1234567890")
+			}
+			isGitea, processEvent, logger, gotReason, err := v.Detect(tt.args.req, tt.args.payload, logger)
 			assert.Assert(t, gotReason == tt.wantReason, gotReason, tt.wantReason)
 			if tt.wantErrSubstr != "" {
 				assert.Assert(t, err != nil)
@@ -204,6 +210,24 @@ func TestProviderDetect(t *testing.T) {
 			assert.NilError(t, err)
 			assert.Assert(t, isGitea == tt.isGitea)
 			assert.Assert(t, processEvent == tt.processEvent)
+
+			if !tt.isGitea {
+				return
+			}
+
+			logger.Info("generate a log message to check if event-id is added to the logger")
+
+			found := false
+			logs := logCatcher.All()
+			for _, entry := range logs {
+				for _, field := range entry.Context {
+					if field.Key == "event-id" {
+						assert.Equal(t, field.String, "1234567890")
+						found = true
+					}
+				}
+			}
+			assert.Assert(t, found, "event-id not found in the logs")
 		})
 	}
 }

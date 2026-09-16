@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
@@ -143,18 +143,21 @@ func TestChangePipelineRun(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		prs           []*tektonv1.PipelineRun
-		expectedError string
+		name           string
+		prs            []*tektonv1.PipelineRun
+		expectedErrors []string
 	}{
 		{
 			name: "test with params",
 			prs:  prs,
 		},
 		{
-			name:          "test with json error",
-			prs:           jsonErrorPRs,
-			expectedError: "failed to marshal PipelineRun json-error-pr: json: error calling MarshalJSON for type v1.ParamValue: impossible ParamValues.Type: \"\"",
+			name: "test with json error",
+			prs:  jsonErrorPRs,
+			expectedErrors: []string{
+				"failed to marshal PipelineRun json-error-pr",
+				"impossible ParamValues.Type: \"\"",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -164,10 +167,13 @@ func TestChangePipelineRun(t *testing.T) {
 			p := &PacRun{event: event}
 			ctx, _ := rtesting.SetupFakeContext(t)
 			err := p.changePipelineRun(ctx, repo, tt.prs)
-			if tt.expectedError != "" {
-				assert.Error(t, err, tt.expectedError)
+			if len(tt.expectedErrors) != 0 {
+				for _, expectedError := range tt.expectedErrors {
+					assert.ErrorContains(t, err, expectedError)
+				}
 				return
 			}
+			assert.NilError(t, err)
 			assert.Assert(t, strings.HasPrefix(tt.prs[0].GetName(), "pac-gitauth"), tt.prs[0].GetName(), "has no pac-gitauth prefix")
 			assert.Assert(t, tt.prs[0].GetAnnotations()[apipac.GitAuthSecret] != "")
 			assert.Assert(t, tt.prs[0].GetNamespace() == "testrepo", "namespace should be testrepo: %v", tt.prs[0].GetNamespace())
@@ -731,7 +737,7 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 				ConsoleURL: "https://console.url",
 			}
 			vcx := &ghprovider.Provider{
-				Token:  github.Ptr("None"),
+				Token:  new("None"),
 				Logger: logger,
 			}
 			vcx.SetGithubClient(fakeclient)
@@ -1001,7 +1007,7 @@ func TestVerifyRepoAndUser(t *testing.T) {
 				},
 			)
 
-			vcx := &ghprovider.Provider{Token: github.Ptr("token"), Logger: logger}
+			vcx := &ghprovider.Provider{Token: new("token"), Logger: logger}
 			vcx.SetGithubClient(ghClient)
 			vcx.SetPacInfo(pacInfo)
 

@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
@@ -209,7 +209,7 @@ func setupStartPRTest(t *testing.T) (*params.Run, *info.Event, *zap.SugaredLogge
 func setupProviderForTest(cs *params.Run, logger *zap.SugaredLogger, fakeclient *github.Client, pacInfo *info.PacOpts) *ghprovider.Provider {
 	vcx := &ghprovider.Provider{
 		Run:    cs,
-		Token:  github.Ptr("test-token"),
+		Token:  new("test-token"),
 		Logger: logger,
 	}
 	vcx.SetGithubClient(fakeclient)

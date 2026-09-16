@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -285,8 +285,8 @@ func TestWrapGetContents(t *testing.T) {
 			Header:  headers,
 		},
 	}
-	fileContent := &github.RepositoryContent{Name: github.Ptr("file")}
-	dirContent := []*github.RepositoryContent{{Name: github.Ptr("dir_file")}}
+	fileContent := &github.RepositoryContent{Name: new("file")}
+	dirContent := []*github.RepositoryContent{{Name: new("dir_file")}}
 
 	call := func() (*github.RepositoryContent, []*github.RepositoryContent, *github.Response, error) {
 		return fileContent, dirContent, resp, fmt.Errorf("contents error")

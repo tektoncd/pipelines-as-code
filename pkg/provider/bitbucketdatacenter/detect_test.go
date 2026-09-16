@@ -131,7 +131,7 @@ func TestProviderDetect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bprovider := Provider{}
-			logger, _ := logger.GetLogger()
+			logger, logCatcher := logger.GetLogger()
 
 			jeez, err := json.Marshal(tt.event)
 			if err != nil {
@@ -140,8 +140,9 @@ func TestProviderDetect(t *testing.T) {
 
 			header := http.Header{}
 			header.Set("X-Event-Key", tt.eventType)
+			header.Set("X-Request-ID", "1234567890")
 			req := &http.Request{Header: header}
-			isBS, processReq, _, reason, err := bprovider.Detect(req, string(jeez), logger)
+			isBS, processReq, logger, reason, err := bprovider.Detect(req, string(jeez), logger)
 			if tt.wantErrString != "" {
 				assert.ErrorContains(t, err, tt.wantErrString)
 				return
@@ -153,6 +154,24 @@ func TestProviderDetect(t *testing.T) {
 			assert.NilError(t, err)
 			assert.Equal(t, tt.isBS, isBS)
 			assert.Equal(t, tt.processReq, processReq)
+
+			if !tt.isBS {
+				return
+			}
+
+			logger.Info("generate a log message to check if event-id is added to the logger")
+
+			found := false
+			logs := logCatcher.All()
+			for _, entry := range logs {
+				for _, field := range entry.Context {
+					if field.Key == "event-id" {
+						assert.Equal(t, field.String, "1234567890")
+						found = true
+					}
+				}
+			}
+			assert.Assert(t, found, "event-id not found in the logs")
 		})
 	}
 }

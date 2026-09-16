@@ -22,7 +22,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
 	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
@@ -212,7 +212,7 @@ func TestGithubGHEPullRequestInvalidSpecValues(t *testing.T) {
 	for {
 		res, resp, err = g.Provider.Client().Checks.ListCheckRunsForRef(ctx, g.Options.Organization, g.Options.Repo, g.SHA, &github.ListCheckRunsOptions{
 			AppID:       g.Provider.ApplicationID,
-			Status:      github.Ptr("completed"),
+			Status:      new("completed"),
 			ListOptions: opt,
 		})
 		assert.NilError(t, err)
@@ -252,7 +252,7 @@ func TestGithubGHETestExplicitlyNoMatchedPipelineRun(t *testing.T) {
 	_, _, err := g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test no-match")})
+		github.IssueCommentRequest{Body: "/test no-match"})
 	assert.NilError(t, err)
 	sopt := twait.SuccessOpt{
 		Title:           fmt.Sprintf("Testing %s with Github APPS integration on %s", g.Label, g.TargetNamespace),
@@ -287,7 +287,7 @@ func TestGithubGHECancelInProgress(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Creating /test on PullRequest to create a second run")
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx, g.Options.Organization, g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test")})
+		github.IssueCommentRequest{Body: "/test"})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
@@ -356,7 +356,7 @@ func TestGithubGHECancelInProgressPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Closing the PullRequest")
 	_, _, err = g.Provider.Client().PullRequests.Edit(ctx, g.Options.Organization, g.Options.Repo, g.PRNumber, &github.PullRequest{
-		State: github.Ptr("closed"),
+		State: new("closed"),
 	})
 	assert.NilError(t, err)
 
@@ -498,7 +498,7 @@ func TestGithubGHEPullRequestNoPipelineRunCancelledOnPRClosed(t *testing.T) {
 
 	g.Cnx.Clients.Log.Infof("Closing the PullRequest")
 	_, _, err = g.Provider.Client().PullRequests.Edit(ctx, g.Options.Organization, g.Options.Repo, g.PRNumber, &github.PullRequest{
-		State: github.Ptr("closed"),
+		State: new("closed"),
 	})
 	assert.NilError(t, err)
 
@@ -560,7 +560,7 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPR(t *testing.T) {
 	_, _, err = g.Provider.Client().Issues.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.PRNumber,
-		&github.IssueComment{Body: github.Ptr("/test")})
+		github.IssueCommentRequest{Body: "/test"})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
@@ -606,7 +606,7 @@ func TestGithubGHECancelInProgressSettingFromConfigMapOnPush(t *testing.T) {
 	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
 		g.Options.Organization,
 		g.Options.Repo, g.SHA,
-		&github.RepositoryComment{Body: github.Ptr(comment)})
+		&github.RepositoryComment{Body: new(comment)})
 	assert.NilError(t, err)
 
 	g.Cnx.Clients.Log.Infof("Waiting for the two pipelinerun to be created")
@@ -784,6 +784,26 @@ func TestGithubGHEPullRequestCELJoin(t *testing.T) {
 		2,
 		nil,
 	)
+	assert.NilError(t, err)
+}
+
+func TestGithubGHEPullRequestEventTimeLogged(t *testing.T) {
+	ctx := context.Background()
+	g := &tgithub.PRTest{
+		Label:     "Github PullRequest Event Time Logged",
+		YamlFiles: []string{"testdata/pipelinerun.yaml"},
+		GHE:       true,
+	}
+	g.RunPullRequest(ctx, t)
+	defer g.TearDown(ctx, t)
+
+	globalNs, _, err := params.GetInstallLocation(ctx, g.Cnx)
+	assert.NilError(t, err)
+	ctx = info.StoreNS(ctx, globalNs)
+
+	reg := regexp.MustCompile("controller responded to event .* in .*ms")
+	maxLines := int64(1000)
+	err = twait.RegexpMatchingInControllerLog(ctx, g.Cnx, *reg, 20, "ghe-controller", &maxLines, nil)
 	assert.NilError(t, err)
 }
 

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
@@ -54,7 +54,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	installID, err := strconv.ParseInt(os.Getenv("TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"), 10, 64)
 	assert.NilError(t, err)
 	event := github.CheckRunEvent{
-		Action: github.Ptr("rerequested"),
+		Action: new("rerequested"),
 		Installation: &github.Installation{
 			ID: &installID,
 		},
@@ -64,7 +64,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 				HeadSHA:    &runinfo.SHA,
 				PullRequests: []*github.PullRequest{
 					{
-						Number: github.Ptr(g.PRNumber),
+						Number: new(g.PRNumber),
 					},
 				},
 			},
@@ -106,7 +106,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	assert.Equal(t, corev1.ConditionTrue, cond.Status)
 
 	csEvent := github.CheckSuiteEvent{
-		Action: github.Ptr("rerequested"),
+		Action: new("rerequested"),
 		Installation: &github.Installation{
 			ID: &installID,
 		},
@@ -115,7 +115,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 			HeadSHA:    &runinfo.SHA,
 			PullRequests: []*github.PullRequest{
 				{
-					Number: github.Ptr(g.PRNumber),
+					Number: new(g.PRNumber),
 				},
 			},
 		},
@@ -154,7 +154,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	// Third rerequest: null head_branch, empty pull_requests — resolved from SHA
 	g.Cnx.Clients.Log.Infof("Sending check_run rerequest with null head_branch (resolve PR from SHA)")
 	nullBranchEvent := github.CheckRunEvent{
-		Action: github.Ptr("rerequested"),
+		Action: new("rerequested"),
 		Installation: &github.Installation{
 			ID: &installID,
 		},
@@ -205,7 +205,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 	// re-runs on fork PRs when it omits the pull_requests on check_suite.
 	g.Cnx.Clients.Log.Infof("Sending check_run rerequest with pull_requests attached directly to check_run")
 	directPREvent := github.CheckRunEvent{
-		Action: github.Ptr("rerequested"),
+		Action: new("rerequested"),
 		Installation: &github.Installation{
 			ID: &installID,
 		},
@@ -217,7 +217,7 @@ func TestGithubGHEPullRerequest(t *testing.T) {
 			},
 			PullRequests: []*github.PullRequest{
 				{
-					Number: github.Ptr(g.PRNumber),
+					Number: new(g.PRNumber),
 				},
 			},
 		},

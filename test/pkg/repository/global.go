@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -30,7 +29,7 @@ func CreateGlobalRepo(ctx context.Context) (context.Context, string, *params.Run
 			Name: info.DefaultGlobalRepoName,
 		},
 		Spec: v1alpha1.RepositorySpec{
-			ConcurrencyLimit: github.Ptr(2),
+			ConcurrencyLimit: new(2),
 		},
 	}
 

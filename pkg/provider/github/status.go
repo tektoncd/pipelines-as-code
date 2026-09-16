@@ -2,13 +2,15 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/action"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
@@ -27,6 +29,12 @@ const (
 	pendingApproval              = "Pending approval, waiting for an /ok-to-test"
 	checkRunsFetchMaxRetries     = 2
 	checkRunsFetchInitialBackoff = 200 * time.Millisecond
+
+	// GitHub may answer with a 404 for a check run created moments earlier by
+	// another reconcile, whose id we read from the PipelineRun annotation, so
+	// retry that update briefly before giving up on it.
+	checkRunUpdateMaxRetries     = 3
+	checkRunUpdateInitialBackoff = 500 * time.Millisecond
 )
 
 const taskStatusTemplate = `
@@ -183,24 +191,28 @@ func (v *Provider) canIUseCheckrunID(checkrunid *int64) bool {
 	return false
 }
 
-func (v *Provider) createCheckRunStatus(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts) (*int64, error) {
+// createCheckRunStatus creates a check run with its complete state, including
+// the output annotations and, when the run is already finished, its conclusion
+// and completion time. Creating the check run fully formed avoids a follow-up
+// update on a check run GitHub may not report as existing yet.
+func (v *Provider) createCheckRunStatus(ctx context.Context, runevent *info.Event, status providerstatus.StatusOpts, output *github.CheckRunOutput, conclusion string) (*int64, error) {
 	now := github.Timestamp{Time: time.Now()}
 	checkrunoption := github.CreateCheckRunOptions{
-		Name:    provider.GetCheckName(status, v.pacInfo),
-		HeadSHA: runevent.SHA,
-		Status:  github.Ptr(status.Status), // take status from statusOpts because it can be in_progress, queued, or failure // same for conclusion as well
-		Output: &github.CheckRunOutput{
-			Title:   github.Ptr(status.Title),
-			Summary: github.Ptr(status.Summary),
-			Text:    github.Ptr(status.Text),
-		},
-		DetailsURL: github.Ptr(status.DetailsURL),
-		ExternalID: github.Ptr(status.PipelineRunName),
+		Name:       provider.GetCheckName(status, v.pacInfo),
+		HeadSHA:    runevent.SHA,
+		Status:     new(status.Status), // take status from statusOpts because it can be in_progress, queued, or failure // same for conclusion as well
+		Output:     output,
+		DetailsURL: new(status.DetailsURL),
+		ExternalID: new(status.PipelineRunName),
 		StartedAt:  &now,
 	}
 
-	if status.Status != "in_progress" && status.Status != "queued" {
-		checkrunoption.Conclusion = github.Ptr(string(status.Conclusion))
+	switch {
+	case conclusion != "":
+		checkrunoption.Conclusion = new(conclusion)
+		checkrunoption.CompletedAt = &now
+	case status.Status != "in_progress" && status.Status != "queued":
+		checkrunoption.Conclusion = new(string(status.Conclusion))
 	}
 
 	checkRun, _, err := wrapAPI(v, "create_check_run", func() (*github.CheckRun, *github.Response, error) {
@@ -266,15 +278,58 @@ func (v *Provider) getFailuresMessageAsAnnotations(ctx context.Context, pr *tekt
 				continue
 			}
 			annotations = append(annotations, &github.CheckRunAnnotation{
-				Path:            github.Ptr(filename),
-				StartLine:       github.Ptr(ilinenumber),
-				EndLine:         github.Ptr(ilinenumber),
-				AnnotationLevel: github.Ptr("failure"),
-				Message:         github.Ptr(errmsg),
+				Path:            new(filename),
+				StartLine:       new(ilinenumber),
+				EndLine:         new(ilinenumber),
+				AnnotationLevel: new("failure"),
+				Message:         new(errmsg),
 			})
 		}
 	}
 	return annotations
+}
+
+// isNotFoundError reports whether err is an explicit HTTP 404 response from the
+// GitHub API. Transport errors and timeouts are not considered not-found.
+func isNotFoundError(err error) bool {
+	var errResp *github.ErrorResponse
+	if !errors.As(err, &errResp) {
+		return false
+	}
+	return errResp.Response != nil && errResp.Response.StatusCode == http.StatusNotFound
+}
+
+// updateCheckRun updates a check run. When retryNotFound is set, an explicit 404
+// is retried with a short backoff: the check-run id then comes from the
+// PipelineRun annotation, so another reconcile may have created that run only
+// milliseconds ago and GitHub can still report it as missing. Any other
+// failure, and a 404 on a check run we know exists, is returned as is.
+func (v *Provider) updateCheckRun(ctx context.Context, runevent *info.Event, checkRunID int64, opts github.UpdateCheckRunOptions, retryNotFound bool) error {
+	for attempt := range checkRunUpdateMaxRetries + 1 {
+		_, _, err := wrapAPI(v, "update_check_run", func() (*github.CheckRun, *github.Response, error) {
+			return v.Client().Checks.UpdateCheckRun(ctx, runevent.Organization, runevent.Repository, checkRunID, opts)
+		})
+		if err == nil {
+			return nil
+		}
+
+		if !retryNotFound || !isNotFoundError(err) || attempt == checkRunUpdateMaxRetries {
+			return err
+		}
+
+		backoff := time.Duration(1<<uint(attempt)) * checkRunUpdateInitialBackoff
+		v.Logger.Debugf("check-run %d update returned 404 for %s/%s (attempt %d/%d); retrying in %v",
+			checkRunID, runevent.Organization, runevent.Repository,
+			attempt+1, checkRunUpdateMaxRetries+1, backoff)
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w while retrying check-run %d update after: %w", ctx.Err(), checkRunID, err)
+		case <-v.getClock().After(backoff):
+		}
+	}
+	// unreachable: the last attempt returns from within the loop.
+	return nil
 }
 
 // getOrUpdateCheckRunStatus create a status via the checkRun API, which is only
@@ -305,15 +360,36 @@ func (v *Provider) getOrUpdateCheckRunStatus(ctx context.Context, runevent *info
 			if err != nil {
 				return fmt.Errorf("api error: cannot convert checkrunid")
 			}
-			checkRunID = github.Ptr(int64(checkID))
+			checkRunID = new(int64(checkID))
 		}
 	}
+
+	checkRunOutput := &github.CheckRunOutput{
+		Title:   &statusOpts.Title,
+		Summary: &statusOpts.Summary,
+		Text:    new(statusOpts.Text),
+	}
+	if statusOpts.PipelineRun != nil && pacopts.ErrorDetection {
+		checkRunOutput.Annotations = v.getFailuresMessageAsAnnotations(ctx, statusOpts.PipelineRun, pacopts)
+	}
+
+	// A conclusion means the run is finished, a pending one does not.
+	conclusion := ""
+	if statusOpts.Conclusion != "" && statusOpts.Conclusion != providerstatus.ConclusionPending {
+		conclusion = string(statusOpts.Conclusion)
+	}
+	if isPipelineRunCancelledOrStopped(statusOpts.PipelineRun) {
+		conclusion = "cancelled"
+	}
+
 	if !found {
+		created := false
 		if checkRunID, _ = v.getExistingCheckRunID(ctx, runevent, statusOpts); checkRunID == nil {
-			checkRunID, err = v.createCheckRunStatus(ctx, runevent, statusOpts)
+			checkRunID, err = v.createCheckRunStatus(ctx, runevent, statusOpts, checkRunOutput, conclusion)
 			if err != nil {
 				return err
 			}
+			created = true
 		}
 
 		// Patch the pipelineRun with the checkRunID and logURL only when the pipelineRun is not nil and has a name
@@ -324,47 +400,36 @@ func (v *Provider) getOrUpdateCheckRunStatus(ctx context.Context, runevent *info
 				return err
 			}
 		}
-	}
 
-	text := statusOpts.Text
-	checkRunOutput := &github.CheckRunOutput{
-		Title:   &statusOpts.Title,
-		Summary: &statusOpts.Summary,
-	}
-
-	if statusOpts.PipelineRun != nil {
-		if pacopts.ErrorDetection {
-			checkRunOutput.Annotations = v.getFailuresMessageAsAnnotations(ctx, statusOpts.PipelineRun, pacopts)
+		// The check run has just been created with its complete state, updating
+		// it again would only race with GitHub making it visible.
+		if created {
+			return nil
 		}
 	}
 
-	checkRunOutput.Text = github.Ptr(text)
-
 	opts := github.UpdateCheckRunOptions{
 		Name:   provider.GetCheckName(statusOpts, pacopts),
-		Status: github.Ptr(statusOpts.Status),
+		Status: new(statusOpts.Status),
 		Output: checkRunOutput,
 	}
 	if statusOpts.PipelineRunName != "" {
-		opts.ExternalID = github.Ptr(statusOpts.PipelineRunName)
+		opts.ExternalID = new(statusOpts.PipelineRunName)
 	}
 	if statusOpts.DetailsURL != "" {
 		opts.DetailsURL = &statusOpts.DetailsURL
 	}
-
-	// Only set completed-at if conclusion is set (which means finished)
-	if statusOpts.Conclusion != "" && statusOpts.Conclusion != providerstatus.ConclusionPending {
+	if conclusion != "" {
 		opts.CompletedAt = &github.Timestamp{Time: time.Now()}
-		opts.Conclusion = github.Ptr(string(statusOpts.Conclusion))
-	}
-	if isPipelineRunCancelledOrStopped(statusOpts.PipelineRun) {
-		opts.Conclusion = github.Ptr("cancelled")
+		opts.Conclusion = new(conclusion)
 	}
 
-	_, _, err = wrapAPI(v, "update_check_run", func() (*github.CheckRun, *github.Response, error) {
-		return v.Client().Checks.UpdateCheckRun(ctx, runevent.Organization, runevent.Repository, *checkRunID, opts)
-	})
-	return err
+	if checkRunID == nil {
+		return fmt.Errorf("api error: check-run id is missing for %s/%s", runevent.Organization, runevent.Repository)
+	}
+	// The id read from the PipelineRun annotation may point at a check run
+	// another reconcile created a moment ago, which GitHub can still 404 on.
+	return v.updateCheckRun(ctx, runevent, *checkRunID, opts, found)
 }
 
 func isPipelineRunCancelledOrStopped(run *tektonv1.PipelineRun) bool {
@@ -410,10 +475,10 @@ func (v *Provider) createStatusCommit(ctx context.Context, runevent *info.Event,
 	}
 
 	ghstatus := github.RepoStatus{
-		State:       github.Ptr(string(status.Conclusion)),
-		TargetURL:   github.Ptr(status.DetailsURL),
-		Description: github.Ptr(status.Title),
-		Context:     github.Ptr(provider.GetCheckName(status, v.pacInfo)),
+		State:       new(string(status.Conclusion)),
+		TargetURL:   new(status.DetailsURL),
+		Description: new(status.Title),
+		Context:     new(provider.GetCheckName(status, v.pacInfo)),
 		CreatedAt:   &github.Timestamp{Time: now},
 	}
 
@@ -463,8 +528,8 @@ func (v *Provider) createStatusCommit(ctx context.Context, runevent *info.Event,
 				return v.Client().Issues.CreateComment(
 					ctx, runevent.Organization, runevent.Repository,
 					runevent.PullRequestNumber,
-					&github.IssueComment{
-						Body: github.Ptr(fmt.Sprintf("%s<br>%s", status.Summary, status.Text)),
+					github.IssueCommentRequest{
+						Body: fmt.Sprintf("%s<br>%s", status.Summary, status.Text),
 					},
 				)
 			})

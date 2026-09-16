@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/google/go-github/v90/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
 	pgitea "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
@@ -269,7 +268,7 @@ func CreateGiteaUser(giteaClient *forgejo.Client, username, password string) (*f
 		Username:           username,
 		Email:              username + "@redhat.com",
 		Password:           password,
-		MustChangePassword: github.Ptr(false),
+		MustChangePassword: new(false),
 		Visibility:         &visibility,
 	}
 	newuser, _, err := giteaClient.AdminCreateUser(opts)

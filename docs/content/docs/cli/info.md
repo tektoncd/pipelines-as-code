@@ -23,6 +23,10 @@ As an admin, if your installation uses a [GitHub App]({{< relref "/docs/provider
 
 Use `tkn pac info globbing` to test whether a glob pattern matches files or strings. This is especially useful when you are configuring annotations such as `on-path-change` or `on-target-branch`.
 
+{{< callout type="warning" >}}
+Against a directory, this command matches your local filesystem. Pipelines-as-Code matches the list of changed files your Git provider reports, which is not the same thing. Submodules show the gap: your checkout has their contents, while the provider reports only the submodule directory. A pattern such as `test-submodule/**` matches here and fails at runtime. See [Git submodules]({{< relref "/docs/guides/event-matching/path-matching#git-submodules" >}}).
+{{< /callout >}}
+
 ### Examples
 
 Match all markdown files in the `docs` directory and its subdirectories:
@@ -40,6 +44,6 @@ tkn pac info globbing -s "refs/heads/main" "refs/heads/*"
 ### Flags
 
 * `-d` / `--dir`: Test the glob pattern against a different directory (default: current directory).
-* `-s` / `--string`: Test the glob pattern against a string instead of files. Use this for annotations such as `on-target-branch`.
+* `-s` / `--str`: Test the glob pattern against a string instead of files. Use this for annotations such as `on-target-branch`.
 
 The first argument is the glob pattern to test. If you omit it, the command prompts you for it. Patterns follow the syntax defined by the [glob library](https://github.com/gobwas/glob?tab=readme-ov-file#example).
