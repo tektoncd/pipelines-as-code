@@ -17,7 +17,7 @@ spec:
     - name: revision
       value: "{{revision}}"
     - name: hugo_version
-      value: "0.146.0"
+      value: "0.166.0"
     - name: wrangler_version
       value: "4.72.0"
   pipelineSpec:
