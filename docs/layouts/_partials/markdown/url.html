@@ -1,0 +1,14 @@
+{{- $page := .page -}}
+{{- $absolute := default false .absolute -}}
+{{- $url := "" -}}
+{{- with $page.OutputFormats.Get "markdown" -}}
+  {{- if $absolute -}}
+    {{- $url = .Permalink -}}
+  {{- else -}}
+    {{- $url = .RelPermalink -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (eq $page.Kind "section") (hasSuffix $url "/index.md") -}}
+  {{- $url = printf "%s.md" (strings.TrimSuffix "/index.md" $url) -}}
+{{- end -}}
+{{- return $url -}}

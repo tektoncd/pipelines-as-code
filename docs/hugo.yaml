@@ -9,6 +9,19 @@ module:
   imports:
     - path: github.com/imfing/hextra
 
+outputs:
+  home:
+    - HTML
+    - RSS
+    - markdown
+  page:
+    - HTML
+    - markdown
+  section:
+    - HTML
+    - RSS
+    - markdown
+
 markup:
   highlight:
     noClasses: false

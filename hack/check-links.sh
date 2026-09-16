@@ -188,6 +188,9 @@ rm -rf "${DOCS_BUILD_DIR}" "${TOPDIR}/docs/public"
 echo "==> Building Hugo documentation site..."
 "${HUGO_BIN}" build --gc --minify -s "${TOPDIR}/docs/" -d "${DOCS_BUILD_DIR}"
 
+# Verify Markdown output routes and canonical links.
+"${TOPDIR}/hack/check-markdown-output.sh" "${DOCS_BUILD_DIR}"
+
 # Run htmltest
 echo "==> Running htmltest link checker..."
 HTMLTEST_CONF="${TOPDIR}/docs/.htmltest.yml"

@@ -325,7 +325,7 @@ spec:
               image: docker.io/thegeeklab/markdownlint-cli
               workingDir: $(workspaces.source.path)
               script: |
-                markdownlint $(find . -type f -regex ".*md"  -not -regex '^./vendor/.*' -not -regex "^./docs/themes/.*" -not -regex './.vale/.*' -not -regex "^./.git/.*" -print)
+                markdownlint $(find . -type f -regex ".*md"  -not -regex '^./vendor/.*' -not -regex "^./docs/themes/.*" -not -regex "^./docs/layouts/.*" -not -regex './.vale/.*' -not -regex "^./.git/.*" -print)
 
             - name: vale
               displayName: "Spelling and Grammar"

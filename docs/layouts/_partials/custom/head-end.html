@@ -1,0 +1,3 @@
+{{- with partial "markdown/url.html" (dict "page" . "absolute" true) }}
+  <link rel="alternate" type="text/markdown" href="{{ . }}" title="Markdown version" />
+{{- end }}
