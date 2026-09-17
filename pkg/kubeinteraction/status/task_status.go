@@ -20,6 +20,36 @@ var reasonMessageReplacementRegexp = regexp.MustCompile(`\(image: .*`)
 
 const maxErrorSnippetCharacterLimit = 65535 // This is the maximum size allowed by Github check run logs and may apply to all other providers
 
+// reasonsWithoutPodLogs are the failure reasons where no container ever ran the
+// user code, the snippet is then taken from the task condition message.
+var reasonsWithoutPodLogs = map[string]struct{}{
+	tektonv1.TaskRunReasonFailedValidation.String():           {},
+	tektonv1.TaskRunReasonTaskFailedValidation.String():       {},
+	tektonv1.TaskRunReasonFailedResolution.String():           {},
+	tektonv1.TaskRunReasonInvalidParamValue.String():          {},
+	tektonv1.TaskRunReasonResourceVerificationFailed.String(): {},
+	tektonv1.TaskRunReasonCancelled.String():                  {},
+	tektonv1.TaskRunReasonTimedOut.String():                   {},
+	tektonv1.TaskRunReasonImagePullFailed.String():            {},
+	tektonv1.TaskRunReasonCreateContainerConfigError.String(): {},
+	tektonv1.TaskRunReasonPodCreationFailed.String():          {},
+	tektonv1.TaskRunReasonInitContainerFailed.String():        {},
+	tektonv1.TaskRunReasonInitContainerOOM.String():           {},
+}
+
+// reasonsWithPodLogs are the failure reasons where the pod has run and we can
+// get a log snippet out of the failed containers.
+var reasonsWithPodLogs = map[string]struct{}{
+	tektonv1.TaskRunReasonFailed.String():                       {},
+	tektonv1.TaskRunReasonStepFailed.String():                   {},
+	tektonv1.TaskRunReasonStepOOM.String():                      {},
+	tektonv1.TaskRunReasonSidecarFailed.String():                {},
+	tektonv1.TaskRunReasonSidecarOOM.String():                   {},
+	tektonv1.TaskRunReasonStopSidecarFailed.String():            {},
+	tektonv1.TaskRunReasonPodEvicted.String():                   {},
+	tektonv1.TaskRunReasonResultLargerThanAllowedLimit.String(): {},
+}
+
 func waitingMessage(steps []tektonv1.StepState) string {
 	for _, step := range steps {
 		if step.Waiting == nil || step.Waiting.Message == "" {
@@ -115,10 +145,16 @@ func CollectFailedTasksLogSnippet(ctx context.Context, cs *params.Run, kinteract
 			ti.LogSnippet = ti.Message
 		}
 		// don't check for pod logs into those
-		if ti.Reason == "TaskRunValidationFailed" || ti.Reason == tektonv1.TaskRunReasonCancelled.String() || ti.Reason == tektonv1.TaskRunReasonTimedOut.String() || ti.Reason == tektonv1.TaskRunReasonImagePullFailed.String() || ti.Reason == tektonv1.TaskRunReasonCreateContainerConfigError.String() || ti.Reason == tektonv1.TaskRunReasonPodCreationFailed.String() {
+		if _, ok := reasonsWithoutPodLogs[ti.Reason]; ok {
 			failureReasons[task.PipelineTaskName] = ti
 			continue
-		} else if ti.Reason != tektonv1.PipelineRunReasonFailed.String() {
+		}
+		if _, ok := reasonsWithPodLogs[ti.Reason]; !ok {
+			// a failure we don't know about, tekton may have added a new
+			// reason, log it so we don't silently drop the snippet.
+			if task.Status.Conditions[0].IsFalse() && ti.Reason != tektonv1.TaskRunReasonFailureIgnored.String() {
+				cs.Clients.Log.Warnf("unknown taskrun failure reason %q on task %q, skipping log snippet", ti.Reason, task.PipelineTaskName)
+			}
 			continue
 		}
 
