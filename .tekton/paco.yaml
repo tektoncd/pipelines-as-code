@@ -28,7 +28,7 @@ spec:
     - name: git_auth_secret
       value: "{{git_auth_secret}}"
     - name: model
-      value: "google-vertex-anthropic/claude-sonnet-5@default"
+      value: "google-vertex-anthropic/claude-sonnet-4-6@default"
     - name: vertex_credentials_secret
       value: "paco-vertex-credentials"
     - name: vertex_credentials_key
@@ -47,7 +47,7 @@ spec:
         default: ""
       - name: git_auth_secret
       - name: model
-        default: "google-vertex-anthropic/claude-sonnet-5@default"
+        default: "google-vertex-anthropic/claude-sonnet-4-6@default"
       - name: vertex_credentials_secret
         default: "paco-vertex-credentials"
       - name: vertex_credentials_key
