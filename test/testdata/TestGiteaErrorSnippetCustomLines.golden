@@ -1,5 +1,5 @@
 <h4>Failure snippet:</h4>
-task <b>task</b> has the status <b>"Failed"</b>:
+task <b>task</b> has the status <b>"FAILURE_REASON"</b>:
 <pre>3
 4
 5
