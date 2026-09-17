@@ -36,22 +36,98 @@ func TestCollectFailedTasksLogSnippet(t *testing.T) {
 	tests := []struct {
 		name, displayName string
 		message, status   string
+		conditionStatus   corev1.ConditionStatus
 		wantFailure       int
 		podOutput         string
+		wantSnippet       string
+		wantWarning       string
 	}{
 		{
-			name:        "no failures",
-			status:      "Success",
-			message:     "never gonna make you fail",
-			wantFailure: 0,
+			name:            "no failures",
+			status:          "Success",
+			conditionStatus: corev1.ConditionTrue,
+			message:         "never gonna make you fail",
+			wantFailure:     0,
 		},
 		{
-			name:        "failure pod output",
-			status:      "Failed",
-			message:     "i am gonna to make you fail",
-			podOutput:   "hahah i am the devil of the pod",
-			wantFailure: 1,
-			displayName: "A task",
+			name:            "failure pod output",
+			status:          "Failed",
+			conditionStatus: corev1.ConditionFalse,
+			message:         "i am gonna to make you fail",
+			podOutput:       "hahah i am the devil of the pod",
+			wantFailure:     1,
+			displayName:     "A task",
+		},
+		{
+			name:            "step failed",
+			status:          tektonv1.TaskRunReasonStepFailed.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         `"step-lint" exited with code 2: Error`,
+			podOutput:       "the step went wrong",
+			wantFailure:     1,
+		},
+		{
+			name:            "step out of memory",
+			status:          tektonv1.TaskRunReasonStepOOM.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         `"step-build" exited because of OOMKilled`,
+			podOutput:       "out of memory",
+			wantFailure:     1,
+		},
+		{
+			name:            "sidecar failed",
+			status:          tektonv1.TaskRunReasonSidecarFailed.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "sidecar crashed",
+			podOutput:       "sidecar logs",
+			wantFailure:     1,
+		},
+		{
+			name:            "sidecar could not be stopped",
+			status:          tektonv1.TaskRunReasonStopSidecarFailed.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "sidecar could not be stopped",
+			podOutput:       "stop sidecar logs",
+			wantFailure:     1,
+		},
+		{
+			name:            "result larger than the allowed limit",
+			status:          tektonv1.TaskRunReasonResultLargerThanAllowedLimit.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "result is way too large",
+			podOutput:       "task result logs",
+			wantFailure:     1,
+		},
+		{
+			name:            "pod evicted",
+			status:          tektonv1.TaskRunReasonPodEvicted.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "pod was evicted",
+			podOutput:       "evicted logs",
+			wantFailure:     1,
+		},
+		{
+			name:            "init container failed falls back to the message",
+			status:          tektonv1.TaskRunReasonInitContainerFailed.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "init container prepare failed",
+			wantFailure:     1,
+			wantSnippet:     "init container prepare failed",
+		},
+		{
+			name:            "ignored failure is skipped",
+			status:          tektonv1.TaskRunReasonFailureIgnored.String(),
+			conditionStatus: corev1.ConditionFalse,
+			message:         "we don't care about this one",
+			wantFailure:     0,
+		},
+		{
+			name:            "unknown failure reason is skipped and reported",
+			status:          "ANewTektonFailureReason",
+			conditionStatus: corev1.ConditionFalse,
+			message:         "something new happened",
+			wantFailure:     0,
+			wantWarning:     "unknown taskrun failure reason",
 		},
 	}
 	for _, tt := range tests {
@@ -93,7 +169,7 @@ func TestCollectFailedTasksLogSnippet(t *testing.T) {
 						map[string]string{}, taskStatus, knativeduckv1.Conditions{
 							{
 								Type:    knativeapi.ConditionSucceeded,
-								Status:  corev1.ConditionTrue,
+								Status:  tt.conditionStatus,
 								Reason:  tt.status,
 								Message: tt.message,
 							},
@@ -103,8 +179,10 @@ func TestCollectFailedTasksLogSnippet(t *testing.T) {
 			}
 			ctx, _ := rtesting.SetupFakeContext(t)
 			stdata, _ := testclient.SeedTestData(t, ctx, tdata)
+			observer, logCatcher := zapobserver.New(zap.WarnLevel)
 			cs := &params.Run{Clients: paramclients.Clients{
 				Tekton: stdata.Pipeline,
+				Log:    zap.New(observer).Sugar(),
 			}}
 			intf := &kubernetestint.KinterfaceTest{}
 			if tt.podOutput != "" {
@@ -117,8 +195,16 @@ func TestCollectFailedTasksLogSnippet(t *testing.T) {
 			if tt.podOutput != "" {
 				assert.Equal(t, tt.podOutput, got["task1"].LogSnippet)
 			}
+			if tt.wantSnippet != "" {
+				assert.Equal(t, tt.wantSnippet, got["task1"].LogSnippet)
+			}
 			if tt.displayName != "" {
 				assert.Equal(t, tt.displayName, got["task1"].DisplayName)
+			}
+			if tt.wantWarning != "" {
+				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantWarning).Len() > 0, "expected a warning matching %q", tt.wantWarning)
+			} else {
+				assert.Equal(t, 0, logCatcher.Len(), "no warning was expected")
 			}
 		})
 	}
@@ -322,11 +408,41 @@ func TestCollectFailedTasksLogSnippetWaitingReasons(t *testing.T) {
 			// TaskRunValidationFailed/PodCreationFailed happen before any
 			// step/pod is created, so waitingMessage() has nothing to
 			// inspect and we must fall back to the condition message.
+			// The reasons are spelled out on purpose here so the mapping of
+			// the tekton constants to their string value is pinned down.
 			name:        "no steps falls back to condition message",
 			reason:      "TaskRunValidationFailed",
 			condMessage: "task validation failed: unknown field foo",
 			steps:       nil,
 			wantSnippet: "task validation failed: unknown field foo",
+		},
+		{
+			name:        "task validation failure falls back to condition message",
+			reason:      "TaskValidationFailed",
+			condMessage: "task validation failed: missing step name",
+			steps:       nil,
+			wantSnippet: "task validation failed: missing step name",
+		},
+		{
+			name:        "resolution failure falls back to condition message",
+			reason:      "TaskRunResolutionFailed",
+			condMessage: "error getting task: cannot resolve task from git",
+			steps:       nil,
+			wantSnippet: "error getting task: cannot resolve task from git",
+		},
+		{
+			name:        "invalid param value falls back to condition message",
+			reason:      "InvalidParamValue",
+			condMessage: "param foo is not allowed",
+			steps:       nil,
+			wantSnippet: "param foo is not allowed",
+		},
+		{
+			name:        "resource verification failure falls back to condition message",
+			reason:      "ResourceVerificationFailed",
+			condMessage: "resource verification failed",
+			steps:       nil,
+			wantSnippet: "resource verification failed",
 		},
 	}
 	for _, tt := range tests {
