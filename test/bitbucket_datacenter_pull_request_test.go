@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	tbbdc "github.com/openshift-pipelines/pipelines-as-code/test/pkg/bitbucketdatacenter"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
@@ -29,7 +31,7 @@ func TestBitbucketDataCenterPullRequest(t *testing.T) {
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
 
-	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, bitbucketWSOwner, targetNS)
+	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
 	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
 	defer tbbdc.TearDownNs(ctx, t, runcnx, targetNS)
 
@@ -63,7 +65,7 @@ func TestBitbucketDataCenterCELPathChangeInPullRequest(t *testing.T) {
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
 
-	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, bitbucketWSOwner, targetNS)
+	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
 	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
 	defer tbbdc.TearDownNs(ctx, t, runcnx, targetNS)
 
@@ -101,7 +103,7 @@ func TestBitbucketDataCenterOnPathChangeAnnotationOnPRMerge(t *testing.T) {
 	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
 	assert.NilError(t, err)
 
-	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, bitbucketWSOwner, targetNS)
+	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
 	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
 	defer tbbdc.TearDownNs(ctx, t, runcnx, targetNS)
 
@@ -146,4 +148,61 @@ func TestBitbucketDataCenterOnPathChangeAnnotationOnPRMerge(t *testing.T) {
 	assert.Equal(t, len(pipelineRuns.Items), 1)
 	// check that pipeline run contains on-path-change annotation.
 	assert.Equal(t, pipelineRuns.Items[0].GetAnnotations()[keys.OnPathChange], "[doc/***.md]")
+}
+
+func TestBitbucketDataCenterPRSkippedStatusReported(t *testing.T) {
+	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
+	ctx := context.Background()
+	bitbucketWSOwner := os.Getenv("TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY")
+
+	ctx, runcnx, opts, client, err := tbbdc.Setup(ctx)
+	assert.NilError(t, err)
+
+	opts.Settings = &v1alpha1.Settings{
+		StatusChecks: &v1alpha1.StatusChecks{
+			Enabled: true,
+			Mode:    v1alpha1.StatusCheckModePerPipelineRun,
+		},
+	}
+	repo := tbbdc.CreateCRD(ctx, t, client, runcnx, opts, bitbucketWSOwner, targetNS)
+	runcnx.Clients.Log.Infof("Repository %s has been created", repo.Name)
+	defer tbbdc.TearDownNs(ctx, t, runcnx, targetNS)
+
+	entries, err := payload.GetEntries(
+		map[string]string{".tekton/pipelinerun-matching.yaml": "testdata/pipelinerun.yaml"},
+		targetNS, options.MainBranch, triggertype.PullRequest.String(), map[string]string{},
+	)
+	assert.NilError(t, err)
+
+	// this is not going to match as it's targeting main branch on push event while we're gonna raise a pull request
+	skipEntry, err := payload.GetEntries(
+		map[string]string{".tekton/pipelinerun-skipped.yaml": "testdata/pipelinerun.yaml"},
+		targetNS, options.MainBranch, triggertype.Push.String(), map[string]string{},
+	)
+	assert.NilError(t, err)
+	entries[".tekton/pipelinerun-skipped.yaml"] = skipEntry[".tekton/pipelinerun-skipped.yaml"]
+
+	pr := tbbdc.CreatePR(ctx, t, client, runcnx, opts, repo, entries, bitbucketWSOwner, targetNS)
+	runcnx.Clients.Log.Infof("Pull Request with title '%s' is created", pr.Title)
+	defer tbbdc.TearDown(ctx, t, runcnx, client, pr, bitbucketWSOwner, targetNS)
+
+	successOpts := wait.SuccessOpt{
+		TargetNS:        targetNS,
+		OnEvent:         triggertype.PullRequest.String(),
+		NumberofPRMatch: 1,
+		MinNumberStatus: 1,
+	}
+	wait.Succeeded(ctx, t, runcnx, opts, successOpts)
+
+	statuses, _, err := client.Repositories.ListStatus(ctx, bitbucketWSOwner, pr.Sha, &scm.ListOptions{})
+	assert.NilError(t, err)
+
+	foundStatus := false
+	for _, status := range statuses {
+		if status.State == scm.StateUnknown && strings.Contains(status.Label, "pipelinerun-skipped") {
+			foundStatus = true
+			break
+		}
+	}
+	assert.Equal(t, foundStatus, true, "should have found the status for the skipped pipeline run")
 }

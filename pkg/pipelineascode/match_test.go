@@ -317,7 +317,7 @@ spec:
 				nil,
 			)
 
-			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repositories[0])
+			matchedPRs, _, err := p.getPipelineRunsFromRepo(ctx, repositories[0])
 			assert.NilError(t, err)
 			if tt.wantNoMatch {
 				assert.Equal(t, len(matchedPRs), 0)
@@ -453,7 +453,7 @@ spec:
 			p := NewPacs(event, vcx, cs, pacInfo, nil, logger, nil)
 			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
 
-			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, repo)
+			matchedPRs, _, err := p.getPipelineRunsFromRepo(ctx, repo)
 			assert.NilError(t, err)
 			assert.Equal(t, 1, len(matchedPRs))
 			assert.Equal(t, tt.wantRevision, vcx.fileInsideRepoRevision)
@@ -523,14 +523,15 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		repositories          *v1alpha1.Repository
-		tektondir             string
-		expectedNumberOfPruns int
-		event                 *info.Event
-		logSnippet            string
-		wantErr               bool
-		seedData              *testclient.Data
+		name                           string
+		repositories                   *v1alpha1.Repository
+		tektondir                      string
+		expectedNumberOfPruns          int
+		expectedNumberOfUnmatchedPruns int
+		event                          *info.Event
+		logSnippet                     string
+		wantErr                        bool
+		seedData                       *testclient.Data
 	}{
 		{
 			name: "more than one pipelinerun in .tekton dir",
@@ -541,9 +542,10 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 				},
 				Spec: v1alpha1.RepositorySpec{},
 			},
-			tektondir:             "testdata/pull_request_multiplepipelineruns",
-			expectedNumberOfPruns: 2,
-			event:                 pullRequestEvent,
+			tektondir:                      "testdata/pull_request_multiplepipelineruns",
+			expectedNumberOfPruns:          2,
+			expectedNumberOfUnmatchedPruns: 1,
+			event:                          pullRequestEvent,
 		},
 		{
 			name: "single pipelinerun in .tekton dir",
@@ -582,9 +584,10 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 			},
 			// we have 3 PR in there 2 that has a match on pull request and 1 that is a no-matching
 			// matching those two that is matching here
-			tektondir:             "testdata/no-match",
-			expectedNumberOfPruns: 2,
-			event:                 pullRequestEvent,
+			tektondir:                      "testdata/no-match",
+			expectedNumberOfPruns:          2,
+			expectedNumberOfUnmatchedPruns: 1,
+			event:                          pullRequestEvent,
 		},
 		{
 			name: "no-match pipelineruns in .tekton dir, only match the no-match",
@@ -613,9 +616,10 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 			// if `testdata/no_yaml` dir is supplied here p.getPipelineRunsFromRepo func will return after
 			// GetTektonDir so providing `testdat/push_branch` so that it should call MatchPipelineRunsByAnnotation
 			// first and then create a neutral check-run.
-			tektondir:             "testdata/push_branch",
-			expectedNumberOfPruns: 0,
-			event:                 okToTestEvent,
+			tektondir:                      "testdata/push_branch",
+			expectedNumberOfPruns:          0,
+			expectedNumberOfUnmatchedPruns: 1,
+			event:                          okToTestEvent,
 		},
 		{
 			name: "no .tekton dir in repository",
@@ -751,7 +755,7 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 			vcx.SetPacInfo(pacInfo)
 			p := NewPacs(tt.event, vcx, cs, pacInfo, k8int, logger, nil)
 			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
-			matchedPRs, err := p.getPipelineRunsFromRepo(ctx, tt.repositories)
+			matchedPRs, unmatchedPRs, err := p.getPipelineRunsFromRepo(ctx, tt.repositories)
 			if tt.wantErr {
 				assert.Assert(t, err != nil, "expected an error but got nil")
 				return
@@ -765,6 +769,7 @@ func TestGetPipelineRunsFromRepo(t *testing.T) {
 				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.logSnippet).Len() > 0, logCatcher.All())
 			}
 			assert.Equal(t, len(matchedPRNames), tt.expectedNumberOfPruns)
+			assert.Equal(t, len(unmatchedPRs), tt.expectedNumberOfUnmatchedPruns)
 		})
 	}
 }

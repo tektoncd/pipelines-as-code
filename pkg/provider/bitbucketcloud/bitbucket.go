@@ -107,7 +107,7 @@ func (v *Provider) CreateStatus(_ context.Context, event *info.Event, statusopts
 	switch statusopts.Conclusion {
 	case status.ConclusionSkipped:
 		state = types.StateStopped
-		statusopts.Title = "➖ Skipping this commit"
+		statusopts.Title = "➖ Skipping this PipelineRun"
 	case status.ConclusionNeutral:
 		state = types.StateStopped
 		statusopts.Title = "➖ CI has stopped"

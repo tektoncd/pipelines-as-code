@@ -701,6 +701,122 @@ func TestCreateStatus(t *testing.T) {
 	}
 }
 
+func TestCreateStatusUnmatchedReportSkipsMRComment(t *testing.T) {
+	tests := []struct {
+		name              string
+		isUnmatchedReport bool
+		repo              *v1alpha1.Repository
+		wantNoteCreated   bool
+	}{
+		{
+			name:              "unmatched report skips MR comment with default comment strategy",
+			isUnmatchedReport: true,
+			wantNoteCreated:   false,
+		},
+		{
+			name:              "matched report creates MR comment with default comment strategy",
+			isUnmatchedReport: false,
+			wantNoteCreated:   true,
+		},
+		{
+			name:              "unmatched report skips MR comment with update comment strategy",
+			isUnmatchedReport: true,
+			repo: &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{
+						Gitlab: &v1alpha1.GitlabSettings{
+							CommentStrategy: "update",
+						},
+					},
+				},
+			},
+			wantNoteCreated: false,
+		},
+		{
+			name:              "matched report creates MR comment with update comment strategy",
+			isUnmatchedReport: false,
+			repo: &v1alpha1.Repository{
+				Spec: v1alpha1.RepositorySpec{
+					Settings: &v1alpha1.Settings{
+						Gitlab: &v1alpha1.GitlabSettings{
+							CommentStrategy: "update",
+						},
+					},
+				},
+			},
+			wantNoteCreated: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			log, _ := logger.GetLogger()
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+			run := &params.Run{
+				Clients: clients.Clients{
+					Kube:   stdata.Kube,
+					Tekton: stdata.Pipeline,
+					Log:    log,
+				},
+			}
+
+			client, mux, tearDown := thelp.Setup(t)
+			defer tearDown()
+
+			v := &Provider{
+				targetProjectID: 100,
+				run:             run,
+				Logger:          log,
+				repo:            tt.repo,
+				pacInfo: &info.PacOpts{
+					Settings: settings.Settings{
+						ApplicationName: settings.PACApplicationNameDefaultValue,
+					},
+				},
+				eventEmitter: events.NewEventEmitter(run.Clients.Kube, log),
+			}
+			v.SetGitLabClient(client)
+
+			event := &info.Event{
+				TriggerTarget:     "pull_request",
+				EventType:         "Merge Request",
+				SourceProjectID:   400,
+				TargetProjectID:   400,
+				SHA:               "abc123",
+				PullRequestNumber: 42,
+			}
+
+			mux.HandleFunc("/user", func(rw http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(rw, `{"id": 100}`)
+			})
+
+			// Both source and target return errors so CreateStatus falls through to MR comment path
+			mux.HandleFunc("/projects/400/statuses/abc123", func(rw http.ResponseWriter, _ *http.Request) {
+				rw.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(rw, `{"message": "400 Bad Request"}`)
+			})
+
+			noteCreated := false
+			mux.HandleFunc(fmt.Sprintf("/projects/%d/merge_requests/42/notes", event.TargetProjectID), func(rw http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					fmt.Fprint(rw, `[]`)
+					return
+				}
+				noteCreated = true
+				fmt.Fprint(rw, `{}`)
+			})
+
+			err := v.CreateStatus(ctx, event, providerstatus.StatusOpts{
+				Conclusion:              providerstatus.ConclusionSkipped,
+				OriginalPipelineRunName: "test-pr",
+				IsUnmatchedReport:       tt.isUnmatchedReport,
+			})
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantNoteCreated, noteCreated, "MR note creation mismatch")
+		})
+	}
+}
+
 func TestCreateStatusPipelineIDSharedAcrossPipelineRuns(t *testing.T) {
 	ctx, _ := rtesting.SetupFakeContext(t)
 	log, _ := logger.GetLogger()

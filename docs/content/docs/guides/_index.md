@@ -9,7 +9,7 @@ This section covers the core workflows you need to run CI/CD with Pipelines-as-C
 
 {{< cards >}}
   {{< card link="creating-pipelines" title="Authoring PipelineRuns" subtitle="Create pipelines, CEL variables, GitHub token" >}}
-  {{< card link="repository-crd" title="Repository CR" subtitle="Configure repos, concurrency, comment settings" >}}
+  {{< card link="repository-crd" title="Repository CR" subtitle="Configure repos, concurrency, comment settings, status checks" >}}
   {{< card link="event-matching" title="Event matching" subtitle="on-event, on-target-branch, path, CEL, labels" >}}
   {{< card link="gitops-commands" title="GitOps commands" subtitle="/retest, /test, /cancel and more" >}}
   {{< card link="statuses" title="PipelineRun status" subtitle="Status reporting and failure detection" >}}
