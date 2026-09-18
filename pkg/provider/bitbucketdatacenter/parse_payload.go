@@ -194,6 +194,7 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 	}
 
 	v.projectKey = processedEvent.Organization
+	processedEvent.BBDCProjectKey = processedEvent.Organization
 	processedEvent.Organization = sanitizeOwner(processedEvent.Organization)
 	processedEvent.URL = sanitizeEventURL(processedEvent.URL)
 

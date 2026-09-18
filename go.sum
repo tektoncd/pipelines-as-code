@@ -171,8 +171,8 @@ github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec h1:qv2VnGeEQHchGaZ/u
 github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec/go.mod h1:Q48J4R4DvxnHolD5P8pOtXigYlRuPLGl6moFx3ulM68=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/jenkins-x/go-scm v1.16.0 h1:msa2M5ZKW3cwTDrs+JGdykfVcWUKNfWObvKdvT20ZKE=
-github.com/jenkins-x/go-scm v1.16.0/go.mod h1:300d241SqLGRZ9uum2UAH6f8Nb8eAmybAF26pEIgsG8=
+github.com/jenkins-x/go-scm v1.16.3 h1:W0clSwQajkCrhaD7xYjHrLdn9ixHOh6hbfJIlHBV3YA=
+github.com/jenkins-x/go-scm v1.16.3/go.mod h1:twMXaFq8u+VoCDkkYr3hSvIzUbeY0iS2bhz/ITGDoy8=
 github.com/jonboulle/clockwork v0.5.0 h1:Hyh9A8u51kptdkR+cqRpT1EebBwTn1oK9YfGYbdFz6I=
 github.com/jonboulle/clockwork v0.5.0/go.mod h1:3mZlmanh0g2NDKO5TWZVJAfofYk64M7XN3SzBPjZF60=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
