@@ -15,7 +15,6 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func ScopeTokenToListOfRepos(ctx context.Context, vcx provider.Interface, pacInfo *info.PacOpts, repo *v1alpha1.Repository, run *params.Run,
@@ -50,12 +49,12 @@ func ScopeTokenToListOfRepos(ctx context.Context, vcx provider.Interface, pacInf
 	}
 	if repo.Spec.Settings != nil && len(repo.Spec.Settings.GithubAppTokenScopeRepos) != 0 {
 		ns := repo.Namespace
-		repoListInPerticularNamespace, err := run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(ns).List(ctx, metav1.ListOptions{})
+		repoListInPerticularNamespace, err := run.ListRepositories(ctx, ns)
 		if err != nil {
 			return "", err
 		}
-		for i := range repoListInPerticularNamespace.Items {
-			splitData, err := getURLPathData(repoListInPerticularNamespace.Items[i].Spec.URL)
+		for i := range repoListInPerticularNamespace {
+			splitData, err := getURLPathData(repoListInPerticularNamespace[i].Spec.URL)
 			if err != nil {
 				return "", err
 			}
