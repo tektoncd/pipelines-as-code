@@ -167,7 +167,7 @@ func TestQueuePipelineRun(t *testing.T) {
 			wantLog: "no new PipelineRun acquired for repo test",
 		},
 		{
-			name:         "failed to get PR from the Q after many iterations",
+			name:         "queue repeatedly returns a gone candidate",
 			runningQueue: []string{"test/test2"},
 			pipelineRun: &tektonv1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{
@@ -189,7 +189,7 @@ func TestQueuePipelineRun(t *testing.T) {
 				},
 			},
 			wantLog:       "failed to get PR",
-			wantErrString: "max iterations reached of",
+			wantErrString: "twice during admission",
 		},
 	}
 	for _, tt := range tests {
@@ -357,10 +357,7 @@ func TestQueuePipelineRunAdditionalBranches(t *testing.T) {
 }
 
 // TestQueuePipelineRunSlotRelease asserts when a queue slot is released and,
-// more importantly, when it must not be. The slot follows the state patch: it
-// is what clears spec.status, so before it lands the PipelineRun is still
-// pending and holding its slot would strand it forever, and after it lands the
-// PipelineRun is running and releasing its slot would admit past the limit.
+// more importantly, when a failed start must retain its reservation.
 func TestQueuePipelineRunSlotRelease(t *testing.T) {
 	const ns = "test"
 
@@ -392,11 +389,11 @@ func TestQueuePipelineRunSlotRelease(t *testing.T) {
 		{
 			name:          "vanished pipelineRun releases the queue slot",
 			seededPR:      nil,
-			wantErrString: "max iterations reached of",
+			wantErrString: "twice during admission",
 			wantReleased:  true,
 		},
 		{
-			name:     "failing state patch releases the queue slot",
+			name:     "uncertain state patch retains the queue slot",
 			seededPR: acquiredPR,
 			setup: func(t *testing.T, cs *fakepipelineclientset.Clientset) {
 				t.Helper()
@@ -405,10 +402,10 @@ func TestQueuePipelineRunSlotRelease(t *testing.T) {
 				})
 			},
 			wantErrString: "failed to update pipelineRun test/queued to in_progress",
-			wantReleased:  true,
+			wantReleased:  false,
 		},
 		{
-			name:     "transient get failure releases the queue slot",
+			name:     "transient get failure is retried rather than dropped",
 			seededPR: acquiredPR,
 			setup: func(t *testing.T, cs *fakepipelineclientset.Clientset) {
 				t.Helper()
@@ -416,8 +413,8 @@ func TestQueuePipelineRunSlotRelease(t *testing.T) {
 					return true, nil, apierrors.NewServiceUnavailable("apiserver is shutting down")
 				})
 			},
-			wantErrString: "failed to get pipelineRun test/queued",
-			wantReleased:  true,
+			wantErrString: "cannot read execution-order pipelineRun test/queued",
+			wantReleased:  false,
 		},
 	}
 
@@ -443,8 +440,9 @@ func TestQueuePipelineRunSlotRelease(t *testing.T) {
 			released := []string{}
 			r := &Reconciler{
 				qm: testconcurrency.TestQMI{
-					RunningQueue: []string{ns + "/queued"},
-					Removed:      &released,
+					RunningQueue:     []string{ns + "/queued"},
+					Removed:          &released,
+					AdmissionRepoKey: queuepkg.RepoKey(repo),
 				},
 				repoLister: informers.Repository.Lister(),
 				run: &params.Run{
@@ -487,8 +485,7 @@ func TestQueuePipelineRunSlotRelease(t *testing.T) {
 // TestQueuePipelineRunProcessesAllAcquiredSlots asserts that a failure on one
 // acquired PipelineRun does not abandon the others. With a concurrency limit
 // above one, several PipelineRuns can be acquired in the same call; each one
-// already holds a slot, so every one of them must end up either started or
-// released. Returning early would strand the rest in the running set forever.
+// already holds a slot, so every one must be started or recorded for retry.
 func TestQueuePipelineRunProcessesAllAcquiredSlots(t *testing.T) {
 	const ns = "test"
 
@@ -530,8 +527,9 @@ func TestQueuePipelineRunProcessesAllAcquiredSlots(t *testing.T) {
 	released := []string{}
 	r := &Reconciler{
 		qm: testconcurrency.TestQMI{
-			RunningQueue: []string{ns + "/first", ns + "/second"},
-			Removed:      &released,
+			RunningQueue:     []string{ns + "/first", ns + "/second"},
+			Removed:          &released,
+			AdmissionRepoKey: queuepkg.RepoKey(repo),
 		},
 		repoLister: informers.Repository.Lister(),
 		run: &params.Run{
@@ -563,8 +561,8 @@ func TestQueuePipelineRunProcessesAllAcquiredSlots(t *testing.T) {
 	err := r.queuePipelineRun(ctx, fakelogger, trigger)
 	assert.ErrorContains(t, err, "pipelineRun test/first")
 
-	// "first" never left pending, so its slot must have been handed back.
-	assert.DeepEqual(t, released, []string{ns + "/test|" + ns + "/first"})
+	// A pending read cannot rule out a late commit of the failed start.
+	assert.Equal(t, len(released), 0)
 
 	// "second" must not have been abandoned: its state patch went through.
 	second, err := stdata.Pipeline.TektonV1().PipelineRuns(ns).Get(ctx, "second", metav1.GetOptions{})
@@ -674,9 +672,7 @@ func TestQueuePipelineRunDropsGoneKeysFromRetry(t *testing.T) {
 }
 
 // TestStartNextPipelineRunInQueue asserts the completion path obeys the same
-// slot rule as the acquire path: a candidate that never left pending gives its
-// slot back and the queue moves on to the next one, while a candidate whose
-// start failed only after the state patch keeps its slot.
+// reservation and retry rules as initial admission.
 func TestStartNextPipelineRunInQueue(t *testing.T) {
 	const ns = "test"
 
@@ -702,6 +698,7 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 		wantReleased   []string
 		wantStarted    []string
 		wantNotStarted []string
+		wantErr        string
 	}{
 		{
 			name:        "vanished candidate releases its slot and the next one starts",
@@ -713,7 +710,7 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 			wantStarted: []string{"second"},
 		},
 		{
-			name:        "failing state patch releases the slot and the next one starts",
+			name:        "uncertain state patch keeps the slot and returns an error",
 			nextInQueue: []string{ns + "/first", ns + "/second"},
 			seeded:      []*tektonv1.PipelineRun{makePR("first"), makePR("second")},
 			setup: func(t *testing.T, cs *fakepipelineclientset.Clientset) {
@@ -725,10 +722,8 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 					return false, nil, nil
 				})
 			},
-			wantReleased: []string{
-				ns + "/test|" + ns + "/first",
-			},
-			wantStarted: []string{"second"},
+			wantNotStarted: []string{"first", "second"},
+			wantErr:        "start is not confirmed",
 		},
 		{
 			// The state patch on "first" succeeds, then provider detection
@@ -765,8 +760,9 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 			next := append([]string{}, tt.nextInQueue...)
 			r := &Reconciler{
 				qm: testconcurrency.TestQMI{
-					Removed:     &released,
-					NextInQueue: &next,
+					Removed:          &released,
+					NextInQueue:      &next,
+					AdmissionRepoKey: queuepkg.RepoKey(repo),
 				},
 				repoLister: informers.Repository.Lister(),
 				run: &params.Run{
@@ -785,7 +781,12 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 			}
 
 			finished := makePR("finished")
-			r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished)
+			err := r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				assert.NilError(t, err)
+			}
 
 			assert.DeepEqual(t, released, func() []string {
 				if tt.wantReleased == nil {
@@ -811,8 +812,7 @@ func TestStartNextPipelineRunInQueue(t *testing.T) {
 // Every candidate that cannot be started hands its slot back and the loop asks
 // the queue for another one, so a queue that keeps handing out a key it was
 // asked to remove would spin forever and take the whole test binary down with
-// it on the -timeout kill. It must give up instead, and it must always release
-// the slot it is holding when it does.
+// it on the -timeout kill. It must return an error without discarding recovery.
 func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 	const ns = "test"
 
@@ -835,7 +835,6 @@ func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 			repeatNext: ns + "/never-there",
 			wantRemoved: []string{
 				ns + "/test|" + ns + "/never-there",
-				ns + "/test|" + ns + "/never-there",
 			},
 		},
 		{
@@ -844,7 +843,6 @@ func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 			repeatNext: "no-slash-here",
 			wantRemoved: []string{
 				ns + "/test|no-slash-here",
-				ns + "/test|no-slash-here",
 			},
 		},
 		{
@@ -852,10 +850,10 @@ func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 			// RemoveAndTakeItemFromQueue, or the finished PipelineRun's own
 			// slot is never freed, and the slot taken for the candidate we
 			// then decline to start must be handed back.
-			name:        "a cancelled context releases the slot it just took",
+			name:        "a cancelled context preserves recovery",
 			repeatNext:  ns + "/never-there",
 			cancel:      true,
-			wantRemoved: []string{ns + "/test|" + ns + "/never-there"},
+			wantRemoved: []string{},
 		},
 	}
 
@@ -878,9 +876,10 @@ func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 			taken := 0
 			r := &Reconciler{
 				qm: testconcurrency.TestQMI{
-					Removed:    &removed,
-					RepeatNext: tt.repeatNext,
-					Taken:      &taken,
+					Removed:          &removed,
+					RepeatNext:       tt.repeatNext,
+					Taken:            &taken,
+					AdmissionRepoKey: queuepkg.RepoKey(repo),
 				},
 				repoLister: informers.Repository.Lister(),
 				run: &params.Run{
@@ -901,7 +900,12 @@ func TestStartNextPipelineRunInQueueGivesUp(t *testing.T) {
 			finished := &tektonv1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "finished", Namespace: ns},
 			}
-			r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished)
+			err := r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished)
+			if tt.cancel {
+				assert.ErrorContains(t, err, ctx.Err().Error())
+			} else {
+				assert.ErrorContains(t, err, "twice during admission")
+			}
 
 			assert.DeepEqual(t, removed, tt.wantRemoved)
 			// RemoveAndTakeItemFromQueue is what frees the finished
@@ -963,7 +967,7 @@ func TestStartNextPipelineRunInQueueReleasesSlotForReal(t *testing.T) {
 	finished := &tektonv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{Name: "finished", Namespace: ns},
 	}
-	r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished)
+	assert.NilError(t, r.startNextPipelineRunInQueue(ctx, fakelogger, repo, finished))
 
 	// Both the finished run and the vanished candidate must be gone from the
 	// queue. If "gone" kept the slot it briefly held, the repository would sit

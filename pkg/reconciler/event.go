@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strconv"
 
@@ -18,6 +19,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrProviderNotConfigured marks a detectProvider failure as permanent: the
+// PipelineRun's git-provider annotation is missing or names a provider PAC
+// does not know. Retrying detectProvider can never succeed in that case,
+// unlike e.g. a GitHub App client failing to initialize, which is worth a
+// retry.
+var ErrProviderNotConfigured = stderrors.New("provider not configured")
+
 // detectProvider detects the git provider for the given PipelineRun and
 // initializes the corresponding provider interface. It returns the provider
 // interface, event information, and an error if any occurs during detection or
@@ -28,7 +36,7 @@ import (
 func (r *Reconciler) detectProvider(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun) (provider.Interface, *info.Event, error) {
 	gitProvider, ok := pr.GetAnnotations()[keys.GitProvider]
 	if !ok {
-		return nil, nil, fmt.Errorf("failed to detect git provider for pipleinerun %s : git-provider label not found", pr.GetName())
+		return nil, nil, fmt.Errorf("%w: git-provider annotation not found on pipelinerun %s", ErrProviderNotConfigured, pr.GetName())
 	}
 
 	event := buildEventFromPipelineRun(pr)
@@ -54,7 +62,7 @@ func (r *Reconciler) detectProvider(ctx context.Context, logger *zap.SugaredLogg
 	case "gitea", "forgejo":
 		provider = &gitea.Provider{}
 	default:
-		return nil, nil, fmt.Errorf("failed to detect provider for pipelinerun: %s : unknown provider", pr.GetName())
+		return nil, nil, fmt.Errorf("%w: unknown provider %q for pipelinerun %s", ErrProviderNotConfigured, gitProvider, pr.GetName())
 	}
 	provider.SetLogger(logger)
 	return provider, event, nil
