@@ -28,6 +28,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/versiondata"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
 	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	"go.uber.org/zap"
@@ -274,14 +275,33 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, runevent *info.
 	if repo != nil && repo.Spec.Settings != nil && repo.Spec.Settings.Forgejo != nil && repo.Spec.Settings.Forgejo.UserAgent != "" {
 		userAgent = repo.Spec.Settings.Forgejo.UserAgent
 	}
+
+	clientOpts := []forgejo.ClientOption{forgejo.SetUserAgent(userAgent)}
+
+	// Configure retry transport before creating the client so the initial version
+	// check is also protected against transient failures
+	if v.pacInfo != nil && v.pacInfo.EnableAPIRetry {
+		retryOpts := retryhttp.Options{
+			MaxAttempts: v.pacInfo.APIRetryMaxAttempts,
+			MaxWait:     time.Duration(v.pacInfo.APIRetryMaxWaitSeconds) * time.Second,
+			Logger:      v.Logger,
+		}
+		httpClient := &http.Client{
+			Transport: retryhttp.Wrap(http.DefaultTransport, retryOpts),
+		}
+		clientOpts = append(clientOpts, forgejo.SetHTTPClient(httpClient))
+	}
+
 	// password is not exposed to CRD, it's only used from the e2e tests
 	if v.Password != "" && runevent.Provider.User != "" {
-		v.giteaClient, err = forgejo.NewClient(apiURL, forgejo.SetBasicAuth(runevent.Provider.User, v.Password), forgejo.SetUserAgent(userAgent))
+		clientOpts = append(clientOpts, forgejo.SetBasicAuth(runevent.Provider.User, v.Password))
+		v.giteaClient, err = forgejo.NewClient(apiURL, clientOpts...)
 	} else {
 		if runevent.Provider.Token == "" {
 			return fmt.Errorf("no git_provider.secret has been set in the repo crd")
 		}
-		v.giteaClient, err = forgejo.NewClient(apiURL, forgejo.SetToken(runevent.Provider.Token), forgejo.SetUserAgent(userAgent))
+		clientOpts = append(clientOpts, forgejo.SetToken(runevent.Provider.Token))
+		v.giteaClient, err = forgejo.NewClient(apiURL, clientOpts...)
 	}
 	if err != nil {
 		return err
