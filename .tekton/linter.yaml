@@ -65,7 +65,7 @@ spec:
                 codespell -d docs/content pkg test
             - name: shellcheck
               displayName: "Shell scripts linter"
-              image: docker.io/koalaman/shellcheck-alpine
+              image: docker.io/koalaman/shellcheck-alpine:stable
               workingDir: $(workspaces.source.path)
               script: |
                 shellcheck $(find hack/ -type f -regex ".*sh" -print)
