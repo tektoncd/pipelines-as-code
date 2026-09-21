@@ -1,7 +1,9 @@
 package consoleui
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -25,8 +27,7 @@ func TestCustomGood(t *testing.T) {
 			CustomConsolePRdetail:  consolePRdetail,
 			CustomConsolePRTaskLog: consolePRtasklog,
 		},
-	})
-	c.SetParams(map[string]string{
+	}).WithParams(map[string]string{
 		"foo":       "bar",
 		"nonewline": "nonewline\n ",
 	})
@@ -75,10 +76,9 @@ func TestCustomGood(t *testing.T) {
 			CustomConsolePRdetail:  "{{ notthere}}",
 			CustomConsolePRTaskLog: "{{ notthere}}",
 		},
-	})
-	f.SetParams(map[string]string{})
-	assert.Assert(t, strings.Contains(c.DetailURL(pr), consoleURL))
-	assert.Assert(t, strings.Contains(c.TaskLogURL(pr, trStatus), consoleURL))
+	}).WithParams(map[string]string{})
+	assert.Assert(t, strings.Contains(f.DetailURL(pr), consoleURL))
+	assert.Assert(t, strings.Contains(f.TaskLogURL(pr, trStatus), consoleURL))
 
 	o := NewCustomConsole(&info.PacOpts{
 		Settings: settings.Settings{
@@ -107,4 +107,298 @@ func TestCustomBad(t *testing.T) {
 	assert.Assert(t, strings.Contains(c.DetailURL(pr), "is.not.configured"))
 	assert.Assert(t, strings.Contains(c.TaskLogURL(pr, nil), "is.not.configured"))
 	assert.Assert(t, strings.Contains(c.NamespaceURL(pr), "is.not.configured"), c.NamespaceURL(pr))
+}
+
+func TestCustomConcurrentURLs(t *testing.T) {
+	c := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleName:         "MyCorp Console",
+			CustomConsoleURL:          "https://mycorp.console",
+			CustomConsolePRdetail:     "https://mycorp.console/{{ namespace }}/{{ pr }}",
+			CustomConsoleNamespaceURL: "https://mycorp.console/{{ namespace }}",
+			CustomConsolePRTaskLog:    "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}/{{ pod }}/{{ firstFailedStep }}",
+		},
+	}).WithParams(map[string]string{"foo": "bar"})
+
+	const workers = 16
+	const iterations = 25
+
+	type result struct {
+		got  string
+		want string
+	}
+	results := make([][]result, workers)
+	start := make(chan struct{})
+	wg := sync.WaitGroup{}
+	for i := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ns := fmt.Sprintf("ns%d", i)
+			prName := fmt.Sprintf("pr%d", i)
+			task := fmt.Sprintf("task%d", i)
+			pod := fmt.Sprintf("pod%d", i)
+			step := fmt.Sprintf("step%d", i)
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: prName},
+			}
+			trStatus := &tektonv1.PipelineRunTaskRunStatus{
+				PipelineTaskName: task,
+				Status: &tektonv1.TaskRunStatus{
+					TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+						PodName: pod,
+						Steps: []tektonv1.StepState{
+							{
+								Name: step,
+								ContainerState: corev1.ContainerState{
+									Terminated: &corev1.ContainerStateTerminated{ExitCode: 1},
+								},
+							},
+						},
+					},
+				},
+			}
+			<-start
+			for range iterations {
+				results[i] = append(
+					results[i],
+					result{
+						got:  c.DetailURL(pr),
+						want: fmt.Sprintf("https://mycorp.console/%s/%s", ns, prName),
+					},
+					result{
+						got:  c.NamespaceURL(pr),
+						want: fmt.Sprintf("https://mycorp.console/%s", ns),
+					},
+					result{
+						got:  c.TaskLogURL(pr, trStatus),
+						want: fmt.Sprintf("https://mycorp.console/%s/%s/%s/%s/%s", ns, prName, task, pod, step),
+					},
+				)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for _, worker := range results {
+		for _, res := range worker {
+			assert.Equal(t, res.want, res.got)
+		}
+	}
+}
+
+func TestCustomConcurrentWithParams(t *testing.T) {
+	base := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:      "https://mycorp.console",
+			CustomConsolePRdetail: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ foo }}",
+		},
+	})
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+
+	const workers = 8
+	const iterations = 50
+	got := make([][]string, workers)
+	want := make([]string, workers)
+	start := make(chan struct{})
+	wg := sync.WaitGroup{}
+	for i := range workers {
+		want[i] = fmt.Sprintf("https://mycorp.console/ns/pr/bar%d", i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for range iterations {
+				scoped := base.WithParams(map[string]string{"foo": fmt.Sprintf("bar%d", i)})
+				got[i] = append(got[i], scoped.DetailURL(pr))
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for i, worker := range got {
+		for _, url := range worker {
+			assert.Equal(t, want[i], url)
+		}
+	}
+	// the shared console keeps no parameters of its own
+	assert.Equal(t, "https://mycorp.console", base.DetailURL(pr))
+}
+
+func TestCustomWithParamsIsolation(t *testing.T) {
+	base := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:      "https://mycorp.console",
+			CustomConsolePRdetail: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ foo }}",
+		},
+	})
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+
+	first := base.WithParams(map[string]string{"foo": "one"})
+	second := base.WithParams(map[string]string{"foo": "two"})
+
+	assert.Equal(t, "https://mycorp.console/ns/pr/one", first.DetailURL(pr))
+	assert.Equal(t, "https://mycorp.console/ns/pr/two", second.DetailURL(pr))
+	// a scoped console is not affected by a later one
+	assert.Equal(t, "https://mycorp.console/ns/pr/one", first.DetailURL(pr))
+	// an unresolved parameter still falls back to the console URL
+	assert.Equal(t, "https://mycorp.console", base.WithParams(nil).DetailURL(pr))
+}
+
+func TestCustomWithParamsCopiesMap(t *testing.T) {
+	params := map[string]string{"foo": "bar"}
+	c := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:      "https://mycorp.console",
+			CustomConsolePRdetail: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ foo }}",
+		},
+	}).WithParams(params)
+	params["foo"] = "mutated"
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+	assert.Equal(t, "https://mycorp.console/ns/pr/bar", c.DetailURL(pr))
+}
+
+func TestCustomTaskLogURLFirstFailedStep(t *testing.T) {
+	step := func(name string, exitCode int32) tektonv1.StepState {
+		return tektonv1.StepState{
+			Name: name,
+			ContainerState: corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{ExitCode: exitCode},
+			},
+		}
+	}
+	tests := []struct {
+		name          string
+		taskRunStatus *tektonv1.PipelineRunTaskRunStatus
+		want          string
+	}{
+		{
+			name: "no failed step",
+			taskRunStatus: &tektonv1.PipelineRunTaskRunStatus{
+				PipelineTaskName: "task",
+				Status: &tektonv1.TaskRunStatus{
+					TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+						PodName: "pod",
+						Steps:   []tektonv1.StepState{step("first", 0), step("second", 0)},
+					},
+				},
+			},
+			want: "https://mycorp.console/ns/pr/task/pod/",
+		},
+		{
+			name: "failure on a later step",
+			taskRunStatus: &tektonv1.PipelineRunTaskRunStatus{
+				PipelineTaskName: "task",
+				Status: &tektonv1.TaskRunStatus{
+					TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+						PodName: "pod",
+						Steps:   []tektonv1.StepState{step("first", 0), step("second", 2), step("third", 1)},
+					},
+				},
+			},
+			want: "https://mycorp.console/ns/pr/task/pod/second",
+		},
+		{
+			name: "running step is not a failure",
+			taskRunStatus: &tektonv1.PipelineRunTaskRunStatus{
+				PipelineTaskName: "task",
+				Status: &tektonv1.TaskRunStatus{
+					TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+						PodName: "pod",
+						Steps:   []tektonv1.StepState{{Name: "running"}, step("failed", 1)},
+					},
+				},
+			},
+			want: "https://mycorp.console/ns/pr/task/pod/failed",
+		},
+		{
+			name:          "no taskrun status",
+			taskRunStatus: nil,
+			want:          "https://mycorp.console/ns/pr///",
+		},
+		{
+			name:          "taskrun status without status field",
+			taskRunStatus: &tektonv1.PipelineRunTaskRunStatus{PipelineTaskName: "task"},
+			want:          "https://mycorp.console/ns/pr/task//",
+		},
+	}
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCustomConsole(&info.PacOpts{
+				Settings: settings.Settings{
+					CustomConsoleURL:       "https://mycorp.console",
+					CustomConsolePRTaskLog: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}/{{ pod }}/{{ firstFailedStep }}",
+				},
+			})
+			assert.Equal(t, tt.want, c.TaskLogURL(pr, tt.taskRunStatus))
+		})
+	}
+}
+
+func TestCustomURLsDoNotLeakAcrossCalls(t *testing.T) {
+	c := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:          "https://mycorp.console",
+			CustomConsolePRdetail:     "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}/{{ pod }}/{{ firstFailedStep }}",
+			CustomConsoleNamespaceURL: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}",
+			CustomConsolePRTaskLog:    "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}/{{ pod }}/{{ firstFailedStep }}",
+		},
+	})
+	first := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "pr1"},
+	}
+	trStatus := &tektonv1.PipelineRunTaskRunStatus{
+		PipelineTaskName: "task1",
+		Status: &tektonv1.TaskRunStatus{
+			TaskRunStatusFields: tektonv1.TaskRunStatusFields{
+				PodName: "pod1",
+				Steps: []tektonv1.StepState{
+					{
+						Name: "step1",
+						ContainerState: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{ExitCode: 1},
+						},
+					},
+				},
+			},
+		},
+	}
+	assert.Equal(t, "https://mycorp.console/ns1/pr1/task1/pod1/step1", c.TaskLogURL(first, trStatus))
+
+	second := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns2", Name: "pr2"},
+	}
+	assert.Equal(t, "https://mycorp.console/ns2/pr2///", c.DetailURL(second))
+	assert.Equal(t, "https://mycorp.console/ns2/pr2/", c.NamespaceURL(second))
+}
+
+func TestCustomConsoleSnapshotsSettings(t *testing.T) {
+	pacInfo := &info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:      "https://mycorp.console",
+			CustomConsolePRdetail: "https://mycorp.console/{{ namespace }}/{{ pr }}",
+		},
+	}
+	c := NewCustomConsole(pacInfo)
+	pacInfo.CustomConsolePRdetail = "https://elsewhere.console/{{ namespace }}"
+	pacInfo.CustomConsoleURL = "https://elsewhere.console"
+
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+	assert.Equal(t, "https://mycorp.console/ns/pr", c.DetailURL(pr))
+	assert.Equal(t, "https://mycorp.console/ns/pr", c.WithParams(nil).DetailURL(pr))
 }

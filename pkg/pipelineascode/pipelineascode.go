@@ -8,6 +8,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/action"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/customparams"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
@@ -42,6 +43,18 @@ type PacRun struct {
 	manager      *ConcurrencyManager
 	pacInfo      *info.PacOpts
 	globalRepo   *v1alpha1.Repository
+	// console is scoped to this event once the custom params are resolved, so
+	// concurrent events never render their URLs with each other's parameters.
+	console consoleui.Interface
+}
+
+// consoleUI returns the event scoped console, falling back to the shared one
+// until the custom params have been resolved.
+func (p *PacRun) consoleUI() consoleui.Interface {
+	if p.console != nil {
+		return p.console
+	}
+	return p.run.Clients.ConsoleUI()
 }
 
 func NewPacs(event *info.Event, vcx provider.Interface, run *params.Run, pacInfo *info.PacOpts, k8int kubeinteraction.Interface, logger *zap.SugaredLogger, globalRepo *v1alpha1.Repository) PacRun {
@@ -87,7 +100,7 @@ func (p *PacRun) Run(ctx context.Context) error {
 			Status:     CompletedStatus,
 			Conclusion: providerstatus.ConclusionFailure,
 			Text:       fmt.Sprintf("There was an issue validating the commit: %q", err),
-			DetailsURL: p.run.Clients.ConsoleUI().URL(),
+			DetailsURL: p.consoleUI().URL(),
 		})
 		p.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "RepositoryCreateStatus", fmt.Sprintf("an error occurred: %s", err))
 		if createStatusErr != nil {
@@ -132,7 +145,7 @@ func (p *PacRun) Run(ctx context.Context) error {
 	} else {
 		p.debugf("resolved %d custom params for console UI", len(maptemplate))
 	}
-	p.run.Clients.ConsoleUI().SetParams(maptemplate)
+	p.console = p.run.Clients.ConsoleUI().WithParams(maptemplate)
 
 	var wg sync.WaitGroup
 	for i, match := range matchedPRs {
@@ -168,7 +181,7 @@ func (p *PacRun) Run(ctx context.Context) error {
 					Title:                    "pipelinerun start failure",
 					Conclusion:               providerstatus.ConclusionFailure,
 					Text:                     errMsgM,
-					DetailsURL:               p.run.Clients.ConsoleUI().URL(),
+					DetailsURL:               p.consoleUI().URL(),
 					InstanceCountForCheckRun: i,
 				})
 				if createStatusErr != nil {
@@ -249,11 +262,11 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	p.logger.Infof("PipelineRun %s has been created in namespace %s with status %s for SHA: %s Target Branch: %s",
 		pr.GetName(), match.Repo.GetNamespace(), pr.Spec.Status, p.event.SHA, p.event.BaseBranch)
 
-	consoleURL := p.run.Clients.ConsoleUI().DetailURL(pr)
+	consoleURL := p.consoleUI().DetailURL(pr)
 	mt := formatting.MessageTemplate{
 		PipelineRunName: pr.GetName(),
 		Namespace:       match.Repo.GetNamespace(),
-		ConsoleName:     p.run.Clients.ConsoleUI().GetName(),
+		ConsoleName:     p.consoleUI().GetName(),
 		ConsoleURL:      consoleURL,
 		TknBinary:       settings.TknBinaryName,
 		TknBinaryURL:    settings.TknBinaryURL,
@@ -309,7 +322,7 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 
 	// Patch pipelineRun with logURL annotation, skips for GitHub App as we patch logURL while patching CheckrunID
 	if _, ok := pr.Annotations[keys.InstallationID]; !ok {
-		patchAnnotations[keys.LogURL] = p.run.Clients.ConsoleUI().DetailURL(pr)
+		patchAnnotations[keys.LogURL] = p.consoleUI().DetailURL(pr)
 		whatPatching = "annotations.logURL, " + whatPatching
 	}
 

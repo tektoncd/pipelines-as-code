@@ -17,7 +17,14 @@ type Interface interface {
 	UI(ctx context.Context, kdyn dynamic.Interface) error
 	URL() string
 	GetName() string
-	SetParams(mt map[string]string)
+	// WithParams returns a console scoped to the given extra substitution
+	// parameters. The receiver is left untouched so a console shared between
+	// concurrent requests never sees another request's parameters.
+	//
+	// This deliberately replaces the earlier SetParams: a setter on a console
+	// shared by every request cannot express per-request ownership, so keeping
+	// it would leave the same defect reachable.
+	WithParams(mt map[string]string) Interface
 }
 
 type FallBackConsole struct{}
@@ -46,7 +53,8 @@ func (f FallBackConsole) URL() string {
 	return consoleIsnotConfiguredURL
 }
 
-func (f FallBackConsole) SetParams(_ map[string]string) {
+func (f FallBackConsole) WithParams(_ map[string]string) Interface {
+	return f
 }
 
 func New(ctx context.Context, kdyn dynamic.Interface, _ *info.Info) Interface {

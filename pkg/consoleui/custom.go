@@ -3,9 +3,9 @@ package consoleui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -15,16 +15,19 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// CustomConsole is immutable once built: WithParams returns a new console
+// rather than mutating the receiver, so a console shared between concurrent
+// requests cannot be reconfigured under them.
 type CustomConsole struct {
-	pacInfo              *info.PacOpts
-	namespace, pr, task  string
-	pod, firstFailedStep string
-	extraParams          map[string]string
-	mu                   sync.RWMutex
+	pacInfo     *info.PacOpts
+	extraParams map[string]string
 }
 
+// NewCustomConsole snapshots the settings it needs so a later change to the
+// caller's PacOpts cannot alter the URLs this console renders.
 func NewCustomConsole(pacInfo *info.PacOpts) *CustomConsole {
-	return &CustomConsole{pacInfo: pacInfo}
+	snapshot := *pacInfo
+	return &CustomConsole{pacInfo: &snapshot}
 }
 
 func (o *CustomConsole) GetName() string {
@@ -41,27 +44,56 @@ func (o *CustomConsole) URL() string {
 	return o.pacInfo.CustomConsoleURL
 }
 
-func (o *CustomConsole) SetParams(mt map[string]string) {
-	o.extraParams = mt
+// WithParams returns a copy of the console carrying its own extra substitution
+// parameters, leaving the receiver and the caller's map untouched.
+func (o *CustomConsole) WithParams(mt map[string]string) Interface {
+	scoped := &CustomConsole{pacInfo: o.pacInfo}
+	if mt != nil {
+		scoped.extraParams = maps.Clone(mt)
+	}
+	return scoped
+}
+
+// consoleParams builds the built-in substitution values from the arguments of a
+// single call. Values that the caller cannot provide are left empty.
+func consoleParams(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus) map[string]string {
+	dict := map[string]string{
+		"namespace":       "",
+		"pr":              "",
+		"task":            "",
+		"pod":             "",
+		"firstFailedStep": "",
+	}
+	if pr != nil {
+		dict["namespace"] = pr.GetNamespace()
+		dict["pr"] = pr.GetName()
+	}
+	if taskRunStatus == nil {
+		return dict
+	}
+	dict["task"] = taskRunStatus.PipelineTaskName
+	if taskRunStatus.Status == nil {
+		return dict
+	}
+	dict["pod"] = taskRunStatus.Status.PodName
+	// search for the first failed step in taskrunstatus
+	for _, step := range taskRunStatus.Status.Steps {
+		if step.Terminated != nil && step.Terminated.ExitCode != 0 {
+			dict["firstFailedStep"] = step.Name
+			break
+		}
+	}
+	return dict
 }
 
 // generateURL will generate a URL from a template, trim some of the spaces and
 // \n we get from yaml
 // return the default URL if there it's not become a proper url or that it has
 // some of the templates like {{}} left.
-func (o *CustomConsole) generateURL(urlTmpl string) string {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	dict := map[string]string{
-		"namespace":       o.namespace,
-		"pr":              o.pr,
-		"task":            o.task,
-		"pod":             o.pod,
-		"firstFailedStep": o.firstFailedStep,
-	}
-	for k, v := range o.extraParams {
-		dict[k] = v
-	}
+// dict is owned by the caller and gets the extra parameters merged into it,
+// those take precedence over the built-in ones.
+func (o *CustomConsole) generateURL(urlTmpl string, dict map[string]string) string {
+	maps.Copy(dict, o.extraParams)
 
 	newurl := templates.ReplacePlaceHoldersVariables(urlTmpl, dict, nil, nil, nil)
 	// trim new line because yaml parser adds new line at the end of the string
@@ -80,39 +112,21 @@ func (o *CustomConsole) DetailURL(pr *tektonv1.PipelineRun) string {
 	if o.pacInfo.CustomConsolePRdetail == "" {
 		return fmt.Sprintf("https://detailurl.setting.%s.is.not.configured", settings.CustomConsolePRDetailKey)
 	}
-	o.namespace = pr.GetNamespace()
-	o.pr = pr.GetName()
-	return o.generateURL(o.pacInfo.CustomConsolePRdetail)
+	return o.generateURL(o.pacInfo.CustomConsolePRdetail, consoleParams(pr, nil))
 }
 
 func (o *CustomConsole) NamespaceURL(pr *tektonv1.PipelineRun) string {
 	if o.pacInfo.CustomConsoleNamespaceURL == "" {
 		return fmt.Sprintf("https://detailurl.setting.%s.is.not.configured", settings.CustomConsoleNamespaceURLKey)
 	}
-	o.namespace = pr.GetNamespace()
-	return o.generateURL(o.pacInfo.CustomConsoleNamespaceURL)
+	return o.generateURL(o.pacInfo.CustomConsoleNamespaceURL, consoleParams(pr, nil))
 }
 
 func (o *CustomConsole) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus) string {
 	if o.pacInfo.CustomConsolePRTaskLog == "" {
 		return fmt.Sprintf("https://tasklogurl.setting.%s.is.not.configured", settings.CustomConsolePRTaskLogKey)
 	}
-	firstFailedStep := ""
-	// search for the first failed steps in taskrunstatus
-	for _, step := range taskRunStatus.Status.Steps {
-		if step.Terminated != nil && step.Terminated.ExitCode != 0 {
-			firstFailedStep = step.Name
-			break
-		}
-	}
-
-	o.namespace = pr.GetNamespace()
-	o.pr = pr.GetName()
-	o.task = taskRunStatus.PipelineTaskName
-	o.pod = taskRunStatus.Status.PodName
-	o.firstFailedStep = firstFailedStep
-
-	return o.generateURL(o.pacInfo.CustomConsolePRTaskLog)
+	return o.generateURL(o.pacInfo.CustomConsolePRTaskLog, consoleParams(pr, taskRunStatus))
 }
 
 func (o *CustomConsole) UI(_ context.Context, _ dynamic.Interface) error {

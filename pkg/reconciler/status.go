@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	kstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction/status"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
@@ -49,7 +50,18 @@ func (r *Reconciler) getFailureSnippet(ctx context.Context, pr *tektonv1.Pipelin
 	return fmt.Sprintf("task <b>%s</b> has the status <b>\"%s\"</b>:\n<pre>%s</pre>", name, sortedTaskInfos[0].Reason, text)
 }
 
-func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLogger, pacInfo *info.PacOpts, vcx provider.Interface, event *info.Event, createdPR *tektonv1.PipelineRun) (*tektonv1.PipelineRun, map[string]*tektonv1.PipelineRunTaskRunStatus, error) {
+// detailURL returns the console URL for a PipelineRun on the paths that do not
+// resolve the repository custom parameters themselves. The URL recorded on the
+// PipelineRun when it started was rendered with those parameters, so it is
+// preferred over rendering a new one from the unscoped console.
+func (r *Reconciler) detailURL(pr *tektonv1.PipelineRun) string {
+	if logURL := pr.GetAnnotations()[apipac.LogURL]; logURL != "" {
+		return logURL
+	}
+	return r.run.Clients.ConsoleUI().DetailURL(pr)
+}
+
+func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLogger, pacInfo *info.PacOpts, vcx provider.Interface, event *info.Event, createdPR *tektonv1.PipelineRun, console consoleui.Interface) (*tektonv1.PipelineRun, map[string]*tektonv1.PipelineRunTaskRunStatus, error) {
 	pr, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(createdPR.GetNamespace()).Get(
 		ctx, createdPR.GetName(), metav1.GetOptions{},
 	)
@@ -61,7 +73,7 @@ func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLog
 	var taskStatusText string
 	if len(trStatus) > 0 {
 		var err error
-		taskStatusText, err = sort.TaskStatusTmpl(pr, trStatus, r.run, vcx.GetConfig())
+		taskStatusText, err = sort.TaskStatusTmpl(pr, trStatus, console, vcx.GetConfig())
 		if err != nil {
 			return pr, trStatus, err
 		}
@@ -69,13 +81,13 @@ func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLog
 		taskStatusText = pr.Status.GetCondition(apis.ConditionSucceeded).Message
 	}
 
-	namespaceURL := r.run.Clients.ConsoleUI().NamespaceURL(pr)
-	consoleURL := r.run.Clients.ConsoleUI().DetailURL(pr)
+	namespaceURL := console.NamespaceURL(pr)
+	consoleURL := console.DetailURL(pr)
 	mt := formatting.MessageTemplate{
 		PipelineRunName: pr.GetName(),
 		Namespace:       pr.GetNamespace(),
 		NamespaceURL:    namespaceURL,
-		ConsoleName:     r.run.Clients.ConsoleUI().GetName(),
+		ConsoleName:     console.GetName(),
 		ConsoleURL:      consoleURL,
 		TknBinary:       settings.TknBinaryName,
 		TknBinaryURL:    settings.TknBinaryURL,
@@ -100,7 +112,7 @@ func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLog
 		Conclusion:              formatting.PipelineRunStatus(pr),
 		Text:                    tmplStatusText,
 		PipelineRunName:         pr.Name,
-		DetailsURL:              r.run.Clients.ConsoleUI().DetailURL(pr),
+		DetailsURL:              consoleURL,
 		OriginalPipelineRunName: pr.GetAnnotations()[apipac.OriginalPRName],
 	}
 

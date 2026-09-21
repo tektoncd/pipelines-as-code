@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -19,6 +20,7 @@ import (
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
@@ -77,6 +79,56 @@ func TestPostFinalStatus(t *testing.T) {
 		},
 	}
 
-	_, _, err := r.postFinalStatus(ctx, fakelogger, pacInfo, vcx, info.NewEvent(), pr1)
+	_, _, err := r.postFinalStatus(ctx, fakelogger, pacInfo, vcx, info.NewEvent(), pr1, run.Clients.ConsoleUI())
 	assert.NilError(t, err)
+}
+
+func TestDetailURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		want        string
+	}{
+		{
+			name:        "url recorded at start is reused",
+			annotations: map[string]string{keys.LogURL: "https://mycorp.console/ns/pr/myparam"},
+			want:        "https://mycorp.console/ns/pr/myparam",
+		},
+		{
+			name:        "no annotation falls back to the console",
+			annotations: nil,
+			want:        "https://mycorp.console/ns/pr/{{ foo }}",
+		},
+		{
+			name:        "empty annotation falls back to the console",
+			annotations: map[string]string{keys.LogURL: ""},
+			want:        "https://mycorp.console/ns/pr/{{ foo }}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run := params.New()
+			// a console whose template resolves everything, so the fallback is
+			// visibly different from the recorded URL
+			run.Clients.SetConsoleUI(&fakeDetailConsole{})
+			r := &Reconciler{run: run}
+			pr := &tektonv1.PipelineRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:   "ns",
+					Name:        "pr",
+					Annotations: tt.annotations,
+				},
+			}
+			assert.Equal(t, tt.want, r.detailURL(pr))
+		})
+	}
+}
+
+type fakeDetailConsole struct {
+	consoleui.FallBackConsole
+}
+
+func (f *fakeDetailConsole) DetailURL(pr *tektonv1.PipelineRun) string {
+	return "https://mycorp.console/" + pr.GetNamespace() + "/" + pr.GetName() + "/{{ foo }}"
 }

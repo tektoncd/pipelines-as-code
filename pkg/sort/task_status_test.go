@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -75,10 +74,8 @@ func TestStatusTmpl(t *testing.T) {
 			config := &info.ProviderConfig{
 				TaskStatusTMPL: tt.tmpl,
 			}
-			runs := params.New()
-			runs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
 			pr := &tektonv1.PipelineRun{}
-			output, err := TaskStatusTmpl(pr, tt.prTaskRunStatus, runs, config)
+			output, err := TaskStatusTmpl(pr, tt.prTaskRunStatus, consoleui.FallBackConsole{}, config)
 			if tt.wantErr {
 				assert.Assert(t, err != nil)
 				return
@@ -120,10 +117,8 @@ func TestStatusTmplSameStartTime(t *testing.T) {
 	config := &info.ProviderConfig{
 		TaskStatusTMPL: flattedTmpl,
 	}
-	runs := params.New()
-	runs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
 	pr := &tektonv1.PipelineRun{}
-	output, err := TaskStatusTmpl(pr, prTaskRunStatus, runs, config)
+	output, err := TaskStatusTmpl(pr, prTaskRunStatus, consoleui.FallBackConsole{}, config)
 	assert.NilError(t, err)
 	assert.Assert(t, wantRegexp.MatchString(output), "%s != %s", output, wantRegexp.String())
 }

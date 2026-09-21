@@ -26,7 +26,8 @@ type OpenshiftConsole struct {
 	host string
 }
 
-func (o *OpenshiftConsole) SetParams(_ map[string]string) {
+func (o *OpenshiftConsole) WithParams(_ map[string]string) Interface {
+	return o
 }
 
 func (o *OpenshiftConsole) GetName() string {

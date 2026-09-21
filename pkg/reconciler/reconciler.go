@@ -368,7 +368,9 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		r.eventEmitter.EmitMessage(repo, zap.ErrorLevel, "ParamsError",
 			fmt.Sprintf("error processing repository CR custom params: %s", err.Error()))
 	}
-	r.run.Clients.ConsoleUI().SetParams(maptemplate)
+	// scope the custom console to this request so concurrent reconciles do not
+	// render their URLs with another repository's parameters
+	console := r.run.Clients.ConsoleUI().WithParams(maptemplate)
 
 	if event.InstallationID > 0 {
 		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
@@ -397,7 +399,7 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	}
 
 	finalState := kubeinteraction.StateCompleted
-	newPr, trStatus, err := r.postFinalStatus(ctx, logger, pacInfo, provider, event, pr)
+	newPr, trStatus, err := r.postFinalStatus(ctx, logger, pacInfo, provider, event, pr, console)
 	if err != nil {
 		logger.Errorf("failed to post final status, moving on: %v", err)
 		finalState = kubeinteraction.StateFailed
@@ -527,7 +529,7 @@ func (r *Reconciler) updatePipelineRunToInProgress(ctx context.Context, logger *
 		return fmt.Errorf("cannot initialize git provider client: %w", err)
 	}
 
-	consoleURL := r.run.Clients.ConsoleUI().DetailURL(pr)
+	consoleURL := r.detailURL(pr)
 
 	mt := formatting.MessageTemplate{
 		PipelineRunName: pr.GetName(),
