@@ -67,7 +67,9 @@ for FILENAME in "${CRD_FILES[@]}"; do
       echo "  ✅ Successfully generated schema"
 
       # Find the auto-generated CRD file
-      if command -v yq >/dev/null 2>&1 && yq --version | grep -q "mikefarah/yq"; then
+      if command -v yq >/dev/null 2>&1 &&
+        version_output=$(yq --version 2>&1) &&
+        grep -q "mikefarah/yq" <<<"${version_output}"; then
         echo "  🔄 Syncing schema from temporary CRD to $BASENAME"
 
         # Find the auto-generated CRD file in the temp directory

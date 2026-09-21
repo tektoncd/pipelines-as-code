@@ -26,7 +26,7 @@ valid_pattern='^Test(Github|Gitea|Gitlab|Bitbucket|Others)|Concurrency'
 orphaned_tests=()
 while IFS= read -r test; do
     [[ -z "${test}" ]] && continue
-    if ! echo "${test}" | grep -qE "${valid_pattern}"; then
+    if ! grep -qE "${valid_pattern}" <<< "${test}"; then
         orphaned_tests+=("${test}")
     fi
 done <<< "${all_tests}"

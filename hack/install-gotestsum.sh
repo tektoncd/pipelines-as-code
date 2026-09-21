@@ -10,7 +10,9 @@ TARGETDIR=${2:-}
 [[ -z ${VERSION} || -z ${TARGETDIR} ]] && { echo "Usage: $0 <version> <targetdir>" && exit 1; }
 [[ -d ${TARGETDIR} ]] || mkdir -p "${TARGETDIR}"
 [[ -x ${TARGETDIR}/gotestsum ]] && {
-  "${TARGETDIR}/gotestsum" --version 2>/dev/null | grep -q "${VERSION}" && exit 0
+  if version_output=$("${TARGETDIR}/gotestsum" --version 2>/dev/null); then
+    grep -q "${VERSION}" <<<"${version_output}" && exit 0
+  fi
   rm -f "${TARGETDIR}/gotestsum"
 }
 

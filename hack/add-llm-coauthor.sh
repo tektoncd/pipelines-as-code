@@ -468,7 +468,7 @@ select_llms() {
     # Remove mode: only show LLMs that are present in the commits
     for llm in "${!llm_options[@]}"; do
       local llm_coauthor="${llm_options[$llm]}"
-      if echo "$existing_llm_coauthors" | grep -q "$llm_coauthor"; then
+      if grep -q "$llm_coauthor" <<< "$existing_llm_coauthors"; then
         available_llms+=("$llm")
       fi
     done
@@ -485,7 +485,7 @@ select_llms() {
     # Add mode: filter out LLMs that already have co-authors in any of the selected commits
     for llm in "${!llm_options[@]}"; do
       local llm_coauthor="${llm_options[$llm]}"
-      if ! echo "$existing_llm_coauthors" | grep -q "$llm_coauthor"; then
+      if ! grep -q "$llm_coauthor" <<< "$existing_llm_coauthors"; then
         available_llms+=("$llm")
       else
         echo "⚠️  Skipping '$llm' - already present in selected commit(s)" >&2
