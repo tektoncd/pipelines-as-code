@@ -1,5 +1,5 @@
 baseURL: /
-languageCode: en-us
+locale: en-us
 title: Pipelines as Code
 copyright: "Pipelines as Code"
 enableGitInfo: true

@@ -23,9 +23,17 @@
       {{/* Images under static directory */}}
       {{- $dest = (relURL (strings.TrimPrefix "/" $dest)) -}}
     {{- end -}}
-  {{- else if and $isPage (not $startsWithRelative) -}}
-    {{/* Images that are sibling to the individual page file */}}
-    {{ $dest = (printf "../%s" $dest) }}
+  {{- else -}}
+    {{/* Resolve page bundle resource for multilingual permalink */}}
+    {{- with .PageInner.Resources.Get (strings.TrimPrefix "./" $url.Path) -}}
+      {{- $query := cond $url.RawQuery (printf "?%s" $url.RawQuery) "" -}}
+      {{- $fragment := cond $url.Fragment (printf "#%s" $url.Fragment) "" -}}
+      {{- $dest = printf "%s%s%s" .RelPermalink $query $fragment -}}
+    {{- else -}}
+      {{- if and $isPage (not $startsWithRelative) -}}
+        {{ $dest = (printf "../%s" $dest) }}
+      {{- end -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 

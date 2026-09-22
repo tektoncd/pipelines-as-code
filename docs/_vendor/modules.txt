@@ -1,1 +1,1 @@
-# github.com/imfing/hextra v0.12.0
+# github.com/imfing/hextra v0.12.3
