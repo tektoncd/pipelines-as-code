@@ -270,27 +270,35 @@ func TestGetCommitInfo(t *testing.T) {
 		}
 	}`
 	tests := []struct {
-		name                string
-		event               *info.Event
-		mockCommitResponse  string
-		mockBranchResponse  string
-		mockRepoResponse    string
-		mockRepoStatus      int
-		wantErr             bool
-		wantErrContains     string
-		wantSHATitle        string
-		wantSHAURL          string
-		wantSHAMessage      string
-		wantAuthorName      string
-		wantAuthorEmail     string
-		wantAuthorDate      string
-		wantCommitterName   string
-		wantCommitterEmail  string
-		wantCommitterDate   string
-		wantDefaultBranch   string
-		wantRepoCalls       int
-		checkExtendedFields bool
-		noClient            bool
+		name                     string
+		event                    *info.Event
+		mockCommitResponse       string
+		mockBranchResponse       string
+		mockTagResponse          string
+		mockTagStatus            int
+		mockAnnotatedTagResponse string
+		mockAnnotatedTagStatus   int
+		mockAnnotatedTags        map[string]string
+		mockCommitSHA            string
+		mockRepoResponse         string
+		mockRepoStatus           int
+		wantErr                  bool
+		wantErrContains          string
+		wantSHATitle             string
+		wantSHAURL               string
+		wantSHAMessage           string
+		wantSHA                  string
+		wantAuthorName           string
+		wantAuthorEmail          string
+		wantAuthorDate           string
+		wantCommitterName        string
+		wantCommitterEmail       string
+		wantCommitterDate        string
+		wantDefaultBranch        string
+		wantHeadBranch           string
+		wantRepoCalls            int
+		checkExtendedFields      bool
+		noClient                 bool
 	}{
 		{
 			name: "good with full commit info",
@@ -423,6 +431,270 @@ func TestGetCommitInfo(t *testing.T) {
 			noClient: true,
 			wantErr:  true,
 		},
+		{
+			name: "tag push resolves annotated tag to peeled commit sha",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "tagobjectsha999",
+			},
+			mockAnnotatedTagResponse: `{
+				"tag": "v1.0.0",
+				"sha": "tagobjectsha999",
+				"object": {
+					"sha": "peeledcommitsha123",
+					"type": "commit"
+				}
+			}`,
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			wantSHATitle:      "release: v1.0.0",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:    "release: v1.0.0",
+			wantSHA:           "peeledcommitsha123",
+			wantHeadBranch:    "refs/tags/v1.0.0",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "tag push detected from head branch resolves annotated tag",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "tagobjectsha999",
+			},
+			mockAnnotatedTagResponse: `{
+				"tag": "v1.0.0",
+				"sha": "tagobjectsha999",
+				"object": {
+					"sha": "peeledcommitsha123",
+					"type": "commit"
+				}
+			}`,
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			wantSHATitle:      "release: v1.0.0",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:    "release: v1.0.0",
+			wantSHA:           "peeledcommitsha123",
+			wantHeadBranch:    "refs/tags/v1.0.0",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "tag push resolves lightweight tag directly by commit sha without tag endpoints",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "peeledcommitsha123",
+			},
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			mockTagStatus:          http.StatusInternalServerError,
+			mockAnnotatedTagStatus: http.StatusInternalServerError,
+			wantSHATitle:           "release: v1.0.0",
+			wantSHAURL:             "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:         "release: v1.0.0",
+			wantSHA:                "peeledcommitsha123",
+			wantHeadBranch:         "refs/tags/v1.0.0",
+			wantDefaultBranch:      "main",
+			wantRepoCalls:          1,
+		},
+		{
+			name: "nested annotated tag resolves through intermediate tags to peeled commit sha",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "outertagsha111",
+			},
+			mockAnnotatedTags: map[string]string{
+				"outertagsha111": `{
+					"tag": "v1.0.0",
+					"sha": "outertagsha111",
+					"object": {
+						"sha": "innertagsha222",
+						"type": "tag"
+					}
+				}`,
+				"innertagsha222": `{
+					"tag": "v1.0.0-rc1",
+					"sha": "innertagsha222",
+					"object": {
+						"sha": "peeledcommitsha123",
+						"type": "commit"
+					}
+				}`,
+			},
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			wantSHATitle:      "release: v1.0.0",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:    "release: v1.0.0",
+			wantSHA:           "peeledcommitsha123",
+			wantHeadBranch:    "refs/tags/v1.0.0",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "annotated tag resolves by sha even when tag was moved or deleted in repository",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "tagobjectsha999",
+			},
+			mockAnnotatedTagResponse: `{
+				"tag": "v1.0.0",
+				"sha": "tagobjectsha999",
+				"object": {
+					"sha": "peeledcommitsha123",
+					"type": "commit"
+				}
+			}`,
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			mockTagResponse: `{
+				"name": "v1.0.0",
+				"id": "newtagsha888",
+				"commit": {
+					"sha": "othercommit456"
+				}
+			}`,
+			wantSHATitle:      "release: v1.0.0",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:    "release: v1.0.0",
+			wantSHA:           "peeledcommitsha123",
+			wantHeadBranch:    "refs/tags/v1.0.0",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "tag push without sha resolves via tag name lookup",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "",
+			},
+			mockTagResponse: `{
+				"name": "v1.0.0",
+				"id": "tagobjectsha999",
+				"commit": {
+					"sha": "peeledcommitsha123"
+				}
+			}`,
+			mockCommitSHA: "peeledcommitsha123",
+			mockCommitResponse: `{
+				"sha": "peeledcommitsha123",
+				"html_url": "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+				"commit": {
+					"message": "release: v1.0.0"
+				}
+			}`,
+			wantSHATitle:      "release: v1.0.0",
+			wantSHAURL:        "https://gitea.com/owner/repo/commit/peeledcommitsha123",
+			wantSHAMessage:    "release: v1.0.0",
+			wantSHA:           "peeledcommitsha123",
+			wantHeadBranch:    "refs/tags/v1.0.0",
+			wantDefaultBranch: "main",
+			wantRepoCalls:     1,
+		},
+		{
+			name: "tag push fails when annotated tag lookup returns error",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "tagobjectsha999",
+			},
+			mockAnnotatedTagStatus: http.StatusInternalServerError,
+			wantErr:                true,
+			wantErrContains:        "failed to resolve tag v1.0.0 (sha: tagobjectsha999)",
+		},
+		{
+			name: "tag push fails when annotated tag has empty commit sha",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "tagobjectsha999",
+			},
+			mockAnnotatedTagResponse: `{
+				"tag": "v1.0.0",
+				"sha": "tagobjectsha999"
+			}`,
+			wantErr:         true,
+			wantErrContains: "failed to resolve commit for tag v1.0.0 (sha: tagobjectsha999)",
+		},
+		{
+			name: "tag push without sha fails when tag lookup returns error",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "",
+			},
+			mockTagStatus: http.StatusInternalServerError,
+			wantErr:       true,
+		},
+		{
+			name: "tag push without sha fails when tag has empty commit sha",
+			event: &info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				BaseBranch:   "refs/tags/v1.0.0",
+				HeadBranch:   "refs/tags/v1.0.0",
+				SHA:          "",
+			},
+			mockTagResponse: `{
+				"name": "v1.0.0",
+				"id": "tagobjectsha999"
+			}`,
+			wantErr:         true,
+			wantErrContains: "failed to resolve commit for tag v1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -439,13 +711,49 @@ func TestGetCommitInfo(t *testing.T) {
 				// upfront when the event carries one; otherwise it comes from
 				// the branch lookup below.
 				commitSHA := tt.event.SHA
-				if commitSHA == "" {
+				if tt.mockCommitSHA != "" {
+					commitSHA = tt.mockCommitSHA
+				} else if commitSHA == "" {
 					commitSHA = "head123"
 				}
 				mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/commits/%s", tt.event.Organization, tt.event.Repository, commitSHA),
 					func(rw http.ResponseWriter, _ *http.Request) {
 						fmt.Fprint(rw, tt.mockCommitResponse)
 					})
+
+				if len(tt.mockAnnotatedTags) > 0 {
+					for tagSHA, resp := range tt.mockAnnotatedTags {
+						tSHA, tResp := tagSHA, resp
+						mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/tags/%s", tt.event.Organization, tt.event.Repository, tSHA),
+							func(rw http.ResponseWriter, _ *http.Request) {
+								fmt.Fprint(rw, tResp)
+							})
+					}
+				} else if tt.mockAnnotatedTagResponse != "" || tt.mockAnnotatedTagStatus != 0 {
+					mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/git/tags/%s", tt.event.Organization, tt.event.Repository, tt.event.SHA),
+						func(rw http.ResponseWriter, _ *http.Request) {
+							if tt.mockAnnotatedTagStatus != 0 {
+								rw.WriteHeader(tt.mockAnnotatedTagStatus)
+								return
+							}
+							fmt.Fprint(rw, tt.mockAnnotatedTagResponse)
+						})
+				}
+
+				if tt.mockTagResponse != "" || tt.mockTagStatus != 0 {
+					tagName := strings.TrimPrefix(tt.event.BaseBranch, "refs/tags/")
+					if tagName == "" {
+						tagName = strings.TrimPrefix(tt.event.HeadBranch, "refs/tags/")
+					}
+					mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/tags/%s", tt.event.Organization, tt.event.Repository, tagName),
+						func(rw http.ResponseWriter, _ *http.Request) {
+							if tt.mockTagStatus != 0 {
+								rw.WriteHeader(tt.mockTagStatus)
+								return
+							}
+							fmt.Fprint(rw, tt.mockTagResponse)
+						})
+				}
 
 				if tt.mockBranchResponse != "" {
 					mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/branches/%s", tt.event.Organization, tt.event.Repository, tt.event.HeadBranch),
@@ -485,10 +793,16 @@ func TestGetCommitInfo(t *testing.T) {
 			}
 
 			assert.NilError(t, err)
+			if tt.wantSHA != "" {
+				assert.Equal(t, tt.wantSHA, tt.event.SHA, "SHA should match")
+			}
 			assert.Equal(t, tt.wantSHATitle, tt.event.SHATitle, "SHATitle should match")
 			assert.Equal(t, tt.wantSHAURL, tt.event.SHAURL, "SHAURL should match")
 			assert.Equal(t, tt.wantSHAMessage, tt.event.SHAMessage, "SHAMessage should match")
 			assert.Equal(t, tt.wantDefaultBranch, tt.event.DefaultBranch, "DefaultBranch should match")
+			if tt.wantHeadBranch != "" {
+				assert.Equal(t, tt.wantHeadBranch, tt.event.HeadBranch, "HeadBranch should match")
+			}
 			assert.Equal(t, tt.wantRepoCalls, repoCalls, "unexpected number of calls to the repository endpoint")
 
 			if tt.checkExtendedFields {
