@@ -549,7 +549,7 @@ func WaitForPullRequestCommentMatch(t *testing.T, topts *TestOpts) {
 	i := 0
 	topts.ParamsRun.Clients.Log.Infof("Looking for regexp \"%s\" in PR comments", topts.Regexp.String())
 	for {
-		comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+		comments, _, err := topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 		assert.NilError(t, err)
 		for _, v := range comments {
 			if topts.Regexp.MatchString(v.Body) {
@@ -573,7 +573,7 @@ func WaitForPullRequestCommentGoldenMatch(t *testing.T, topts *TestOpts, goldenF
 	}
 
 	for {
-		comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+		comments, _, err := topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 		assert.NilError(t, err)
 		for _, v := range comments {
 			if v.Body == "" {
