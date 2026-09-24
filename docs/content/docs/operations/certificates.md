@@ -32,3 +32,32 @@ kubectl set env deployment pipelines-as-code-controller pipelines-as-code-watche
 ```
 
 Once you apply this change, Pipelines-as-Code can access your Git repository using the custom certificate.
+
+Heres a YAML snippet showing  where to place the env and volumeMounts for the pipelines-as-code-controller  kubernetes section within the TektonConfig custom resource:
+
+```yaml
+...
+platforms:
+    kubernetes:   
+      pipelinesAsCode:
+        options:
+            deployments:
+                pipelines-as-code-controller:
+                    spec:
+                        template:
+                            spec:
+                                containers:
+                                    name: pac-controller
+                                    - env:
+                                        - name: SSL_CERT_DIR
+                                          value: /etc/ssl/certs/custom
+                                        volumeMounts:
+                                        - name: custom-cert
+                                          mountPath: /etc/ssl/certs/custom
+                                volumes:
+                                    name: custom-certs
+                                    - config-map: 
+                                        name: ca-certs
+
+```
+
