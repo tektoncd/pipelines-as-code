@@ -346,9 +346,10 @@ func TestGiteaRetestCommentUpdate(t *testing.T) {
 			assert.Equal(t, len(prs), 2, "should have only 2 pipelineruns")
 
 			// Verify comment strategy: count pac-status comments.
-			comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(
+			comments, _, err := topts.GiteaCNX.Client().ListIssueComments(
 				topts.PullRequest.Base.Repository.Owner.UserName,
 				topts.PullRequest.Base.Repository.Name,
+				topts.PullRequest.Index,
 				forgejo.ListIssueCommentOptions{},
 			)
 			assert.NilError(t, err)
