@@ -607,27 +607,51 @@ func (v *Provider) GetCommitInfo(_ context.Context, runevent *info.Event) error 
 	}
 
 	sha := runevent.SHA
-	if sha == "" && runevent.HeadBranch != "" {
-		branchinfo, _, err := v.Client().GetRepoBranch(runevent.Organization, runevent.Repository, runevent.HeadBranch)
+	var tagName string
+	if strings.HasPrefix(runevent.BaseBranch, "refs/tags/") {
+		tagName = strings.TrimPrefix(runevent.BaseBranch, "refs/tags/")
+	} else if strings.HasPrefix(runevent.HeadBranch, "refs/tags/") {
+		tagName = strings.TrimPrefix(runevent.HeadBranch, "refs/tags/")
+	}
+	if tagName != "" {
+		if strings.HasPrefix(runevent.HeadBranch, "refs/tags/") {
+			runevent.HeadBranch = tagName
+		}
+		tag, _, err := v.Client().GetTag(runevent.Organization, runevent.Repository, tagName)
 		if err != nil {
 			return err
 		}
-		sha = branchinfo.Commit.ID
-	} else if sha == "" && runevent.PullRequestNumber != 0 {
-		pr, _, err := v.Client().GetPullRequest(runevent.Organization, runevent.Repository, int64(runevent.PullRequestNumber))
-		if err != nil {
-			return err
+		if tag == nil || tag.Commit == nil || tag.Commit.SHA == "" {
+			return fmt.Errorf("failed to resolve commit for tag %s", tagName)
 		}
-		runevent.SHA = pr.Head.Sha
-		runevent.HeadBranch = pr.Head.Ref
-		runevent.BaseBranch = pr.Base.Ref
-		if runevent.HeadURL == "" && pr.Head.Repository != nil {
-			runevent.HeadURL = pr.Head.Repository.HTMLURL
+		sha = tag.Commit.SHA
+		runevent.SHA = tag.Commit.SHA
+	}
+
+	if sha == "" {
+		switch {
+		case runevent.HeadBranch != "":
+			branchinfo, _, err := v.Client().GetRepoBranch(runevent.Organization, runevent.Repository, runevent.HeadBranch)
+			if err != nil {
+				return err
+			}
+			sha = branchinfo.Commit.ID
+		case runevent.PullRequestNumber != 0:
+			pr, _, err := v.Client().GetPullRequest(runevent.Organization, runevent.Repository, int64(runevent.PullRequestNumber))
+			if err != nil {
+				return err
+			}
+			runevent.SHA = pr.Head.Sha
+			runevent.HeadBranch = pr.Head.Ref
+			runevent.BaseBranch = pr.Base.Ref
+			if runevent.HeadURL == "" && pr.Head.Repository != nil {
+				runevent.HeadURL = pr.Head.Repository.HTMLURL
+			}
+			if runevent.BaseURL == "" && pr.Base.Repository != nil {
+				runevent.BaseURL = pr.Base.Repository.HTMLURL
+			}
+			sha = pr.Head.Sha
 		}
-		if runevent.BaseURL == "" && pr.Base.Repository != nil {
-			runevent.BaseURL = pr.Base.Repository.HTMLURL
-		}
-		sha = pr.Head.Sha
 	}
 	commit, _, err := v.Client().GetSingleCommit(runevent.Organization, runevent.Repository, sha)
 	if err != nil {
