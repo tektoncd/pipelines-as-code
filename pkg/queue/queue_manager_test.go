@@ -323,9 +323,66 @@ func TestFilterPipelineRunByInProgress(t *testing.T) {
 		orderList[i] = fmt.Sprintf("%s/%s", ns, pr.GetName())
 	}
 	stdata, _ := testclient.SeedTestData(t, ctx, tdata)
-	filtered := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	filtered, err := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	assert.NilError(t, err)
 	expected := []string{"test-ns/pr1"}
 	assert.DeepEqual(t, filtered, expected)
+}
+
+// TestFilterPipelineRunByStateSkipsMalformedKeys asserts that a malformed
+// entry in the execution-order annotation is skipped rather than panicking.
+// The annotation is user-editable, and this function runs inside InitQueues at
+// watcher startup, so a panic here is a persistent CrashLoopBackOff for the
+// whole cluster, not one dropped reconcile.
+func TestFilterPipelineRunByStateSkipsMalformedKeys(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	ns := "test-ns"
+
+	pipelineRuns := []*tektonv1.PipelineRun{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "valid",
+				Namespace: ns,
+				Annotations: map[string]string{
+					keys.State: kubeinteraction.StateQueued,
+				},
+			},
+			Spec: tektonv1.PipelineRunSpec{
+				Status: tektonv1.PipelineRunSpecStatusPending,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "padded",
+				Namespace: ns,
+				Annotations: map[string]string{
+					keys.State: kubeinteraction.StateQueued,
+				},
+			},
+			Spec: tektonv1.PipelineRunSpec{
+				Status: tektonv1.PipelineRunSpecStatusPending,
+			},
+		},
+	}
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Namespaces:   []*corev1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: ns}}},
+		PipelineRuns: pipelineRuns,
+	})
+
+	orderList := []string{
+		"",                 // strings.Split("", ",") yields this
+		"no-slash",         // missing namespace separator
+		"/name-only",       // empty namespace
+		"ns-only/",         // empty name
+		"too/many/slashes", // name would contain a slash
+		// Surrounding whitespace is tolerated and points at a distinct run, so
+		// the expected result does not depend on the same key appearing twice.
+		"  " + ns + " / padded  ",
+		ns + "/valid",
+	}
+	filtered, err := FilterPipelineRunByState(ctx, stdata.Pipeline, orderList, tektonv1.PipelineRunSpecStatusPending, kubeinteraction.StateQueued)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, filtered, []string{ns + "/padded", ns + "/valid"})
 }
 
 // TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder asserts that a
@@ -552,7 +609,8 @@ func TestFilterPipelineRunByStateSkipsUnusableItems(t *testing.T) {
 				PipelineRuns: tt.pipelineRuns,
 			})
 
-			got := FilterPipelineRunByState(ctx, stdata.Pipeline, tt.orderList, tt.wantedStatus, tt.wantedState)
+			got, err := FilterPipelineRunByState(ctx, stdata.Pipeline, tt.orderList, tt.wantedStatus, tt.wantedState)
+			assert.NilError(t, err)
 			assert.DeepEqual(t, got, tt.want)
 		})
 	}
