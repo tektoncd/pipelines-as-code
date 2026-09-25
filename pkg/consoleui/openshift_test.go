@@ -125,6 +125,10 @@ func TestOpenshiftConsoleURLs(t *testing.T) {
 	assert.Equal(t, o.URL(), "https://fakeconsole")
 	assert.Equal(t, o.DetailURL(pr), "https://fakeconsole/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr")
 	assert.Equal(t, o.TaskLogURL(pr, trStatus), "https://fakeconsole/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr/logs/task")
+	assert.Equal(t, o.StepLogURL(pr, trStatus, "unit-tests"),
+		"https://fakeconsole/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr/logs?taskName=task&step=unit-tests")
+	// no step name falls back to the task logs
+	assert.Equal(t, o.StepLogURL(pr, trStatus, ""), o.TaskLogURL(pr, trStatus))
 	assert.Equal(t, o.NamespaceURL(pr), "https://fakeconsole/pipelines/ns/theNS/pipeline-runs")
 
 	emptyHost := OpenshiftConsole{host: ""}
@@ -132,4 +136,14 @@ func TestOpenshiftConsoleURLs(t *testing.T) {
 	assert.Equal(t, emptyHost.DetailURL(pr), "https://openshift.url.is.not.configured/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr")
 	assert.Equal(t, emptyHost.TaskLogURL(pr, trStatus), "https://openshift.url.is.not.configured/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr/logs/task")
 	assert.Equal(t, emptyHost.NamespaceURL(pr), "https://openshift.url.is.not.configured/pipelines/ns/theNS/pipeline-runs")
+}
+
+func TestOpenshiftConsoleStepLogURLEscaping(t *testing.T) {
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "theNS", Name: "pr"},
+	}
+	trStatus := &tektonv1.PipelineRunTaskRunStatus{PipelineTaskName: "my task"}
+	o := OpenshiftConsole{host: "fakeconsole"}
+	assert.Equal(t, o.StepLogURL(pr, trStatus, "a step"),
+		"https://fakeconsole/k8s/ns/theNS/tekton.dev~v1~PipelineRun/pr/logs?taskName=my+task&step=a+step")
 }

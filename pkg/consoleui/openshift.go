@@ -3,6 +3,7 @@ package consoleui
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,7 @@ const (
 	openShiftPipelineNamespaceViewURL = "%s/pipelines/ns/%s/pipeline-runs"
 	openShiftPipelineDetailViewURL    = "%s/k8s/ns/%s/tekton.dev~v1~PipelineRun/%s"
 	openShiftPipelineTaskLogURL       = "%s/logs/%s"
+	openShiftPipelineStepLogURL       = "%s/logs?taskName=%s&step=%s"
 	openShiftRouteGroup               = "route.openshift.io"
 	openShiftRouteVersion             = "v1"
 	openShiftRouteResource            = "routes"
@@ -47,6 +49,16 @@ func (o *OpenshiftConsole) DetailURL(pr *tektonv1.PipelineRun) string {
 
 func (o *OpenshiftConsole) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus) string {
 	return fmt.Sprintf(openShiftPipelineTaskLogURL, o.DetailURL(pr), taskRunStatus.PipelineTaskName)
+}
+
+// StepLogURL points to the logs of a single step of a task, the console
+// scrolls the log viewer to that step when the query parameters are set.
+func (o *OpenshiftConsole) StepLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus, stepName string) string {
+	if stepName == "" {
+		return o.TaskLogURL(pr, taskRunStatus)
+	}
+	return fmt.Sprintf(openShiftPipelineStepLogURL, o.DetailURL(pr),
+		url.QueryEscape(taskRunStatus.PipelineTaskName), url.QueryEscape(stepName))
 }
 
 func (o *OpenshiftConsole) NamespaceURL(pr *tektonv1.PipelineRun) string {

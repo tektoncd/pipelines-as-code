@@ -229,6 +229,13 @@ data:
   # custom-console-url-namespace: https://url/ns/{{ namespace }}
   # custom-console-url-pr-details: https://url/ns/{{ namespace }}/{{ pr }}
   # custom-console-url-pr-tasklog: https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ task }}
+  # custom-console-url-pr-steplog: https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ task }}/{{ step }}
+
+  # Add the breakdown of the steps of every task to the status reported back to
+  # the Git provider. The steps are listed under their task with a link to
+  # their logs on the console, which lets you jump straight to the logs of a
+  # step of a task using StepActions. Set it to false to only report the tasks.
+  status-show-steps: "true"
 
 kind: ConfigMap
 metadata:

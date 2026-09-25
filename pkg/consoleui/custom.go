@@ -76,7 +76,6 @@ func consoleParams(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRun
 		return dict
 	}
 	dict["pod"] = taskRunStatus.Status.PodName
-	// search for the first failed step in taskrunstatus
 	for _, step := range taskRunStatus.Status.Steps {
 		if step.Terminated != nil && step.Terminated.ExitCode != 0 {
 			dict["firstFailedStep"] = step.Name
@@ -86,22 +85,23 @@ func consoleParams(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRun
 	return dict
 }
 
+func taskParams(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus, stepName string) map[string]string {
+	base := consoleParams(pr, taskRunStatus)
+	base["step"] = stepName
+	return base
+}
+
 // generateURL will generate a URL from a template, trim some of the spaces and
-// \n we get from yaml
-// return the default URL if there it's not become a proper url or that it has
-// some of the templates like {{}} left.
-// dict is owned by the caller and gets the extra parameters merged into it,
-// those take precedence over the built-in ones.
+// \n we get from yaml. The caller-owned dict gets the extra params merged into it,
+// and those take precedence over the built-ins.
 func (o *CustomConsole) generateURL(urlTmpl string, dict map[string]string) string {
 	maps.Copy(dict, o.extraParams)
 
 	newurl := templates.ReplacePlaceHoldersVariables(urlTmpl, dict, nil, nil, nil)
-	// trim new line because yaml parser adds new line at the end of the string
 	newurl = strings.TrimSpace(strings.TrimSuffix(newurl, "\n"))
 	if _, err := url.ParseRequestURI(newurl); err != nil {
 		return o.URL()
 	}
-	// detect if there is still some {{}} in the url
 	if keys.ParamsRe.MatchString(newurl) {
 		return o.URL()
 	}
@@ -127,6 +127,15 @@ func (o *CustomConsole) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tekt
 		return fmt.Sprintf("https://tasklogurl.setting.%s.is.not.configured", settings.CustomConsolePRTaskLogKey)
 	}
 	return o.generateURL(o.pacInfo.CustomConsolePRTaskLog, consoleParams(pr, taskRunStatus))
+}
+
+// StepLogURL points to the logs of a single step of a task, it falls back to
+// the task log URL when no step specific template has been configured.
+func (o *CustomConsole) StepLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus, stepName string) string {
+	if o.pacInfo.CustomConsolePRStepLog == "" || stepName == "" {
+		return o.TaskLogURL(pr, taskRunStatus)
+	}
+	return o.generateURL(o.pacInfo.CustomConsolePRStepLog, taskParams(pr, taskRunStatus, stepName))
 }
 
 func (o *CustomConsole) UI(_ context.Context, _ dynamic.Interface) error {

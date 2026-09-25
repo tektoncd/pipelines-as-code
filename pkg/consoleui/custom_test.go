@@ -68,6 +68,11 @@ func TestCustomGood(t *testing.T) {
 	assert.Equal(t, c.DetailURL(pr), "https://mycorp.console/ns/pr/params/bar")
 	assert.Equal(t, c.TaskLogURL(pr, trStatus), "https://mycorp.console/ns/pr/task/pod/failure/params/bar/nonewline")
 
+	scoped, ok := c.WithParams(map[string]string{"foo": "scoped"}).(*CustomConsole)
+	assert.Assert(t, ok, "WithParams should return a *CustomConsole")
+	assert.Equal(t, scoped.DetailURL(pr), "https://mycorp.console/ns/pr/params/scoped")
+	assert.Equal(t, c.DetailURL(pr), "https://mycorp.console/ns/pr/params/bar")
+
 	// test if we fallback properly
 	f := NewCustomConsole(&info.PacOpts{
 		Settings: settings.Settings{
@@ -94,6 +99,54 @@ func TestCustomGood(t *testing.T) {
 	assert.Assert(t, strings.Contains(o.NamespaceURL(pr), "https://mycorp.console/ns"))
 }
 
+func TestCustomStepLogURL(t *testing.T) {
+	consoleURL := "https://mycorp.console"
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pr"},
+	}
+	trStatus := &tektonv1.PipelineRunTaskRunStatus{
+		PipelineTaskName: "task",
+		Status: &tektonv1.TaskRunStatus{
+			TaskRunStatusFields: tektonv1.TaskRunStatusFields{PodName: "pod"},
+		},
+	}
+
+	c := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:       consoleURL,
+			CustomConsolePRTaskLog: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}",
+			CustomConsolePRStepLog: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}/{{ step }}",
+		},
+	})
+	assert.Equal(t, c.StepLogURL(pr, trStatus, "unit-tests"), "https://mycorp.console/ns/pr/task/unit-tests")
+	// no step name falls back to the task log url
+	assert.Equal(t, c.StepLogURL(pr, trStatus, ""), "https://mycorp.console/ns/pr/task")
+	// the step of a previous call does not leak on the task log url
+	assert.Equal(t, c.TaskLogURL(pr, trStatus), "https://mycorp.console/ns/pr/task")
+
+	// no step template configured falls back to the task log url
+	noStep := NewCustomConsole(&info.PacOpts{
+		Settings: settings.Settings{
+			CustomConsoleURL:       consoleURL,
+			CustomConsolePRTaskLog: "https://mycorp.console/{{ namespace }}/{{ pr }}/{{ task }}",
+		},
+	})
+	assert.Equal(t, noStep.StepLogURL(pr, trStatus, "unit-tests"), "https://mycorp.console/ns/pr/task")
+
+	// the console is shared by concurrent handlers, a step URL must not pick
+	// up the step of another call
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			step := fmt.Sprintf("step-%d", i)
+			assert.Check(t, c.StepLogURL(pr, trStatus, step) == "https://mycorp.console/ns/pr/task/"+step)
+		}()
+	}
+	wg.Wait()
+}
+
 func TestCustomBad(t *testing.T) {
 	c := NewCustomConsole(&info.PacOpts{Settings: settings.Settings{}})
 	pr := &tektonv1.PipelineRun{
@@ -106,6 +159,7 @@ func TestCustomBad(t *testing.T) {
 	assert.Assert(t, strings.Contains(c.URL(), "is.not.configured"))
 	assert.Assert(t, strings.Contains(c.DetailURL(pr), "is.not.configured"))
 	assert.Assert(t, strings.Contains(c.TaskLogURL(pr, nil), "is.not.configured"))
+	assert.Assert(t, strings.Contains(c.StepLogURL(pr, nil, "step"), "is.not.configured"))
 	assert.Assert(t, strings.Contains(c.NamespaceURL(pr), "is.not.configured"), c.NamespaceURL(pr))
 }
 

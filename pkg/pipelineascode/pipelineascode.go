@@ -150,6 +150,7 @@ func (p *PacRun) Run(ctx context.Context) error {
 		p.debugf("resolved %d custom params for console UI", len(maptemplate))
 	}
 	p.console = p.run.Clients.ConsoleUI().WithParams(maptemplate)
+	p.run = p.run.WithConsoleParams(maptemplate)
 
 	var wg sync.WaitGroup
 	for i, match := range matchedPRs {

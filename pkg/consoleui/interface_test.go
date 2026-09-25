@@ -35,4 +35,5 @@ func TestFallbackConsole(t *testing.T) {
 	assert.Assert(t, fbc.URL() != "")
 	assert.Assert(t, fbc.DetailURL(pr) != "")
 	assert.Assert(t, fbc.TaskLogURL(pr, trStatus) != "")
+	assert.Assert(t, fbc.StepLogURL(pr, trStatus, "step") != "")
 }

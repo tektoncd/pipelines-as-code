@@ -23,6 +23,7 @@ const (
 	CustomConsoleURLKey          = "custom-console-url"
 	CustomConsolePRDetailKey     = "custom-console-url-pr-details"
 	CustomConsolePRTaskLogKey    = "custom-console-url-pr-tasklog"
+	CustomConsolePRStepLogKey    = "custom-console-url-pr-steplog"
 	CustomConsoleNamespaceURLKey = "custom-console-url-namespace"
 
 	SecretGhAppTokenRepoScopedKey = "secret-github-app-token-scoped" //nolint: gosec
@@ -97,7 +98,12 @@ type Settings struct {
 	CustomConsoleURL          string `json:"custom-console-url"`
 	CustomConsolePRdetail     string `json:"custom-console-url-pr-details"`
 	CustomConsolePRTaskLog    string `json:"custom-console-url-pr-tasklog"`
+	CustomConsolePRStepLog    string `json:"custom-console-url-pr-steplog"`
 	CustomConsoleNamespaceURL string `json:"custom-console-url-namespace"`
+
+	// StatusShowSteps adds the breakdown of the steps of every task to the
+	// status reported back to the Git provider.
+	StatusShowSteps bool `default:"true" json:"status-show-steps"`
 
 	RememberOKToTest   bool `json:"remember-ok-to-test"`
 	RequireOkToTestSHA bool `json:"require-ok-to-test-sha"`
@@ -138,6 +144,7 @@ func DefaultValidators() map[string]func(string) error {
 		"TektonDashboardURL":         isValidURL,
 		"CustomConsoleURL":           isValidURL,
 		"CustomConsolePRTaskLog":     startWithHTTPorHTTPS,
+		"CustomConsolePRStepLog":     startWithHTTPorHTTPS,
 		"CustomConsolePRDetail":      startWithHTTPorHTTPS,
 		"TrustedProviderHostnames":   isValidTrustedProviderHostnames,
 	}
