@@ -181,6 +181,10 @@ func TestGithubGHEAppIncomingNoMatchExactName(t *testing.T) {
 }
 
 func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string, entries map[string]string, targets []string, onWebhook bool, numberOfPR int) {
+	verifyIncomingWebhookWithCommitTitle(t, randomedString, pipelinerunName, entries, targets, onWebhook, numberOfPR, "")
+}
+
+func verifyIncomingWebhookWithCommitTitle(t *testing.T, randomedString, pipelinerunName string, entries map[string]string, targets []string, onWebhook bool, numberOfPR int, commitTitle string) {
 	ctx := context.Background()
 	onGHE := true // All incoming webhook tests use GHE
 	ctx, runcnx, opts, ghprovider, err := tgithub.Setup(ctx, onGHE, onWebhook)
@@ -245,6 +249,9 @@ func verifyIncomingWebhook(t *testing.T, randomedString, pipelinerunName string,
 	targetRefName := fmt.Sprintf("refs/heads/%s", randomedString)
 
 	title := "TestGithubAppIncoming - " + randomedString
+	if commitTitle != "" {
+		title = commitTitle
+	}
 	sha, vref, err := tgithub.PushFilesToRef(ctx, ghprovider.Client(), title,
 		repoinfo.GetDefaultBranch(),
 		targetRefName,
@@ -496,6 +503,23 @@ func TestGithubGHEAppIncomingDefaultBranchProvenance(t *testing.T) {
 		"pipelinesascode.tekton.dev/event-type=incoming", "step-task",
 		*regexp.MustCompile(".*It's a Bird... It's a Plane... It's Superman"), "", 2, nil)
 	assert.NilError(t, err, "Error while checking the logs of the pods")
+}
+
+// TestGithubGHEAppIncomingSkipCI verifies that an incoming webhook creates a
+// PipelineRun even when the HEAD commit message contains a [skip ci] marker.
+// Incoming webhooks are explicit user-triggered runs and must not be suppressed
+// by the skip-CI convention.
+func TestGithubGHEAppIncomingSkipCI(t *testing.T) {
+	randomedString := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
+
+	entries, err := payload.GetEntries(map[string]string{
+		".tekton/pipelinerun-incoming.yaml": "testdata/pipelinerun-incoming.yaml",
+	}, randomedString, randomedString, triggertype.Incoming.String(), map[string]string{})
+	assert.NilError(t, err)
+
+	verifyIncomingWebhookWithCommitTitle(t, randomedString, "pipelinerun-incoming", entries,
+		[]string{randomedString}, false, 1,
+		"chore: update readme [skip ci]")
 }
 
 // Local Variables:
