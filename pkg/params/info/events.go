@@ -80,8 +80,9 @@ type Event struct {
 
 	// TODO: move out inside the provider
 	// Bitbucket Data Center
-	CloneURL string // bitbucket data center has a different url for cloning the repo than normal public html url
-	Provider *Provider
+	CloneURL       string // bitbucket data center has a different url for cloning the repo than normal public html url
+	BBDCProjectKey string // bitbucket data center project key, including the ~ prefix for personal repositories
+	Provider       *Provider
 
 	// GitLab
 	SourceProjectID int64

@@ -12,6 +12,7 @@ import (
 	"github.com/jenkins-x/go-scm/scm"
 	"github.com/jenkins-x/go-scm/scm/driver/stash"
 	"github.com/jenkins-x/go-scm/scm/transport/oauth2"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
@@ -26,6 +27,7 @@ import (
 
 const taskStatusTemplate = `{{range $taskrun := .TaskRunList }}| **{{ formatCondition $taskrun.PipelineRunTaskRunStatus.Status.Conditions }}** | {{ $taskrun.ConsoleLogURL }} | *{{ formatDuration $taskrun.Status.StartTime $taskrun.Status.CompletionTime }}* |
 {{ end }}`
+
 const apiResponseLimit = 100
 
 var _ provider.Interface = (*Provider)(nil)
@@ -129,21 +131,25 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 		return fmt.Errorf("no token has been set, cannot set status")
 	}
 
-	key := statusOpts.PipelineRunName
-	if key == "" {
-		key = statusOpts.Title
-	}
+	key := provider.GetBBCloudStatusKey(statusOpts, v.pacInfo)
 
-	if v.pacInfo.ApplicationName != "" {
-		key = fmt.Sprintf("%s / %s", v.pacInfo.ApplicationName, key)
+	// Event organization strips the tilde from personal repositories.
+	projectKey := event.BBDCProjectKey
+	parent := ""
+	if statusOpts.PipelineRun != nil {
+		annotations := statusOpts.PipelineRun.GetAnnotations()
+		if annotatedProjectKey := annotations[keys.BitbucketProjectKey]; annotatedProjectKey != "" {
+			projectKey = annotatedProjectKey
+		}
+		parent = annotations[keys.BitbucketRequiredBuildParent]
 	}
-
-	OrgAndRepo := fmt.Sprintf("%s/%s", event.Organization, event.Repository)
+	OrgAndRepo := fmt.Sprintf("%s/%s", projectKey, event.Repository)
 	opts := &scm.StatusInput{
-		State: state,
-		Label: key,
-		Desc:  statusOpts.Text,
-		Link:  detailsURL,
+		State:  state,
+		Label:  key,
+		Desc:   statusOpts.Text,
+		Link:   detailsURL,
+		Parent: parent,
 	}
 	_, _, err := v.Client().Repositories.CreateStatus(ctx, OrgAndRepo, event.SHA, opts)
 	if err != nil {
