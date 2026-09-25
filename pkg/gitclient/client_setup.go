@@ -15,7 +15,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // SetupAuthenticatedClient sets up the authenticated VCS client with proper token scoping.
@@ -40,9 +39,7 @@ func SetupAuthenticatedClient(
 		run.Info.Kube.Namespace != "" &&
 		run.Info.Controller.GlobalRepository != "" {
 		var err error
-		if globalRepo, err = run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(run.Info.Kube.Namespace).Get(
-			ctx, run.Info.Controller.GlobalRepository, metav1.GetOptions{},
-		); err != nil {
+		if globalRepo, err = run.GetRepository(ctx, run.Info.Kube.Namespace, run.Info.Controller.GlobalRepository); err != nil {
 			logger.Errorf("cannot get global repository: %v", err)
 		}
 	}
