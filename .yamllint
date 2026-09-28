@@ -6,7 +6,7 @@ ignore: |
   test/testdata/failures/bad-pipelinerun.yaml
   *badyaml.yaml
   .github/workflows/*
-  CLAUDE.md
+  AGENTS.md
 
 rules:
   braces: enable
