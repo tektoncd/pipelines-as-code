@@ -128,6 +128,48 @@ get_tests() {
 	esac
 }
 
+check_github_rate_limit() {
+  local token="$1" url="$2" remaining
+  if [[ -z "${token}" ]]; then
+    echo "Missing GitHub API token for ${url}" >&2
+    return 1
+  fi
+  remaining=$(curl -fsS --max-time 10 -H "Authorization: Bearer ${token}" \
+    -H 'Accept: application/vnd.github+json' "${url}/rate_limit" | jq -er '.resources.core.remaining | numbers') || {
+    echo "Unable to check GitHub API rate limit for ${url}" >&2
+    return 1
+  }
+  if ((remaining < 30)); then
+    echo "GitHub API rate limit is too low for ${url}: ${remaining} remaining" >&2
+    return 1
+  fi
+  echo "GitHub API rate limit for ${url}: ${remaining} remaining"
+}
+
+check_e2e_rate_limits() {
+  local target="${TEST_PROVIDER}"
+  case "${target}" in
+  github_public | github_1 | github_2)
+    check_github_rate_limit \
+      "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
+    ;;
+  github_ghe* | github_second_controller)
+    check_github_rate_limit \
+      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
+    check_github_rate_limit \
+      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
+    ;;
+  concurrency)
+    check_github_rate_limit \
+      "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
+    check_github_rate_limit \
+      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
+    check_github_rate_limit \
+      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
+    ;;
+  esac
+}
+
 run_e2e_tests() {
 	# Accept secrets as positional args (v0.27.x workflow) or env vars (v0.37.x+ workflow)
 	local bitbucket_cloud_token="${1:-${TEST_BITBUCKET_CLOUD_TOKEN:-}}"
@@ -252,7 +294,11 @@ help() {
   create_second_github_app_controller_on_ghe <test_github_second_smee_url> <test_github_second_private_key> <test_github_second_webhook_secret>
     Create the second controller on GHE
 
-  run_e2e_tests <bitbucket_cloud_token> <webhook_secret> <test_gitea_smeeurl> <installation_id> <gh_apps_token> <test_github_second_token> <gitlab_token>
+  check_e2e_rate_limits
+    Check GitHub API rate limits before E2E setup
+    Required env vars: TEST_PROVIDER and the GitHub API URL and tokens for that provider
+
+  run_e2e_tests
     Run the e2e tests
 
   collect_logs
@@ -267,6 +313,10 @@ EOF
 }
 
 case ${1-""} in
+check_e2e_rate_limits)
+  set +x
+  check_e2e_rate_limits
+  ;;
 create_pac_github_app_secret)
 	create_pac_github_app_secret "${2}" "${3}" "${4}"
 	;;
