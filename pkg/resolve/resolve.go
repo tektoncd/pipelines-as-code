@@ -150,6 +150,21 @@ type Opts struct {
 	RepositoryRevision string // revision for repository-local Task and Pipeline references
 }
 
+// hasYAMLContent checks if a document contains actual YAML content
+// beyond comments and whitespace. Returns false for comment-only or empty documents.
+func hasYAMLContent(doc string) bool {
+	for _, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Skip empty lines and comment lines
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		// Found non-comment, non-whitespace content
+		return true
+	}
+	return false
+}
+
 func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (TektonTypes, error) {
 	types := NewTektonTypes()
 	decoder := k8scheme.Codecs.UniversalDeserializer()
@@ -157,7 +172,7 @@ func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (
 	debugf(log, "ReadTektonTypes: data length=%d docs=%d", len(data), len(docs))
 
 	for _, doc := range docs {
-		if strings.TrimSpace(doc) == "" {
+		if !hasYAMLContent(doc) {
 			continue
 		}
 

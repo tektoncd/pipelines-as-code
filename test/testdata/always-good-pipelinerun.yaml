@@ -1,4 +1,6 @@
 ---
+# This is a pipelinerun which should always pass.
+---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
