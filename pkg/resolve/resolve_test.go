@@ -506,6 +506,123 @@ func TestIgnoreDocSpace(t *testing.T) {
 	assert.NilError(t, err)
 }
 
+func TestReadTektonTypesCommentOnlyDocuments(t *testing.T) {
+	tests := []struct {
+		name         string
+		yamlContent  string
+		pipelineRuns int
+		pipelines    int
+		tasks        int
+		validErrors  int
+	}{
+		{
+			name: "comment-only document should be skipped",
+			yamlContent: `---
+# This is just a comment
+# Another comment
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pr
+spec:
+  pipelineSpec:
+    tasks: []`,
+			pipelineRuns: 1,
+			validErrors:  0,
+		},
+		{
+			name: "whitespace and comments should be skipped",
+			yamlContent: `---
+
+# Comment with empty lines above
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: test-task
+spec:
+  steps:
+    - name: step1
+      image: alpine`,
+			tasks:       1,
+			validErrors: 0,
+		},
+		{
+			name: "comment before YAML content should process normally",
+			yamlContent: `---
+# Configuration for pipeline
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-pipeline
+spec:
+  tasks: []`,
+			pipelines:   1,
+			validErrors: 0,
+		},
+		{
+			name: "multiple comment-only docs with one valid doc",
+			yamlContent: `---
+# First comment block
+---
+# Second comment block
+# More comments
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: test-pr
+spec:
+  pipelineSpec:
+    tasks: []
+---
+# Trailing comment block
+---`,
+			pipelineRuns: 1,
+			validErrors:  0,
+		},
+		{
+			name: "NetworkManager comment case from bug report",
+			yamlContent: `---
+# --- NetworkManager ---
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: networkmanager-test
+spec:
+  pipelineSpec:
+    tasks: []`,
+			pipelineRuns: 1,
+			validErrors:  0,
+		},
+		{
+			name: "all comment-only documents",
+			yamlContent: `---
+# Just comments
+---
+# More comments
+# And more
+---
+# Final comments`,
+			validErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			types, err := ReadTektonTypes(context.TODO(), nil, tt.yamlContent)
+			assert.NilError(t, err)
+			assert.Equal(t, len(types.PipelineRuns), tt.pipelineRuns, "unexpected number of PipelineRuns")
+			assert.Equal(t, len(types.Pipelines), tt.pipelines, "unexpected number of Pipelines")
+			assert.Equal(t, len(types.Tasks), tt.tasks, "unexpected number of Tasks")
+			assert.Equal(t, len(types.ValidationErrors), tt.validErrors, "unexpected number of ValidationErrors")
+		})
+	}
+}
+
 func TestPipelineV1StayV1(t *testing.T) {
 	got, _, err := readTDfile(t, "pipelinev1asv1", false, true)
 	assert.NilError(t, err)
