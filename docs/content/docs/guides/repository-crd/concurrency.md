@@ -27,9 +27,9 @@ For additional concurrency strategies and global configuration options, see [Adv
 ## Kueue - Kubernetes-native Job Queueing
 
 If you need more sophisticated queue management than `concurrency_limit` provides, Pipelines-as-Code supports [Kueue](https://kueue.sigs.k8s.io/) as an alternative, Kubernetes-native solution for queuing PipelineRuns.
-To get started, deploy the experimental integration provided by the [konflux-ci/tekton-kueue](https://github.com/konflux-ci/tekton-kueue) project. This allows you to schedule PipelineRuns through Kueue's queuing mechanism.
+To get started, deploy the experimental integration provided by the [tektoncd/tekton-kueue](https://github.com/tektoncd/tekton-kueue) project. This allows you to schedule PipelineRuns through Kueue's queuing mechanism.
 
 {{< callout type="info" >}}
-The [konflux-ci/tekton-kueue](https://github.com/konflux-ci/tekton-kueue) project and the Pipelines-as-Code integration is only intended for testing.
+The [tektoncd/tekton-kueue](https://github.com/tektoncd/tekton-kueue) project and the Pipelines-as-Code integration is only intended for testing.
 It is only meant for experimentation and should not be used in production environments.
 {{< /callout >}}
