@@ -280,7 +280,7 @@ func TestShouldGetNextPage(t *testing.T) {
 		{
 			name: "next page requested",
 			header: http.Header{
-				"X-Pagecount": []string{"1"},
+				"X-Pagecount": []string{"3"},
 			},
 			currentPage:     2,
 			wantNextPage:    true,
