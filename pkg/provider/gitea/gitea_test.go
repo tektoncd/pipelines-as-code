@@ -449,11 +449,11 @@ func TestProviderGetFilesPagination(t *testing.T) {
 					PullRequestNumber: 1,
 					TriggerTarget:     trigger,
 				})
+				assert.NilError(t, err)
 				mu.Lock()
 				gotPages := append([]string(nil), pages...)
 				mu.Unlock()
 				assert.DeepEqual(t, gotPages, tt.wantPages)
-				assert.NilError(t, err)
 				assert.DeepEqual(t, got, tt.want)
 			})
 		}
