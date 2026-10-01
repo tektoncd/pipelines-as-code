@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	stderrors "errors"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -109,12 +110,12 @@ func TestDetectProvider(t *testing.T) {
 		{
 			name:       "unknown provider",
 			annotation: "batman",
-			errStr:     "failed to detect provider for pipelinerun: test : unknown provider",
+			errStr:     `provider not configured: unknown provider "batman" for pipelinerun test`,
 		},
 		{
 			name:         "no label",
 			missTheLabel: true,
-			errStr:       "failed to detect git provider for pipleinerun test : git-provider label not found",
+			errStr:       "provider not configured: git-provider annotation not found on pipelinerun test",
 		},
 	}
 	for _, tt := range tests {
@@ -140,6 +141,8 @@ func TestDetectProvider(t *testing.T) {
 				return
 			}
 			assert.Error(t, err, tt.errStr)
+			assert.Assert(t, stderrors.Is(err, ErrProviderNotConfigured),
+				"a missing or unknown provider annotation must be classified as permanent")
 		})
 	}
 }
