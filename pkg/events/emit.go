@@ -30,6 +30,17 @@ func (e *EventEmitter) SetLogger(logger *zap.SugaredLogger) {
 	e.logger = logger
 }
 
+// WithLogger returns a copy that logs with logger. The receiver is left
+// unchanged so concurrent callers do not race on EventEmitter.logger.
+func (e *EventEmitter) WithLogger(logger *zap.SugaredLogger) *EventEmitter {
+	if e == nil {
+		return nil
+	}
+	copied := *e
+	copied.logger = logger
+	return &copied
+}
+
 func (e *EventEmitter) EmitMessage(repo *v1alpha1.Repository, loggerLevel zapcore.Level, reason, message string) {
 	if repo != nil && e.client != nil {
 		event := makeEvent(repo, loggerLevel, reason, message)
