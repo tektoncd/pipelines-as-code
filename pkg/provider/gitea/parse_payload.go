@@ -88,6 +88,10 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 			processedEvent.TriggerTarget = triggertype.PullRequestClosed
 		}
 	case *forgejostructs.PushPayload:
+		if gitEvent.After != "" && provider.IsZeroSHA(gitEvent.After) {
+			return nil, fmt.Errorf("ref %s has been deleted, skipping", gitEvent.Ref)
+		}
+
 		processedEvent = info.NewEvent()
 		if gitEvent.HeadCommit != nil {
 			processedEvent.SHA = gitEvent.HeadCommit.ID
@@ -95,7 +99,11 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 			processedEvent.SHATitle = gitEvent.HeadCommit.Message
 		}
 		if processedEvent.SHA == "" {
-			processedEvent.SHA = gitEvent.Before
+			if gitEvent.After != "" && !provider.IsZeroSHA(gitEvent.After) {
+				processedEvent.SHA = gitEvent.After
+			} else {
+				processedEvent.SHA = gitEvent.Before
+			}
 		}
 		if gitEvent.Repo != nil {
 			if gitEvent.Repo.Owner != nil {
