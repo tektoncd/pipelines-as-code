@@ -217,25 +217,17 @@ check_github_rate_limit() {
 }
 
 check_e2e_rate_limits() {
+  # GitHub Enterprise returns 404 on /rate_limit when rate limiting is
+  # disabled, so only github.com targets are checked here.
   local target="${TEST_PROVIDER}"
   case "${target}" in
   github_public | github_1 | github_2)
     check_github_rate_limit \
       "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
     ;;
-  github_ghe* | github_second_controller)
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    ;;
   concurrency)
     check_github_rate_limit \
       "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
     ;;
   esac
 }
@@ -404,7 +396,9 @@ help() {
 
   check_e2e_rate_limits
     Check GitHub API rate limits before E2E setup
-    Required env vars: TEST_PROVIDER and the GitHub API URL and tokens for that provider
+    Only github.com targets are checked, GitHub Enterprise does not expose a
+    usable rate limit endpoint.
+    Required env vars: TEST_PROVIDER, TEST_GITHUB_API_URL, TEST_GITHUB_TOKEN
 
   run_e2e_tests
     Run the e2e tests

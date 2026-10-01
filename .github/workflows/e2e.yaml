@@ -138,7 +138,13 @@ jobs:
       - name: Check GitHub API rate limits
         env:
           TEST_PROVIDER: ${{ matrix.provider }}
-        run: ./hack/gh-workflow-ci.sh check_e2e_rate_limits
+        # The script comes from the PR head; older branches lack this command.
+        run: |
+          if grep -q '^check_e2e_rate_limits)' hack/gh-workflow-ci.sh; then
+            ./hack/gh-workflow-ci.sh check_e2e_rate_limits
+          else
+            echo "Rate-limit check not available on this branch, skipping"
+          fi
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
