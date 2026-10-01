@@ -13,6 +13,7 @@ const consoleIsnotConfiguredURL = "https://dashboard.is.not.configured"
 type Interface interface {
 	DetailURL(pr *tektonv1.PipelineRun) string
 	TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatusstatus *tektonv1.PipelineRunTaskRunStatus) string
+	StepLogURL(pr *tektonv1.PipelineRun, taskRunStatusstatus *tektonv1.PipelineRunTaskRunStatus, stepName string) string
 	NamespaceURL(pr *tektonv1.PipelineRun) string
 	UI(ctx context.Context, kdyn dynamic.Interface) error
 	URL() string
@@ -20,10 +21,6 @@ type Interface interface {
 	// WithParams returns a console scoped to the given extra substitution
 	// parameters. The receiver is left untouched so a console shared between
 	// concurrent requests never sees another request's parameters.
-	//
-	// This deliberately replaces the earlier SetParams: a setter on a console
-	// shared by every request cannot express per-request ownership, so keeping
-	// it would leave the same defect reachable.
 	WithParams(mt map[string]string) Interface
 }
 
@@ -38,6 +35,10 @@ func (f FallBackConsole) DetailURL(_ *tektonv1.PipelineRun) string {
 }
 
 func (f FallBackConsole) TaskLogURL(_ *tektonv1.PipelineRun, _ *tektonv1.PipelineRunTaskRunStatus) string {
+	return consoleIsnotConfiguredURL
+}
+
+func (f FallBackConsole) StepLogURL(_ *tektonv1.PipelineRun, _ *tektonv1.PipelineRunTaskRunStatus, _ string) string {
 	return consoleIsnotConfiguredURL
 }
 

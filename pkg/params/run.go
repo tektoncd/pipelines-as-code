@@ -16,6 +16,13 @@ type Run struct {
 	Info    info.Info
 }
 
+func (r *Run) WithConsoleParams(params map[string]string) *Run {
+	scoped := *r
+	scoped.Clients = r.Clients
+	scoped.Clients.SetConsoleUI(r.Clients.ConsoleUI().WithParams(params))
+	return &scoped
+}
+
 func (r *Run) UpdatePacConfig(ctx context.Context) error {
 	ns := info.GetNS(ctx)
 	if ns == "" {

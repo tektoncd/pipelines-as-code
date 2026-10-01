@@ -371,6 +371,12 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	// scope the custom console to this request so concurrent reconciles do not
 	// render their URLs with another repository's parameters
 	console := r.run.Clients.ConsoleUI().WithParams(maptemplate)
+	if r.run.Clients.Log == nil {
+		r.run.Clients.Log = logger
+	}
+	scopedReconciler := *r
+	scopedReconciler.run = r.run.WithConsoleParams(maptemplate)
+	r = &scopedReconciler
 
 	if event.InstallationID > 0 {
 		event.Provider.WebhookSecret, _ = secrets.GetCurrentNSWebhookSecret(ctx, r.kinteract, r.run)
@@ -390,9 +396,6 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 		}
 	}
 
-	if r.run.Clients.Log == nil {
-		r.run.Clients.Log = logger
-	}
 	err = provider.SetClient(ctx, r.run, event, repo, r.eventEmitter)
 	if err != nil {
 		return repo, fmt.Errorf("cannot set client: %w", err)

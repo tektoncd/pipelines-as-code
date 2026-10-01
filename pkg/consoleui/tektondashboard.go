@@ -3,6 +3,7 @@ package consoleui
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"k8s.io/client-go/dynamic"
@@ -28,6 +29,16 @@ func (t *TektonDashboard) NamespaceURL(pr *tektonv1.PipelineRun) string {
 
 func (t *TektonDashboard) TaskLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus) string {
 	return fmt.Sprintf("%s?pipelineTask=%s", t.DetailURL(pr), taskRunStatus.PipelineTaskName)
+}
+
+// StepLogURL points to the logs of a single step of a task, the dashboard
+// selects that step when the query parameters are set.
+func (t *TektonDashboard) StepLogURL(pr *tektonv1.PipelineRun, taskRunStatus *tektonv1.PipelineRunTaskRunStatus, stepName string) string {
+	if stepName == "" {
+		return t.TaskLogURL(pr, taskRunStatus)
+	}
+	return fmt.Sprintf("%s?pipelineTask=%s&step=%s", t.DetailURL(pr),
+		url.QueryEscape(taskRunStatus.PipelineTaskName), url.QueryEscape(stepName))
 }
 
 func (t *TektonDashboard) URL() string {
