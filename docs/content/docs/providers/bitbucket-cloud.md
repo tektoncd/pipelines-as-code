@@ -8,7 +8,7 @@ This page covers how to configure Pipelines-as-Code with Bitbucket Cloud through
 ## Prerequisites
 
 - A running Pipelines-as-Code [installation]({{< relref "/docs/installation/installation" >}})
-- A Bitbucket Cloud scoped API token (see below)
+- A Bitbucket Cloud scoped API token or workspace/repository access token (see below)
 - The public URL of your Pipelines-as-Code controller route or ingress endpoint
 
 ## Create a Bitbucket Cloud API token
@@ -36,6 +36,39 @@ requests in E2E tests.
 {{< /callout >}}
 
 Store the generated token in a safe place. Bitbucket Cloud shows it only once.
+
+### Workspace and repository access tokens
+
+Instead of a personal API token, you can use a
+[workspace](https://support.atlassian.com/bitbucket-cloud/docs/create-a-workspace-access-token/)
+or
+[repository](https://support.atlassian.com/bitbucket-cloud/docs/create-a-repository-access-token/)
+access token. Pipelines-as-Code detects these tokens automatically by their
+`ATCT` prefix and authenticates with bearer authorization instead of basic
+auth. Git clones use the `x-token-auth` username automatically.
+
+When creating the access token, grant these resource-token permissions:
+
+- **Repository: Read**
+- **Pull requests: Read**
+- **Repository: Write**
+- **Webhooks: Write**
+
+Workspace-member access is not needed because resource tokens cannot query
+workspace membership.
+
+{{< callout type="warning" >}}
+Access tokens cannot list workspace members, so workspace membership does not
+authorize a pull request author. To let a pull request run, list the author's
+Bitbucket account ID in the `OWNERS` or `OWNERS_ALIASES` file on the default
+branch, or have a listed user comment `/ok-to-test` on the pull request.
+{{< /callout >}}
+
+{{< callout type="info" >}}
+When using a workspace or repository access token, the `git_provider.user`
+field in the Repository CR is still required but is only used for logging
+purposes — it is not sent as part of the authentication.
+{{< /callout >}}
 
 ## Webhook Configuration using the CLI
 
@@ -139,12 +172,14 @@ Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with th
         # key: "webhook.secret"
 ```
 
-You must use your Bitbucket/Atlassian account email address in the `user` field
-of the Repository CR. Pipelines-as-Code uses this value with the API token for
-Bitbucket Cloud API authentication. To find your email address, click on your
-profile icon at the top-left corner in the Bitbucket Cloud UI (see image
-below), go to **Account Settings**, and scroll down to locate your email
-address.
+The `user` field in the Repository CR is required. When using an API token,
+set it to your Bitbucket/Atlassian account email address — Pipelines-as-Code
+uses it together with the token for basic auth. When using a workspace or
+repository access token (`ATCT` prefix), the value is used for logging only.
+
+To find your email address, click on your profile icon at the top-left corner
+in the Bitbucket Cloud UI (see image below), go to **Account Settings**, and
+scroll down to locate your email address.
 ![Bitbucket Cloud Account Settings](/images/bitbucket-cloud-account-settings.png)
 
 ## Notes

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -119,13 +120,41 @@ func TestSetClient(t *testing.T) {
 		name          string
 		wantErrSubstr string
 		event         *info.Event
-		token         string
+		wantBearer    bool
 	}{
 		{
 			name: "set token",
 			event: &info.Event{
 				Provider: &info.Provider{
 					Token: "token",
+					User:  "user",
+				},
+			},
+		},
+		{
+			name: "access token uses bearer authentication",
+			event: &info.Event{
+				Provider: &info.Provider{
+					Token: "ATCT-access-token",
+					User:  "user",
+				},
+			},
+			wantBearer: true,
+		},
+		{
+			name: "API token uses basic authentication",
+			event: &info.Event{
+				Provider: &info.Provider{
+					Token: "ATAT-api-token",
+					User:  "user@example.com",
+				},
+			},
+		},
+		{
+			name: "app password uses basic authentication",
+			event: &info.Event{
+				Provider: &info.Provider{
+					Token: "ATBB-app-password",
 					User:  "user",
 				},
 			},
@@ -153,6 +182,8 @@ func TestSetClient(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_, mux, tearDown := bbcloudtest.SetupBBCloudClient(t)
+			defer tearDown()
 			ctx, _ := rtesting.SetupFakeContext(t)
 			core, observer := zapobserver.New(zap.InfoLevel)
 			testLog := zap.New(core).Sugar()
@@ -171,8 +202,25 @@ func TestSetClient(t *testing.T) {
 				assert.ErrorContains(t, err, tt.wantErrSubstr)
 				return
 			}
+			assert.NilError(t, err)
 			assert.Equal(t, tt.event.Provider.Token, *v.Token)
 			assert.Equal(t, tt.event.Provider.User, *v.Username)
+
+			authorization := make(chan string, 1)
+			mux.HandleFunc("/repositories/workspace/repo", func(w http.ResponseWriter, r *http.Request) {
+				authorization <- r.Header.Get("Authorization")
+				fmt.Fprint(w, `{ "full_name": "workspace/repo" }`)
+			})
+			_, err = v.Client().Workspaces.Repositories.Repository.Get(&bitbucket.RepositoryOptions{
+				Owner:    "workspace",
+				RepoSlug: "repo",
+			})
+			assert.NilError(t, err)
+			wantAuthorization := "Basic " + base64.StdEncoding.EncodeToString([]byte(tt.event.Provider.User+":"+tt.event.Provider.Token))
+			if tt.wantBearer {
+				wantAuthorization = "Bearer " + tt.event.Provider.Token
+			}
+			assert.Equal(t, <-authorization, wantAuthorization)
 
 			logs := observer.TakeAll()
 			assert.Assert(t, len(logs) > 0, "expected a log entry, got none")

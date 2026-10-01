@@ -2,6 +2,8 @@ package bitbucketcloud
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -29,6 +31,14 @@ func (v *Provider) IsAllowed(ctx context.Context, event *info.Event) (bool, erro
 func (v *Provider) isWorkspaceMember(event *info.Event) (bool, error) {
 	members, err := v.Client().Workspaces.Members(event.Organization)
 	if err != nil {
+		// Workspace, repository, and project access tokens cannot read workspace members.
+		// Keep validating the account ID through OWNERS and approved comments.
+		var responseErr *bitbucket.UnexpectedResponseStatusError
+		if v.Token != nil && strings.HasPrefix(*v.Token, "ATCT") &&
+			errors.As(err, &responseErr) &&
+			(responseErr.StatusCode == http.StatusUnauthorized || responseErr.StatusCode == http.StatusForbidden) {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -42,8 +52,8 @@ func (v *Provider) isWorkspaceMember(event *info.Event) (bool, error) {
 
 // IsAllowedOwnersFile get the owner files (OWNERS, OWNERS_ALIASES) from main branch
 // and check if we have explicitly allowed the user in there.
-func (v *Provider) IsAllowedOwnersFile(ctx context.Context, event *info.Event) (bool, error) {
-	ownerContent, err := v.GetFileInsideRepo(ctx, event, "OWNERS", event.DefaultBranch)
+func (v *Provider) IsAllowedOwnersFile(_ context.Context, event *info.Event) (bool, error) {
+	ownerContent, err := v.getBlob(event, event.DefaultBranch, "OWNERS")
 	if err != nil {
 		if strings.Contains(err.Error(), "cannot find") {
 			// no owner file, skipping
@@ -52,7 +62,7 @@ func (v *Provider) IsAllowedOwnersFile(ctx context.Context, event *info.Event) (
 		return false, err
 	}
 	// If there is OWNERS file, check for OWNERS_ALIASES
-	ownerAliasesContent, err := v.GetFileInsideRepo(ctx, event, "OWNERS_ALIASES", event.DefaultBranch)
+	ownerAliasesContent, err := v.getBlob(event, event.DefaultBranch, "OWNERS_ALIASES")
 	if err != nil {
 		if !strings.Contains(err.Error(), "cannot find") {
 			return false, err

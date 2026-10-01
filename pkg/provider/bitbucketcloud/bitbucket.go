@@ -259,7 +259,15 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, event *info.Eve
 	if event.Provider.User == "" {
 		return fmt.Errorf("no git_provider.user has been in repo crd")
 	}
-	bbClient, err := bitbucket.NewBasicAuth(event.Provider.User, event.Provider.Token)
+	var bbClient *bitbucket.Client
+	var err error
+	// Atlassian identifies workspace, project, and repository access tokens by
+	// the ATCT prefix: https://community.atlassian.com/forums/discussion/3093481/can-we-confirm-bitbuckets-token-prefixes
+	if strings.HasPrefix(event.Provider.Token, "ATCT") {
+		bbClient, err = bitbucket.NewOAuthbearerToken(event.Provider.Token)
+	} else {
+		bbClient, err = bitbucket.NewBasicAuth(event.Provider.User, event.Provider.Token)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create bitbucket client: %w", err)
 	}

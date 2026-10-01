@@ -11,6 +11,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/random"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/vcshost"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -44,8 +45,11 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 	if runevent.Provider.User != "" {
 		gitUser = runevent.Provider.User
 	}
-	if strings.EqualFold(repoURL.Hostname(), "bitbucket.org") {
+	if strings.EqualFold(repoURL.Hostname(), vcshost.PublicBitbucket) {
 		gitUser = bitbucketCloudGitUsername
+		if strings.HasPrefix(runevent.Provider.Token, "ATCT") {
+			gitUser = "x-token-auth"
+		}
 	}
 
 	// Bitbucket Data Center token have / into it, so unless we quote the URL them it's

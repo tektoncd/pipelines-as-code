@@ -12,6 +12,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/completion"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/vcshost"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -106,7 +107,7 @@ func update(ctx context.Context, opts *cli.PacCliOpts, run *params.Run, ioStream
 	if err != nil {
 		return err
 	}
-	isBitbucketCloud := repo.Spec.GitProvider.Type == "bitbucket-cloud" || strings.Contains(repo.Spec.URL, "bitbucket.org")
+	isBitbucketCloud := repo.Spec.GitProvider.Type == "bitbucket-cloud" || strings.Contains(repo.Spec.URL, vcshost.PublicBitbucket)
 	tokenName := "personal access token"
 	if isBitbucketCloud {
 		tokenName = "Bitbucket Cloud API token"

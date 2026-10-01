@@ -129,12 +129,25 @@ func TestCreateBasicAuthSecret(t *testing.T) {
 				URL:          "https://bitbucket.org/workspace/repo",
 				Provider: &info.Provider{
 					User:  "user@example.com",
-					Token: "api-token",
+					Token: "ATAT-api-token",
 				},
 			},
 			expectedGitConfigURL:    "https://bitbucket.org",
-			expectedGitCredentials:  "https://x-bitbucket-api-token-auth:api-token@bitbucket.org/workspace/repo",
+			expectedGitCredentials:  "https://x-bitbucket-api-token-auth:ATAT-api-token@bitbucket.org/workspace/repo",
 			expectedStartSecretName: "pac-gitauth-upper-case",
+		},
+		{
+			name: "bitbucket cloud access token git user",
+			event: info.Event{
+				URL: "https://bitbucket.org/workspace/repo",
+				Provider: &info.Provider{
+					User:  "user@example.com",
+					Token: "ATCT-access-token",
+				},
+			},
+			expectedGitConfigURL:    "https://bitbucket.org",
+			expectedGitCredentials:  "https://x-token-auth:ATCT-access-token@bitbucket.org/workspace/repo",
+			expectedStartSecretName: "pac-gitauth-access-token",
 		},
 	}
 	for _, tt := range tests {

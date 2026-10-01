@@ -149,10 +149,10 @@ func TestIsPublic(t *testing.T) {
 		host string
 		want bool
 	}{
-		{name: "github.com", host: "github.com", want: true},
+		{name: "github.com", host: PublicGitHub, want: true},
 		{name: "api.github.com", host: "api.github.com", want: true},
-		{name: "gitlab.com", host: "gitlab.com", want: true},
-		{name: "bitbucket.org", host: "bitbucket.org", want: true},
+		{name: "gitlab.com", host: PublicGitLab, want: true},
+		{name: "bitbucket.org", host: PublicBitbucket, want: true},
 		{name: "uppercase is still public", host: "GitHub.com", want: true},
 		{name: "self hosted is not public", host: "github.example.com", want: false},
 		{name: "lookalike is not public", host: "github.com.evil.example", want: false},
