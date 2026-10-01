@@ -76,7 +76,7 @@ rules:
     verbs: ["create"]
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "update"]
+    verbs: ["get", "create", "update", "delete"]
   - apiGroups: ["pipelinesascode.tekton.dev"]
     resources: ["repositories"]
     verbs: ["get", "create", "list"]
