@@ -219,23 +219,16 @@ check_github_rate_limit() {
 check_e2e_rate_limits() {
   local target="${TEST_PROVIDER}"
   case "${target}" in
+  # NOTE: GHE (github_ghe*, github_second_controller) is intentionally
+  # excluded here. GitHub Enterprise Server has rate limiting disabled by
+  # default, which makes /rate_limit return 404 regardless of credentials.
   github_public | github_1 | github_2)
     check_github_rate_limit \
       "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
     ;;
-  github_ghe* | github_second_controller)
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    ;;
   concurrency)
     check_github_rate_limit \
       "${TEST_GITHUB_TOKEN}" "https://${TEST_GITHUB_API_URL}" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
-    check_github_rate_limit \
-      "${TEST_GITHUB_SECOND_WEBHOOK_TOKEN}" "https://${TEST_GITHUB_SECOND_API_URL}/api/v3" || return 1
     ;;
   esac
 }
