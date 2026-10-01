@@ -29,6 +29,7 @@ func TestAddLabelsAndAnnotations(t *testing.T) {
 	event.HeadBranch = "pr_branch"
 	event.HeadURL = "https://url/pr"
 	event.CloneURL = "https://url/clone"
+	event.BBDCProjectKey = "~joe"
 
 	type args struct {
 		event          *info.Event
@@ -90,6 +91,7 @@ func TestAddLabelsAndAnnotations(t *testing.T) {
 			assert.Equal(t, tt.args.pipelineRun.Annotations[keys.ControllerInfo],
 				fmt.Sprintf(`{"name":"%s","configmap":"%s","secret":"%s", "gRepo": "%s"}`, tt.args.controllerInfo.Name, tt.args.controllerInfo.Configmap, tt.args.controllerInfo.Secret, tt.args.controllerInfo.GlobalRepository))
 			assert.Equal(t, tt.args.pipelineRun.Annotations[keys.CloneURL], tt.args.event.CloneURL)
+			assert.Equal(t, tt.args.pipelineRun.Annotations[keys.BitbucketProjectKey], tt.args.event.BBDCProjectKey)
 		})
 	}
 }

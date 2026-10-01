@@ -93,6 +93,138 @@ func TestGenerateName(t *testing.T) {
 	assert.Assert(t, resolved.GenerateName != "")
 }
 
+func TestValidatePipelineRunAnnotations(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       string
+		wantErr     string
+		wantNoError bool
+	}{
+		{
+			name:        "annotation is absent",
+			wantNoError: true,
+		},
+		{
+			name:        "value is exactly 210 characters",
+			value:       strings.Repeat("a", 210),
+			wantNoError: true,
+		},
+		{
+			name:    "value is more than 210 characters",
+			value:   strings.Repeat("a", 211),
+			wantErr: "value must not exceed 210 characters",
+		},
+		{
+			name:        "multibyte value is counted by characters",
+			value:       strings.Repeat("é", 105),
+			wantNoError: true,
+		},
+		{
+			name:    "value is not valid UTF-8",
+			value:   string([]byte{0xff}),
+			wantErr: "value is not valid UTF-8",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr := &tektonv1.PipelineRun{}
+			if tt.value != "" {
+				pr.Annotations = map[string]string{
+					apipac.BitbucketRequiredBuildParent: tt.value,
+				}
+			}
+
+			err := validatePipelineRunAnnotations(pr)
+			if tt.wantNoError {
+				assert.NilError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestMetadataResolveIncludesPipelineRunNameInAnnotationError(t *testing.T) {
+	tests := []struct {
+		name            string
+		apiVersion      string
+		pipelineRunName string
+		parent          string
+		wantErr         string
+	}{
+		{
+			name:            "invalid annotation includes pipeline run name",
+			apiVersion:      "tekton.dev/v1",
+			pipelineRunName: "invalid-parent",
+			parent:          strings.Repeat("a", 211),
+			wantErr:         "invalid pipeline run invalid-parent annotations",
+		},
+		{
+			name:            "valid annotation parses successfully",
+			apiVersion:      "tekton.dev/v1",
+			pipelineRunName: "valid-parent",
+			parent:          strings.Repeat("a", 210),
+		},
+		{
+			name:            "v1beta1 invalid annotation includes pipeline run name",
+			apiVersion:      "tekton.dev/v1beta1",
+			pipelineRunName: "invalid-parent-beta",
+			parent:          strings.Repeat("a", 211),
+			wantErr:         "invalid pipeline run invalid-parent-beta annotations",
+		},
+		{
+			name:            "v1beta1 valid annotation parses successfully",
+			apiVersion:      "tekton.dev/v1beta1",
+			pipelineRunName: "valid-parent-beta",
+			parent:          strings.Repeat("a", 210),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := fmt.Sprintf(`apiVersion: %s
+kind: PipelineRun
+metadata:
+  name: %s
+  annotations:
+    %s: %s
+`, tt.apiVersion, tt.pipelineRunName, apipac.BitbucketRequiredBuildParent, tt.parent)
+
+			types, err := ReadTektonTypes(context.TODO(), nil, data)
+			assert.NilError(t, err)
+			_, err = MetadataResolve(types.PipelineRuns)
+			if tt.wantErr == "" {
+				assert.NilError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestMetadataResolveKeepsPipelineRunsBeforeInvalidAnnotation(t *testing.T) {
+	valid := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Name: "valid"},
+	}
+	validAfterInvalid := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Name: "valid-after-invalid"},
+	}
+	invalid := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "invalid",
+			Annotations: map[string]string{
+				apipac.BitbucketRequiredBuildParent: strings.Repeat("a", 211),
+			},
+		},
+	}
+
+	resolved, err := MetadataResolve([]*tektonv1.PipelineRun{valid, invalid, validAfterInvalid})
+
+	assert.ErrorContains(t, err, "invalid pipeline run invalid annotations")
+	assert.Equal(t, len(resolved), 0)
+}
+
 // TestPipelineBundlesSkipped effectively test conversion from beta1 to v1.
 func TestPipelineBundlesSkipped(t *testing.T) {
 	resolved, _, err := readTDfile(t, "pipelinerun-pipeline-bundle", false, true)
