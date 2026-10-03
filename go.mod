@@ -18,7 +18,7 @@ require (
 	github.com/google/go-github/v91 v91.0.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/jenkins-x/go-scm v1.16.3
+	github.com/jenkins-x/go-scm v1.16.5
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/juju/ansiterm v1.0.0
 	github.com/ktrysmt/go-bitbucket v0.10.0
@@ -28,7 +28,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/prometheus/common v0.71.0
+	github.com/prometheus/common v0.72.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tektoncd/pipeline v1.16.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
@@ -51,9 +51,9 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.5.2
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/client-go v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	knative.dev/eventing v0.50.0
