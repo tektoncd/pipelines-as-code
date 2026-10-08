@@ -1,0 +1,36 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: "\\ .PipelineName //"
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: step-alpha
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              script: |
+                echo "alpha has run"
+            - name: step-bravo
+              displayName: "Bravo has a display name"
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              script: |
+                echo "bravo has run"
+            - name: step-charlie
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              script: |
+                echo "charlie has run"
+            - name: step-delta
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              script: |
+                echo "delta has run"
+            - name: step-echo
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              script: |
+                echo "echo has run"

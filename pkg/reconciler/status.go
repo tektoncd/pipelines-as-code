@@ -73,7 +73,7 @@ func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLog
 	var taskStatusText string
 	if len(trStatus) > 0 {
 		var err error
-		taskStatusText, err = sort.TaskStatusTmpl(pr, trStatus, console, vcx.GetConfig())
+		taskStatusText, err = sort.TaskStatusTmpl(pr, trStatus, r.run, pacInfo, vcx.GetConfig())
 		if err != nil {
 			return pr, trStatus, err
 		}

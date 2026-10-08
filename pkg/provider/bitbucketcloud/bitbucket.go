@@ -66,6 +66,9 @@ func (v *Provider) SetPacInfo(pacInfo *info.PacOpts) {
 }
 
 const taskStatusTemplate = `{{range $taskrun := .TaskRunList }} | **{{ formatCondition $taskrun.PipelineRunTaskRunStatus.Status.Conditions }}** | {{ $taskrun.ConsoleLogURL }} | *{{ formatDuration $taskrun.PipelineRunTaskRunStatus.Status.StartTime $taskrun.PipelineRunTaskRunStatus.Status.CompletionTime }}* |
+{{- range $step := $taskrun.Steps }}
+ | {{ $step.Status }} | ↳ {{ $step.ConsoleLogURL }} | *{{ $step.Duration }}* |
+{{- end }}
 {{ end }}`
 
 func (v *Provider) Validate(_ context.Context, _ *params.Run, event *info.Event) error {

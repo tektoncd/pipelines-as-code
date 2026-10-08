@@ -157,12 +157,45 @@ custom-console-url-pr-tasklog: "https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ 
 
 {{< /param >}}
 
+{{< param name="custom-console-url-pr-steplog" type="string" id="param-custom-console-url-pr-steplog" >}}
+Defines the template URL for the logs of a single step, used by the step
+breakdown of the status report. The template must start with `http://` or
+`https://`. Supports variables: `{{ namespace }}`,
+`{{ pr }}`, `{{ task }}`, `{{ step }}`. When it is not set the step breakdown
+links to the task logs instead.
+
+```yaml
+custom-console-url-pr-steplog: "https://url/ns/{{ namespace }}/{{ pr }}/logs/{{ task }}/{{ step }}"
+```
+
+{{< /param >}}
+
 {{< param name="custom-console-url-namespace" type="string" id="param-custom-console-url-namespace" >}}
 Defines the template URL for namespace-level views in your custom console.
 Supports the `{{ namespace }}` variable.
 
 ```yaml
 custom-console-url-namespace: "https://url/ns/{{ namespace }}"
+```
+
+{{< /param >}}
+
+### Status Reporting
+
+{{< param name="status-show-steps" type="boolean" default="true" id="param-status-show-steps" >}}
+Controls whether the status reported back to the Git provider lists the steps
+of every task under the task itself. Each step links to its own logs on the
+console, which is useful when a task is built out of several StepActions and
+the task name alone does not say what ran.
+
+Steps that were skipped because an earlier step failed are left out, so a
+failing task shows the step that broke, and tasks that only have one step keep
+showing a single line. On GitHub, GitLab and Gitea the steps are nested in a
+collapsible block; the Bitbucket providers list them as extra rows because their
+comments do not render collapsible blocks.
+
+```yaml
+status-show-steps: "true"
 ```
 
 {{< /param >}}
