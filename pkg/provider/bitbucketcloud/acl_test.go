@@ -1,11 +1,13 @@
 package bitbucketcloud
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	bbcloudtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/test"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -14,6 +16,7 @@ func TestIsAllowed(t *testing.T) {
 		workspaceMembers []types.Member
 		comments         []types.Comment
 		filescontents    map[string]string
+		membersStatus    int
 	}
 	tests := []struct {
 		name    string
@@ -21,7 +24,84 @@ func TestIsAllowed(t *testing.T) {
 		fields  fields
 		want    bool
 		wantErr bool
+		token   string
 	}{
+		{
+			name:  "access token allows sender in default branch OWNERS after forbidden membership request",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Owner"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusForbidden,
+				filescontents: map[string]string{"OWNERS": "approvers:\n  - Owner\n"},
+			},
+			want: true,
+		},
+		{
+			name:  "access token allows sender in OWNERS after unauthorized membership request",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Owner"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusUnauthorized,
+				filescontents: map[string]string{"OWNERS": "approvers:\n  - Owner\n"},
+			},
+			want: true,
+		},
+		{
+			name:  "access token allows sender through default branch OWNERS_ALIASES",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Owner"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusForbidden,
+				filescontents: map[string]string{
+					"OWNERS":         "approvers:\n  - team\n",
+					"OWNERS_ALIASES": "aliases:\n  team:\n    - Owner\n",
+				},
+			},
+			want: true,
+		},
+		{
+			name:  "access token rejects sender added to PR OWNERS_ALIASES",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Outsider"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusForbidden,
+				filescontents: map[string]string{
+					"OWNERS":         "approvers:\n  - team\n",
+					"OWNERS_ALIASES": "aliases:\n  team:\n    - Owner\n",
+				},
+			},
+		},
+		{
+			name:  "access token allows ok-to-test from OWNERS account",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Outsider"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusForbidden,
+				filescontents: map[string]string{"OWNERS": "approvers:\n  - Owner\n"},
+				comments:      []types.Comment{{Content: types.Content{Raw: "/ok-to-test"}, User: types.User{AccountID: "Owner"}}},
+			},
+			want: true,
+		},
+		{
+			name:  "access token propagates workspace server errors",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Owner"}),
+			token: "ATCT-access-token",
+			fields: fields{
+				membersStatus: http.StatusInternalServerError,
+				filescontents: map[string]string{"OWNERS": "approvers:\n  - Owner\n"},
+			},
+			wantErr: true,
+		},
+		{
+			name:  "API token propagates forbidden membership errors",
+			event: bbcloudtest.MakeEvent(&info.Event{AccountID: "Owner"}),
+			token: "ATAT-api-token",
+			fields: fields{
+				membersStatus: http.StatusForbidden,
+				filescontents: map[string]string{"OWNERS": "approvers:\n  - Owner\n"},
+			},
+			wantErr: true,
+		},
 		{
 			name:  "allowed/user is owner",
 			event: bbcloudtest.MakeEvent(&info.Event{Sender: "member", AccountID: "IsaMember"}),
@@ -175,19 +255,29 @@ func TestIsAllowed(t *testing.T) {
 			bbclient, mux, tearDown := bbcloudtest.SetupBBCloudClient(t)
 			defer tearDown()
 
-			bbcloudtest.MuxOrgMember(t, mux, tt.event, tt.fields.workspaceMembers)
+			if tt.fields.membersStatus != 0 {
+				mux.HandleFunc("/workspaces/"+tt.event.Organization+"/members", func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(tt.fields.membersStatus)
+				})
+			} else {
+				bbcloudtest.MuxOrgMember(t, mux, tt.event, tt.fields.workspaceMembers)
+			}
 			bbcloudtest.MuxComments(t, mux, tt.event, tt.fields.comments)
-			bbcloudtest.MuxFiles(t, mux, tt.event, tt.fields.filescontents, "")
+			bbcloudtest.MuxFiles(t, mux, tt.event, tt.fields.filescontents, "default_branch")
+			// A PR's OWNERS file must never authorize its sender or commenters.
+			bbcloudtest.MuxFiles(t, mux, tt.event, map[string]string{
+				"OWNERS":         "approvers:\n  - " + tt.event.AccountID + "\n",
+				"OWNERS_ALIASES": "aliases:\n  team:\n    - " + tt.event.AccountID + "\n",
+			}, "")
 
-			v := &Provider{bbClient: bbclient}
+			v := &Provider{bbClient: bbclient, Token: &tt.token}
 			got, err := v.IsAllowed(ctx, tt.event)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Provider.IsAllowed() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			if tt.wantErr {
+				assert.Assert(t, err != nil)
+			} else {
+				assert.NilError(t, err)
 			}
-			if got != tt.want {
-				t.Errorf("Provider.IsAllowed() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, got, tt.want)
 		})
 	}
 }

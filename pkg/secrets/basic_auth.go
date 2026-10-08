@@ -46,6 +46,9 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 	}
 	if strings.EqualFold(repoURL.Hostname(), "bitbucket.org") {
 		gitUser = bitbucketCloudGitUsername
+		if strings.HasPrefix(runevent.Provider.Token, "ATCT") {
+			gitUser = "x-token-auth"
+		}
 	}
 
 	// Bitbucket Data Center token have / into it, so unless we quote the URL them it's

@@ -24,6 +24,10 @@ import (
 
 var _ provider.Interface = (*Provider)(nil)
 
+// accessTokenPrefix identifies Bitbucket Cloud repository access tokens:
+// https://community.atlassian.com/forums/discussion/3093481/can-we-confirm-bitbuckets-token-prefixes
+const accessTokenPrefix = "ATCT"
+
 type Provider struct {
 	bbClient      *bitbucket.Client
 	Logger        *zap.SugaredLogger
@@ -259,7 +263,13 @@ func (v *Provider) SetClient(_ context.Context, run *params.Run, event *info.Eve
 	if event.Provider.User == "" {
 		return fmt.Errorf("no git_provider.user has been in repo crd")
 	}
-	bbClient, err := bitbucket.NewBasicAuth(event.Provider.User, event.Provider.Token)
+	var bbClient *bitbucket.Client
+	var err error
+	if strings.HasPrefix(event.Provider.Token, accessTokenPrefix) {
+		bbClient, err = bitbucket.NewOAuthbearerToken(event.Provider.Token)
+	} else {
+		bbClient, err = bitbucket.NewBasicAuth(event.Provider.User, event.Provider.Token)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create bitbucket client: %w", err)
 	}

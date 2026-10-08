@@ -8,7 +8,7 @@ This page covers how to configure Pipelines-as-Code with Bitbucket Cloud through
 ## Prerequisites
 
 - A running Pipelines-as-Code [installation]({{< relref "/docs/installation/installation" >}})
-- A Bitbucket Cloud scoped API token (see below)
+- A Bitbucket Cloud scoped API token or repository access token (see below)
 - The public URL of your Pipelines-as-Code controller route or ingress endpoint
 
 ## Create a Bitbucket Cloud API token
@@ -36,6 +36,31 @@ requests in E2E tests.
 {{< /callout >}}
 
 Store the generated token in a safe place. Bitbucket Cloud shows it only once.
+
+### Repository access tokens
+
+You can use a [repository access token](https://support.atlassian.com/bitbucket-cloud/docs/create-a-repository-access-token/) instead of a personal API token. .
+
+Grant these permissions when you create the token:
+
+- **Repository: Read**
+- **Pull requests: Read**
+- **Repository: Write**
+- **Webhooks: Write**
+
+{{< callout type="warning" >}}
+A repository access token cannot list workspace members, so workspace
+membership does not let a pull request author run PipelineRuns. Add the author's
+Bitbucket account ID to the `OWNERS` or `OWNERS_ALIASES` file on the default
+branch, or ask someone listed there to comment `/ok-to-test` on the pull
+request.
+{{< /callout >}}
+
+{{< callout type="info" >}}
+The Repository CR still requires `git_provider.user` when you use a repository
+access token. Pipelines-as-Code only writes the value to its logs and never
+sends it to Bitbucket.
+{{< /callout >}}
 
 ## Webhook Configuration using the CLI
 
@@ -139,12 +164,14 @@ Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with th
         # key: "webhook.secret"
 ```
 
-You must use your Bitbucket/Atlassian account email address in the `user` field
-of the Repository CR. Pipelines-as-Code uses this value with the API token for
-Bitbucket Cloud API authentication. To find your email address, click on your
-profile icon at the top-left corner in the Bitbucket Cloud UI (see image
-below), go to **Account Settings**, and scroll down to locate your email
-address.
+The Repository CR requires the `user` field. With an API token, set it to your
+Bitbucket/Atlassian account email address, which Pipelines-as-Code sends with
+the token for basic auth. With a repository access token (`ATCT` prefix), the
+value only appears in logs.
+
+To find your email address, click on your profile icon at the top-left corner
+in the Bitbucket Cloud UI (see image below), go to **Account Settings**, and
+scroll down to locate your email address.
 ![Bitbucket Cloud Account Settings](/images/bitbucket-cloud-account-settings.png)
 
 ## Notes
