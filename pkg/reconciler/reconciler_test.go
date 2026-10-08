@@ -42,7 +42,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stesting "k8s.io/client-go/testing"
 	knativeapi "knative.dev/pkg/apis"
 	knativeduckv1 "knative.dev/pkg/apis/duck/v1"
@@ -597,9 +596,8 @@ func TestReconcileKindControllerInfoHandling(t *testing.T) {
 			logger := zap.New(observer).Sugar()
 			controller := &info.ControllerInfo{Name: "default", Secret: "default-secret", GlobalRepository: "default-global"}
 			annotations := map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
 			}
 			if tt.annotation != "" {
 				annotations[keys.ControllerInfo] = tt.annotation
@@ -671,10 +669,9 @@ func TestReconcileKindReturnsErrorWhenDetectProviderFailsTransiently(t *testing.
 			Name:      "test-pr",
 			Namespace: "test-ns",
 			Annotations: map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
-				keys.GitProvider:   "github",
+				keys.State:       kubeinteraction.StateStarted,
+				keys.Repository:  "test-repo",
+				keys.GitProvider: "github",
 				// A non-zero InstallationID routes detectProvider through
 				// InitAppClient, which fails here because no GitHub App
 				// private key secret was seeded -- a stand-in for any
@@ -755,18 +752,16 @@ func TestReconcileKindAbandonsDoneRunWhenProviderNotConfigured(t *testing.T) {
 		{
 			name: "missing git-provider annotation",
 			annotations: map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
 			},
 		},
 		{
 			name: "unknown git-provider annotation",
 			annotations: map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
-				keys.GitProvider:   "batman",
+				keys.State:       kubeinteraction.StateStarted,
+				keys.Repository:  "test-repo",
+				keys.GitProvider: "batman",
 			},
 		},
 	}
@@ -884,9 +879,8 @@ func TestReconcileKindAbandonsDoneRunReleasesQueueEvenWhenStatePatchFails(t *tes
 			Name:      "test-pr",
 			Namespace: "test-ns",
 			Annotations: map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
+				keys.State:      kubeinteraction.StateStarted,
+				keys.Repository: "test-repo",
 				// keys.GitProvider deliberately absent: detectProvider fails
 				// permanently.
 			},
@@ -994,9 +988,8 @@ func TestReconcileKindDeletedRepositoryWithDoneRun(t *testing.T) {
 					Name:      "test-pr",
 					Namespace: "test-ns",
 					Annotations: map[string]string{
-						keys.State:         tt.state,
-						keys.Repository:    "deleted-repo",
-						keys.SecretCreated: "true",
+						keys.State:      tt.state,
+						keys.Repository: "deleted-repo",
 					},
 				},
 			}
@@ -1056,10 +1049,9 @@ func TestReconcileKindRetriesUnconfirmedStartOfRunningPipelineRun(t *testing.T) 
 			Name:      "test-pr",
 			Namespace: "test-ns",
 			Annotations: map[string]string{
-				keys.State:         kubeinteraction.StateQueued,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "true",
-				keys.GitProvider:   "github",
+				keys.State:       kubeinteraction.StateQueued,
+				keys.Repository:  "test-repo",
+				keys.GitProvider: "github",
 			},
 		},
 		// Tekton already started it, so it is no longer pending before the
@@ -1149,10 +1141,9 @@ func TestReconcileKindDropsUnstartableRunningPipelineRun(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pr", Namespace: "test-ns",
 					Annotations: map[string]string{
-						keys.State:         kubeinteraction.StateStarted,
-						keys.Repository:    "test-repo",
-						keys.SecretCreated: "true",
-						keys.GitProvider:   "github",
+						keys.State:       kubeinteraction.StateStarted,
+						keys.Repository:  "test-repo",
+						keys.GitProvider: "github",
 					},
 				},
 				Spec: tektonv1.PipelineRunSpec{Status: tt.status},
@@ -1230,7 +1221,6 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 						keys.SHA:           "123afc",
 						keys.URLOrg:        "random",
 						keys.URLRepository: "app",
-						keys.SecretCreated: "true",
 					},
 				},
 				Spec: tektonv1.PipelineRunSpec{},
@@ -1263,7 +1253,6 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 						keys.SHA:                    "123afc",
 						keys.URLOrg:                 "random",
 						keys.URLRepository:          "app",
-						keys.SecretCreated:          "true",
 					},
 				},
 				Spec: tektonv1.PipelineRunSpec{},
@@ -1295,7 +1284,6 @@ func TestReconcileKindSCMReportingLogic(t *testing.T) {
 						keys.SHA:           "123afc",
 						keys.URLOrg:        "random",
 						keys.URLRepository: "app",
-						keys.SecretCreated: "true",
 					},
 				},
 				Spec: tektonv1.PipelineRunSpec{
@@ -1544,109 +1532,6 @@ func TestReconcileKindEarlyBranches(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
-		})
-	}
-}
-
-func TestReconcileKindSecretCreationBranches(t *testing.T) {
-	tests := []struct {
-		name              string
-		annotations       map[string]string
-		getSecretResult   map[string]string
-		createSecretError error
-		wantErrSub        string
-		wantLogSub        string
-	}{
-		{
-			name: "basic auth secret creation error is returned",
-			annotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			getSecretResult: map[string]string{
-				"provider-secret": "test-token",
-			},
-			createSecretError: fmt.Errorf("connection timeout"),
-			wantErrSub:        "creating basic auth secret",
-		},
-		{
-			name:        "non basic auth secret error is logged and ignored",
-			annotations: map[string]string{},
-			wantLogSub:  "failed to create secret for pipelineRun test-ns/test-pr",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, _ := rtesting.SetupFakeContext(t)
-			observer, log := zapobserver.New(zap.ErrorLevel)
-			logger := zap.New(observer).Sugar()
-			ctx = logging.WithLogger(ctx, logger)
-
-			annotations := map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "false",
-				keys.GitProvider:   "github",
-				keys.RepoURL:       "https://github.com/org/repo",
-				keys.URLOrg:        "org",
-				keys.URLRepository: "repo",
-				keys.SHA:           "abc123",
-			}
-			maps.Copy(annotations, tt.annotations)
-			pr := &tektonv1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "test-pr",
-					Namespace:   "test-ns",
-					Annotations: annotations,
-				},
-			}
-			repo := &v1alpha1.Repository{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"},
-				Spec: v1alpha1.RepositorySpec{
-					GitProvider: &v1alpha1.GitProvider{
-						Secret: &v1alpha1.Secret{Name: "provider-secret"},
-					},
-				},
-			}
-			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
-				PipelineRuns: []*tektonv1.PipelineRun{pr},
-				Repositories: []*v1alpha1.Repository{repo},
-				ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
-			})
-
-			r := &Reconciler{
-				repoLister: informers.Repository.Lister(),
-				qm:         testconcurrency.TestQMI{},
-				run: &params.Run{
-					Clients: clients.Clients{
-						Tekton: stdata.Pipeline,
-						Kube:   stdata.Kube,
-						Log:    logger,
-					},
-					Info: info.Info{
-						Pac: &info.PacOpts{
-							Settings: settings.Settings{SecretAutoCreation: true},
-						},
-						Kube:       &info.KubeOpts{Namespace: "global"},
-						Controller: &info.ControllerInfo{GlobalRepository: "global-repo"},
-					},
-				},
-				kinteract: &testkubernetestint.KinterfaceTest{
-					GetSecretResult:   tt.getSecretResult,
-					CreateSecretError: tt.createSecretError,
-				},
-				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
-			}
-
-			err := r.ReconcileKind(ctx, pr)
-			if tt.wantErrSub != "" {
-				assert.ErrorContains(t, err, tt.wantErrSub)
-				return
-			}
-			assert.NilError(t, err)
-			if tt.wantLogSub != "" {
-				assert.Equal(t, log.FilterMessageSnippet(tt.wantLogSub).Len(), 1)
-			}
 		})
 	}
 }
@@ -2248,281 +2133,6 @@ func reportFinalStatusTestRepository(repoSettings *v1alpha1.Settings) *v1alpha1.
 			},
 		},
 	}
-}
-
-func TestCreateSecretForPipelineRun(t *testing.T) {
-	// Base annotations required by initGitProviderClient (detectProvider + buildEventFromPipelineRun)
-	baseAnnotations := map[string]string{
-		keys.GitProvider:   "github",
-		keys.RepoURL:       "https://github.com/org/repo",
-		keys.URLOrg:        "org",
-		keys.URLRepository: "repo",
-		keys.SHA:           "abc123",
-	}
-
-	providerSecretName := "pac-git-basic-auth-owner-repo"
-
-	tests := []struct {
-		name              string
-		prAnnotations     map[string]string
-		repoUser          string
-		createSecretError error
-		updateSecretError error
-		simulatePatchErr  bool
-		wantErr           string
-		wantLogSnippet    string
-		verifyPatched     bool
-	}{
-		{
-			name:          "missing git-auth-secret annotation",
-			prAnnotations: map[string]string{},
-			wantErr:       "cannot get annotation",
-		},
-		{
-			name: "MakeBasicAuthSecret failure with malformed URL",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-				keys.RepoURL:       "http://[invalid",
-			},
-			wantErr: "making basic auth secret",
-		},
-		{
-			name: "CreateSecret generic failure",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			createSecretError: fmt.Errorf("connection timeout"),
-			wantErr:           "creating basic auth secret",
-		},
-		{
-			name: "CreateSecret AlreadyExists succeeds with warning",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			createSecretError: errors.NewAlreadyExists(schema.GroupResource{Group: "", Resource: "secrets"}, "test-secret"),
-			wantLogSnippet:    "already exists",
-			verifyPatched:     true,
-		},
-		{
-			name: "UpdateSecretWithOwnerRef failure",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			updateSecretError: fmt.Errorf("failed to update owner ref"),
-			wantErr:           "cannot update secret",
-		},
-		{
-			name: "PatchPipelineRun failure returns error",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			simulatePatchErr: true,
-			wantErr:          "failed to patch pipelinerun",
-		},
-		{
-			name: "happy path with default git user",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			verifyPatched: true,
-		},
-		{
-			name: "happy path with custom git user",
-			prAnnotations: map[string]string{
-				keys.GitAuthSecret: "test-secret",
-			},
-			repoUser:      "custom-user",
-			verifyPatched: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, _ := rtesting.SetupFakeContext(t)
-			observer, log := zapobserver.New(zap.InfoLevel)
-			logger := zap.New(observer).Sugar()
-
-			// Merge base annotations with test-specific annotations (test-specific overrides base)
-			annotations := maps.Clone(baseAnnotations)
-			maps.Copy(annotations, tt.prAnnotations)
-
-			pr := &tektonv1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "test-pr",
-					Namespace:   "test-ns",
-					Annotations: annotations,
-				},
-			}
-
-			repo := &v1alpha1.Repository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-repo",
-					Namespace: "test-ns",
-				},
-				Spec: v1alpha1.RepositorySpec{
-					GitProvider: &v1alpha1.GitProvider{
-						Secret: &v1alpha1.Secret{
-							Name: providerSecretName,
-						},
-						User: tt.repoUser,
-					},
-				},
-			}
-
-			testData := testclient.Data{
-				PipelineRuns: []*tektonv1.PipelineRun{pr},
-				Repositories: []*v1alpha1.Repository{repo},
-				ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
-			}
-			stdata, informers := testclient.SeedTestData(t, ctx, testData)
-			ctx = info.StoreNS(ctx, system.Namespace())
-
-			if tt.simulatePatchErr {
-				stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-					return true, nil, fmt.Errorf("etcd unavailable")
-				})
-			}
-
-			kint := &testkubernetestint.KinterfaceTest{
-				GetSecretResult: map[string]string{
-					providerSecretName: "test-token",
-				},
-				CreateSecretError: tt.createSecretError,
-				UpdateSecretError: tt.updateSecretError,
-			}
-
-			r := &Reconciler{
-				run: &params.Run{
-					Clients: clients.Clients{
-						Tekton: stdata.Pipeline,
-						Kube:   stdata.Kube,
-						Log:    logger,
-					},
-					Info: info.Info{
-						Pac: &info.PacOpts{
-							Settings: settings.Settings{},
-						},
-						Kube: &info.KubeOpts{
-							Namespace: "global",
-						},
-						Controller: &info.ControllerInfo{
-							GlobalRepository: "global-repo",
-						},
-					},
-				},
-				repoLister:   informers.Repository.Lister(),
-				kinteract:    kint,
-				eventEmitter: events.NewEventEmitter(stdata.Kube, logger),
-			}
-
-			err := r.createSecretForPipelineRun(ctx, logger, pr, repo)
-
-			if tt.wantErr != "" {
-				assert.Assert(t, err != nil, "expected error containing: %s", tt.wantErr)
-				assert.ErrorContains(t, err, tt.wantErr)
-				return
-			}
-			assert.NilError(t, err)
-
-			if tt.wantLogSnippet != "" {
-				logEntries := log.FilterMessageSnippet(tt.wantLogSnippet).TakeAll()
-				assert.Assert(t, len(logEntries) > 0, "expected log snippet %q not found", tt.wantLogSnippet)
-			}
-
-			if tt.verifyPatched {
-				updatedPR, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
-				assert.NilError(t, getErr)
-				assert.Equal(t, updatedPR.Annotations[keys.SecretCreated], "true")
-			}
-		})
-	}
-}
-
-func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
-	observer, log := zapobserver.New(zap.ErrorLevel)
-	logger := zap.New(observer).Sugar()
-
-	ctx, _ := rtesting.SetupFakeContext(t)
-
-	pr := &tektonv1.PipelineRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "test-ns",
-			Name:      "test-pr",
-			Annotations: map[string]string{
-				keys.State:         kubeinteraction.StateStarted,
-				keys.Repository:    "test-repo",
-				keys.SecretCreated: "false",
-				keys.GitAuthSecret: "pac-git-basic-auth-owner-repo",
-				keys.GitProvider:   "github",
-				keys.RepoURL:       "https://github.com/org/repo",
-				keys.URLOrg:        "org",
-				keys.URLRepository: "repo",
-				keys.SHA:           "abc123",
-			},
-		},
-	}
-
-	repo := &v1alpha1.Repository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-repo",
-			Namespace: "test-ns",
-		},
-		Spec: v1alpha1.RepositorySpec{
-			GitProvider: &v1alpha1.GitProvider{
-				Secret: &v1alpha1.Secret{
-					Name: "pac-provider-secret",
-				},
-				User: "test-user",
-			},
-		},
-	}
-
-	testData := testclient.Data{
-		PipelineRuns: []*tektonv1.PipelineRun{pr},
-		Repositories: []*v1alpha1.Repository{repo},
-		ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
-	}
-	stdata, informers := testclient.SeedTestData(t, ctx, testData)
-	ctx = info.StoreNS(ctx, system.Namespace())
-
-	r := &Reconciler{
-		repoLister: informers.Repository.Lister(),
-		run: &params.Run{
-			Clients: clients.Clients{
-				Tekton: stdata.Pipeline,
-				Kube:   stdata.Kube,
-				Log:    logger,
-			},
-			Info: info.Info{
-				Pac: &info.PacOpts{
-					Settings: settings.Settings{
-						SecretAutoCreation: true,
-					},
-				},
-				Kube: &info.KubeOpts{
-					Namespace: "global",
-				},
-				Controller: &info.ControllerInfo{
-					GlobalRepository: "global-repo",
-				},
-			},
-		},
-		kinteract: &testkubernetestint.KinterfaceTest{
-			GetSecretResult: map[string]string{
-				"pac-provider-secret": "test-token",
-			},
-		},
-		qm: queuepkg.NewManager(logger),
-	}
-
-	err := r.ReconcileKind(ctx, pr)
-	assert.NilError(t, err)
-
-	updatedPR, getErr := stdata.Pipeline.TektonV1().PipelineRuns(pr.Namespace).Get(ctx, pr.Name, metav1.GetOptions{})
-	assert.NilError(t, getErr)
-	assert.Equal(t, updatedPR.Annotations[keys.SecretCreated], "true")
-
-	logEntries := log.FilterMessageSnippet("failed to create secret for pipelineRun").TakeAll()
-	assert.Equal(t, len(logEntries), 0)
 }
 
 // defaultPolicyConfigMap is a controller ConfigMap with no configured allowlist,

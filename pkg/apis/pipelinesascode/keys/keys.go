@@ -62,7 +62,6 @@ const (
 	LogURL                 = pipelinesascode.GroupName + "/log-url"
 	ExecutionOrder         = pipelinesascode.GroupName + "/execution-order"
 	SCMReportingPLRStarted = pipelinesascode.GroupName + "/scm-reporting-plr-started"
-	SecretCreated          = pipelinesascode.GroupName + "/secret-created"
 	CloneURL               = pipelinesascode.GroupName + "/clone-url"
 	// AutoTrustedProviderHostnames annotates the controller ConfigMap with the
 	// hostnames the controller learnt on its own, so that it can tell them apart

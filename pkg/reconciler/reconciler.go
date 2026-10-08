@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"strings"
 
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	pipelinerunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/pipelinerun"
@@ -205,19 +204,6 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 		return nil
 	}
 
-	if secretCreated, ok := pr.GetAnnotations()[keys.SecretCreated]; ok && secretCreated == "false" && pacInfo.SecretAutoCreation {
-		// if secret creation is true then return anyway from createSecretForPipelineRun function
-		// because it patches the PipelineRun with the secretCreated annotation so after the
-		// patch success we will get another reconciliation call for the same pipelineRun.
-		// Note: only return error if the error is not related to secret creation otherwise we would interrupt other operations.
-		err := r.createSecretForPipelineRun(ctx, logger, pr, repo)
-		if err != nil && strings.Contains(err.Error(), "creating basic auth secret") {
-			return fmt.Errorf("failed to create secret for pipelineRun %s/%s: %w", pr.GetNamespace(), pr.GetName(), err)
-		} else if err != nil {
-			logger.Errorf("failed to create secret for pipelineRun %s/%s: %v", pr.GetNamespace(), pr.GetName(), err)
-		}
-	}
-
 	reason := ""
 	if len(pr.Status.GetConditions()) > 0 {
 		reason = pr.Status.GetConditions()[0].GetReason()
@@ -344,67 +330,6 @@ func (r *Reconciler) abandonDoneWithoutProvider(ctx context.Context, logger *zap
 		return fmt.Errorf("abandon pipelinerun without provider %s/%s (cause: %w): cannot update state: %w", pr.Namespace, pr.Name, cause, err)
 	}
 	r.qm.ForgetAdmission(queuepkg.RepoKey(repo), pr)
-	return nil
-}
-
-func (r *Reconciler) createSecretForPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun, repo *v1alpha1.Repository) error {
-	var gitAuthSecretName string
-	// as GitAuthSecret annotation is added to the PipelineRun in getPipelineRunsFromRepo function
-	// we expect the name here otherwise error out
-	if annotation, ok := pr.GetAnnotations()[keys.GitAuthSecret]; ok {
-		gitAuthSecretName = annotation
-		logger.Debugf("using git auth secret from annotation=%s for pipelineRun %s/%s", gitAuthSecretName, pr.GetNamespace(), pr.GetName())
-	} else {
-		return fmt.Errorf("cannot get annotation %s as set on pipelineRun %s/%s", keys.GitAuthSecret, pr.GetNamespace(), pr.GetName())
-	}
-
-	// here we don't need provider but we need to call initGitProviderClient because we need event
-	// built with user and token so secret can be built upon user and token
-	_, event, err := r.initGitProviderClient(ctx, logger, repo, pr)
-	if err != nil {
-		return fmt.Errorf("cannot initialize git provider client: %w", err)
-	}
-
-	authSecret, err := secrets.MakeBasicAuthSecret(event, gitAuthSecretName)
-	if err != nil {
-		return fmt.Errorf("making basic auth secret: %s has failed: %w ", gitAuthSecretName, err)
-	}
-
-	if err = r.kinteract.CreateSecret(ctx, repo.GetNamespace(), authSecret); err != nil {
-		// NOTE: Handle AlreadyExists errors due to etcd/API server timing issues.
-		// Investigation found: slow etcd response causes API server retry, resulting in
-		// duplicate secret creation attempts for the same PR. This is a workaround, not
-		// designed behavior - reuse existing secret to prevent PipelineRun failure.
-		if errors.IsAlreadyExists(err) {
-			msg := fmt.Sprintf("Secret %s already exists in namespace %s, reusing existing secret",
-				authSecret.GetName(), repo.GetNamespace())
-			r.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositorySecretReused", msg)
-		} else {
-			return fmt.Errorf("creating basic auth secret: %s has failed: %w ", authSecret.GetName(), err)
-		}
-	} else {
-		logger.Debugf("created git auth secret %s in namespace %s for pipelineRun %s/%s", authSecret.GetName(), pr.GetNamespace(), pr.GetName())
-	}
-
-	if err = r.kinteract.UpdateSecretWithOwnerRef(ctx, logger, pr.Namespace, gitAuthSecretName, pr); err != nil {
-		return fmt.Errorf("cannot update secret %s with ownerRef to pipelinerun %s: %w", gitAuthSecretName, pr.GetName(), err)
-	}
-	logger.Debugf("updated secret ownerRef for pipelinerun=%s secret=%s", pr.GetName(), gitAuthSecretName)
-
-	patchAnnotations := map[string]any{
-		"metadata": map[string]any{
-			"annotations": map[string]string{
-				keys.SecretCreated: "true",
-			},
-		},
-	}
-
-	_, err = action.PatchPipelineRun(ctx, logger, "patching annotations.secretCreated", r.run.Clients.Tekton, pr, patchAnnotations)
-	if err != nil {
-		return fmt.Errorf("failed to patch pipelinerun %s annotations.secretCreated: %w", pr.GetName(), err)
-	}
-
-	logger.Debugf("patched annotations.secretCreated for pipelinerun=%s", pr.GetName())
 	return nil
 }
 

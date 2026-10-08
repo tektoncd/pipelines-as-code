@@ -62,7 +62,7 @@ func newQueueRecoveryFixture(t *testing.T, limit int, initial bool) *queueRecove
 				Name: name, Namespace: "ns", UID: types.UID(name), ResourceVersion: "1",
 				Annotations: map[string]string{
 					keys.Repository: "repo", keys.State: kubeinteraction.StateQueued,
-					keys.ExecutionOrder: "ns/first,ns/second,ns/third", keys.SecretCreated: "true",
+					keys.ExecutionOrder: "ns/first,ns/second,ns/third",
 				},
 			},
 			Spec: tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusPending},
