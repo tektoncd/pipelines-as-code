@@ -116,3 +116,34 @@ Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with th
 - You can only reference a user by the `ACCOUNT_ID` in the owner file.
 
 {{< /callout >}}
+
+## PipelineRuns as Required Builds
+
+Pipelines-as-Code reports each PipelineRun with a build status to Bitbucket Data
+Center. To use a PipelineRun as a required build for pull request merge checks,
+add the following annotation to it:
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    pipelinesascode.tekton.dev/bitbucket-required-build-parent: pr-validation-build
+```
+
+The annotation sets the parent build under which Bitbucket groups the
+PipelineRun status. You can use any parent build name, including names with
+spaces and special characters. This guide uses `pr-validation-build` as an
+example.
+
+To add the PipelineRun as a new required build merge check for pull requests
+in a repository, you need repository administrator permissions:
+
+- Go to Repository settings > Required builds.
+- Select Add required builds.
+- On the Add required builds page, enter `pr-validation-build` and select the
+  PipelineRun build reported by Pipelines-as-Code.
+- Select Save.
+
+For more details, see the [Bitbucket Data Center documentation on checks for
+merging pull requests](https://confluence.atlassian.com/bitbucketserver/checks-for-merging-pull-requests-776640039.html).

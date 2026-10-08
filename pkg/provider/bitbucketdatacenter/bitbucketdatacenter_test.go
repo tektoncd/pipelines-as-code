@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
@@ -24,7 +25,9 @@ import (
 	bbtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
 	bbtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.opentelemetry.io/otel"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/jenkins-x/go-scm/scm"
 	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
@@ -133,6 +136,23 @@ func TestCreateStatus(t *testing.T) {
 			status: status.StatusOpts{
 				Conclusion: "skipped",
 				Text:       "Skipping",
+			},
+
+			pacOpts: pacopts,
+		},
+		{
+			name: "good/required build parent annotation",
+			status: status.StatusOpts{
+				PipelineRun: &tektonv1.PipelineRun{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							keys.BitbucketRequiredBuildParent: "parentuid",
+							keys.BitbucketProjectKey:          "~joe",
+						},
+					},
+				},
+				Conclusion: "success",
+				Text:       "validated",
 			},
 
 			pacOpts: pacopts,
