@@ -62,7 +62,8 @@ type Event struct {
 
 	// HasSkipCommand indicates whether the commit message contains a skip CI command
 	// (e.g., [skip ci], [ci skip], [skip tkn], [tkn skip]). When true, PipelineRun
-	// execution will be skipped unless overridden by a GitOps command (e.g., /test, /retest).
+	// execution will be skipped unless overridden by a GitOps command (e.g., /test, /retest)
+	// or the event came from an incoming webhook, since both are explicit user-triggered runs.
 	// This allows users to bypass CI for documentation changes or minor fixes while still
 	// maintaining the ability to manually trigger builds when needed.
 	HasSkipCommand bool

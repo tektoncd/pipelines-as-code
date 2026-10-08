@@ -58,7 +58,7 @@ func replyString(mux *http.ServeMux, url, body string) {
 	})
 }
 
-func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool) {
+func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Event, finalStatus, finalStatusText string, noReplyOrgPublicMembers bool, commitMessage string) {
 	t.Helper()
 	// Take a directory and generate replies as Github for it
 	replyString(mux,
@@ -72,11 +72,19 @@ func testSetupCommonGhReplies(t *testing.T, mux *http.ServeMux, runevent info.Ev
 		fmt.Sprintf("/repos/%s/%s/statuses/%s", runevent.Organization, runevent.Repository, runevent.SHA),
 		"{}")
 
-	jj := fmt.Sprintf(`{"sha": "%s", "html_url": "https://git.commit.url/%s", "message": "commit message"}`,
-		runevent.SHA, runevent.SHA)
+	commitMsg := "commit message"
+	if commitMessage != "" {
+		commitMsg = commitMessage
+	}
+	commitJSON, err := json.Marshal(map[string]string{
+		"sha":      runevent.SHA,
+		"html_url": "https://git.commit.url/" + runevent.SHA,
+		"message":  commitMsg,
+	})
+	assert.NilError(t, err)
 	replyString(mux,
 		fmt.Sprintf("/repos/%s/%s/git/commits/%s", runevent.Organization, runevent.Repository, runevent.SHA),
-		jj)
+		string(commitJSON))
 
 	if !noReplyOrgPublicMembers {
 		mux.HandleFunc("/orgs/"+runevent.Organization+"/members", func(rw http.ResponseWriter, _ *http.Request) {
@@ -137,6 +145,7 @@ func TestRun(t *testing.T) {
 		PayloadEncodedSecret         string
 		concurrencyLimit             int
 		expectedLogSnippet           string
+		commitMessage                string
 		expectedPostedComment        string // TODO: multiple posted comments when we need it
 		secretCreationError          error  // Error to inject for secret creation
 	}{
@@ -356,6 +365,27 @@ func TestRun(t *testing.T) {
 			},
 			tektondir:   "testdata/push_branch",
 			finalStatus: "neutral",
+		},
+		{
+			// Incoming webhooks are explicit user-triggered runs, so a skip-CI
+			// marker in the head commit message must not suppress them.
+			name: "Incoming/skip-ci-marker-is-ignored",
+			runevent: info.Event{
+				SHA:           "resolvedsha123",
+				Organization:  "organizationes",
+				Repository:    "lagaffe",
+				URL:           "https://service/documentation",
+				Sender:        "incoming",
+				HeadBranch:    "refs/heads/main",
+				BaseBranch:    "refs/heads/main",
+				DefaultBranch: "main",
+				EventType:     triggertype.Incoming.String(),
+				TriggerTarget: "push",
+			},
+			tektondir:          "testdata/push_branch",
+			commitMessage:      "fix: update docs [skip ci]",
+			finalStatus:        "neutral",
+			expectedLogSnippet: "has been created",
 		},
 		{
 			name: "Push/tags",
@@ -611,7 +641,7 @@ func TestRun(t *testing.T) {
 				},
 			}
 
-			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.skipReplyingOrgPublicMembers)
+			testSetupCommonGhReplies(t, mux, tt.runevent, tt.finalStatus, tt.finalStatusText, tt.skipReplyingOrgPublicMembers, tt.commitMessage)
 			if tt.tektondir != "" {
 				ghtesthelper.SetupGitTree(t, mux, tt.tektondir, &tt.runevent, false)
 			}
@@ -738,6 +768,8 @@ func TestRun(t *testing.T) {
 					logURL, ok := pr.Annotations[path.Join(apipac.GroupName, "log-url")]
 					assert.Assert(t, ok, "failed to find log-url label on pipelinerun: %s/%s", pr.GetNamespace(), pr.GetGenerateName())
 					assert.Equal(t, logURL, cs.Clients.ConsoleUI().DetailURL(&pr))
+					assert.Equal(t, pr.Labels[keys.SHA], tt.runevent.SHA, "sha label mismatch on pipelinerun %s", pr.GetName())
+					assert.Equal(t, provider.SkipCI(tt.commitMessage), tt.runevent.HasSkipCommand, "HasSkipCommand mismatch for commit message %q", tt.commitMessage)
 
 					if pacInfo.SecretAutoCreation {
 						secretName, ok := pr.GetAnnotations()[keys.GitAuthSecret]
