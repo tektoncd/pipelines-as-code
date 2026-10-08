@@ -1115,7 +1115,7 @@ spec:
       serviceAccountName: pipelines-as-code-controller
       containers:
         - name: pac-controller
-          image: "ghcr.io/openshift-pipelines/pipelines-as-code-controller:v0.27.x"
+          image: "ghcr.io/openshift-pipelines/pipelines-as-code-controller:v0.27.3"
           imagePullPolicy: Always
           ports:
             - name: api
@@ -1264,7 +1264,7 @@ spec:
       serviceAccountName: pipelines-as-code-watcher
       containers:
         - name: pac-watcher
-          image: "ghcr.io/openshift-pipelines/pipelines-as-code-watcher:v0.27.x"
+          image: "ghcr.io/openshift-pipelines/pipelines-as-code-watcher:v0.27.3"
           imagePullPolicy: Always
           env:
           - name: CONFIG_LOGGING_NAME
@@ -1385,7 +1385,7 @@ spec:
       serviceAccountName: pipelines-as-code-webhook
       containers:
         - name: pac-webhook
-          image: "ghcr.io/openshift-pipelines/pipelines-as-code-webhook:v0.27.x"
+          image: "ghcr.io/openshift-pipelines/pipelines-as-code-webhook:v0.27.3"
           env:
             - name: CONFIG_LOGGING_NAME
               value: pac-config-logging
