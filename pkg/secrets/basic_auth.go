@@ -78,8 +78,8 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 
 	labels := map[string]string{
 		"app.kubernetes.io/managed-by": pipelinesascode.GroupName,
-		keys.URLOrg:                    formatting.CleanValueKubernetes(runevent.Organization),
-		keys.URLRepository:             formatting.CleanValueKubernetes(runevent.Repository),
+		keys.URLOrg:                    labelValue(runevent.Organization),
+		keys.URLRepository:             labelValue(runevent.Repository),
 	}
 
 	return &corev1.Secret{
@@ -100,4 +100,10 @@ func GenerateBasicAuthSecretName() string {
 	return strings.ToLower(
 		fmt.Sprintf(basicAuthSecretName, random.AlphaString(ranStringSeedLen)),
 	)
+}
+
+// labelValue lowercases label values the same way the secret name is
+// lowercased, so a secret has a single consistent identity.
+func labelValue(s string) string {
+	return strings.ToLower(formatting.CleanValueKubernetes(s))
 }

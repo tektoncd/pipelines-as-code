@@ -21,9 +21,6 @@ func Duration(t1, t2 *metav1.Time) string {
 }
 
 func PRDuration(startTime, completionTime *metav1.Time) string {
-	if startTime == nil || completionTime == nil {
-		return nonAttributedStr
-	}
 	return Duration(startTime, completionTime)
 }
 

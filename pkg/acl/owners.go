@@ -2,6 +2,9 @@ package acl
 
 import (
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	"sigs.k8s.io/yaml"
 )
@@ -53,7 +56,8 @@ func UserInOwnerFile(ownersContent, ownersAliasesContent, sender string) (bool, 
 	}
 	owners := expandAliases(append(approvers, reviewers...), ac.Aliases)
 	for _, owner := range owners {
-		if owner == sender {
+		// entries may carry trailing annotations, e.g. "alice # team lead"
+		if strings.HasPrefix(strings.TrimSpace(owner), sender) {
 			return true, nil
 		}
 	}
@@ -76,9 +80,5 @@ func expandAliases(owners []string, aliases aliases) []string {
 			}
 		}
 	}
-	expanded := make([]string, 0, len(dedups))
-	for o := range dedups {
-		expanded = append(expanded, o)
-	}
-	return expanded
+	return slices.Collect(maps.Keys(dedups))
 }
