@@ -2525,6 +2525,104 @@ func TestReconcileKindSecretCreationDoesNotLogOnSuccess(t *testing.T) {
 	assert.Equal(t, len(logEntries), 0)
 }
 
+// A reconcile that hits the git-auth AlreadyExists path must log and emit
+// against its own PipelineRun, even when the shared emitter still carries
+// another reconcile's logger.
+func TestSecretReuseLogAttribution(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, logCatcher := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+	ctx = logging.WithLogger(ctx, logger)
+	ctx = info.StoreNS(ctx, system.Namespace())
+
+	otherObserver, otherLogs := zapobserver.New(zap.InfoLevel)
+	otherLogger := zap.New(otherObserver).Sugar().With(
+		"namespace", "ns-a",
+		"pipeline-run", "some-pipelinerun",
+		"source-repo-url", "https://git.example.com/org/repo",
+	)
+
+	repo := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo-b", Namespace: "ns-b"},
+		Spec: v1alpha1.RepositorySpec{
+			URL: "https://github.com/org/repo-b",
+			GitProvider: &v1alpha1.GitProvider{
+				Secret: &v1alpha1.Secret{Name: "provider-secret"},
+				User:   "test-user",
+			},
+		},
+	}
+	pr := &tektonv1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo-b-run",
+			Namespace: "ns-b",
+			Annotations: map[string]string{
+				keys.State:         kubeinteraction.StateStarted,
+				keys.Repository:    repo.Name,
+				keys.SecretCreated: "false",
+				keys.GitAuthSecret: "pac-gitauth-xxxxxx",
+				keys.GitProvider:   "github",
+				keys.RepoURL:       "https://github.com/org/repo-b",
+				keys.URLOrg:        "org",
+				keys.URLRepository: "repo-b",
+				keys.SHA:           "deadbeef",
+			},
+		},
+	}
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{
+		PipelineRuns: []*tektonv1.PipelineRun{pr},
+		Repositories: []*v1alpha1.Repository{repo},
+		ConfigMap:    []*corev1.ConfigMap{defaultPolicyConfigMap()},
+	})
+
+	shared := events.NewEventEmitter(stdata.Kube, otherLogger)
+	r := &Reconciler{
+		repoLister: informers.Repository.Lister(),
+		kinteract: &testkubernetestint.KinterfaceTest{
+			GetSecretResult:   map[string]string{"provider-secret": "test-token"},
+			CreateSecretError: errors.NewAlreadyExists(schema.GroupResource{Resource: "secrets"}, "pac-gitauth-xxxxxx"),
+		},
+		eventEmitter: shared,
+		run: &params.Run{
+			Clients: clients.Clients{
+				Kube:   stdata.Kube,
+				Tekton: stdata.Pipeline,
+				Log:    logger,
+			},
+			Info: info.Info{
+				Kube:       &info.KubeOpts{Namespace: "global"},
+				Controller: &info.ControllerInfo{GlobalRepository: "global-repo"},
+				Pac: &info.PacOpts{
+					Settings: settings.Settings{SecretAutoCreation: true},
+				},
+			},
+		},
+	}
+
+	assert.NilError(t, r.ReconcileKind(ctx, pr))
+
+	warnings := logCatcher.FilterMessageSnippet("already exists").All()
+	assert.Equal(t, 1, len(warnings))
+	assert.Equal(t, "Secret pac-gitauth-xxxxxx already exists in namespace ns-b for PipelineRun ns-b/repo-b-run, reusing existing secret", warnings[0].Message)
+	assert.Equal(t, "ns-b", warnings[0].ContextMap()["namespace"])
+	assert.Equal(t, "repo-b-run", warnings[0].ContextMap()["pipeline-run"])
+	_, leaked := warnings[0].ContextMap()["source-repo-url"]
+	assert.Assert(t, !leaked, "warning borrowed another reconcile's source-repo-url")
+	assert.Equal(t, 0, len(otherLogs.FilterMessageSnippet("already exists").All()))
+
+	shared.EmitMessage(nil, zap.InfoLevel, "probe", "shared-emitter-probe")
+	assert.Equal(t, 1, len(otherLogs.FilterMessage("shared-emitter-probe").All()))
+	assert.Equal(t, 0, len(logCatcher.FilterMessage("shared-emitter-probe").All()))
+
+	recorded, err := stdata.Kube.CoreV1().Events(repo.Namespace).List(ctx, metav1.ListOptions{})
+	assert.NilError(t, err)
+	assert.Equal(t, 1, len(recorded.Items))
+	assert.Equal(t, "RepositorySecretReused", recorded.Items[0].Reason)
+	assert.Equal(t, repo.Name, recorded.Items[0].InvolvedObject.Name)
+	assert.Equal(t, repo.Namespace, recorded.Items[0].InvolvedObject.Namespace)
+	assert.Equal(t, warnings[0].Message, recorded.Items[0].Message)
+}
+
 // defaultPolicyConfigMap is a controller ConfigMap with no configured allowlist,
 // which is the state every stock install starts in: the public instances are
 // trusted and nothing else is.

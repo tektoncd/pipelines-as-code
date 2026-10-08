@@ -143,6 +143,10 @@ func controllerInfoForPipelineRun(pr *tektonv1.PipelineRun, fallback *info.Contr
 func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	ctx = info.StoreNS(ctx, system.Namespace())
 	logger := logging.FromContext(ctx).With("namespace", pr.GetNamespace())
+	// ReconcileKind copies this struct, which copies the emitter pointer.
+	// Use a per-reconcile copy before anything emits, so overlapping
+	// reconciles do not log under each other's fields.
+	r.eventEmitter = r.eventEmitter.WithLogger(logger.With("pipeline-run", pr.GetName()))
 
 	logger.Debugf("reconciling pipelineRun %s/%s", pr.GetNamespace(), pr.GetName())
 
@@ -293,7 +297,7 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 
 	logger = logger.With(logFields...)
 	logger.Infof("pipelineRun %v/%v is done, reconciling to report status!  ", pr.GetNamespace(), pr.GetName())
-	r.eventEmitter.SetLogger(logger)
+	r.eventEmitter = r.eventEmitter.WithLogger(logger)
 
 	detectedProvider, event, err := r.detectProvider(ctx, logger, pr)
 	if err != nil {
@@ -376,9 +380,9 @@ func (r *Reconciler) createSecretForPipelineRun(ctx context.Context, logger *zap
 		// duplicate secret creation attempts for the same PR. This is a workaround, not
 		// designed behavior - reuse existing secret to prevent PipelineRun failure.
 		if errors.IsAlreadyExists(err) {
-			msg := fmt.Sprintf("Secret %s already exists in namespace %s, reusing existing secret",
-				authSecret.GetName(), repo.GetNamespace())
-			r.eventEmitter.EmitMessage(nil, zap.WarnLevel, "RepositorySecretReused", msg)
+			msg := fmt.Sprintf("Secret %s already exists in namespace %s for PipelineRun %s/%s, reusing existing secret",
+				authSecret.GetName(), repo.GetNamespace(), pr.GetNamespace(), pr.GetName())
+			r.eventEmitter.EmitMessage(repo, zap.WarnLevel, "RepositorySecretReused", msg)
 		} else {
 			return fmt.Errorf("creating basic auth secret: %s has failed: %w ", authSecret.GetName(), err)
 		}
