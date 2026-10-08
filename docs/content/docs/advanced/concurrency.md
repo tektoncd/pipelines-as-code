@@ -46,15 +46,34 @@ queue looks stuck — nothing starting, or more running than the configured
 `concurrency_limit` — the fastest way to find out why is to ask the watcher
 directly instead of guessing from PipelineRun status.
 
-The watcher serves a read-only, JSON snapshot of its in-memory queues on
+The watcher can serve a read-only, JSON snapshot of its in-memory queues on
 `/debug/queue`, on the same port it already uses for its health probe.
 
-{{< callout type="info" >}}
-This exposes only the limit and the PipelineRun names PAC currently considers
-running or pending for each repository — nothing that is not already visible by
-listing PipelineRuns. It is meant for troubleshooting, not for regular
-monitoring.
+{{< callout type="warning" >}}
+This endpoint is disabled by default and must be explicitly enabled. It is
+unauthenticated: anything that can reach the watcher pod on its probe port
+(any workload in the cluster with network access to it, not just cluster
+API clients) can read the namespace, Repository name, and pending/running
+PipelineRun names for every repository the watcher knows about. Only turn it
+on for troubleshooting, and turn it back off afterward.
 {{< /callout >}}
+
+### Enabling it
+
+Set `PAC_ENABLE_QUEUE_DEBUG=true` on the `pac-watcher` container in the
+`pipelines-as-code-watcher` Deployment, then restart the pod:
+
+```shell
+kubectl -n pipelines-as-code set env deployment/pipelines-as-code-watcher \
+  -c pac-watcher PAC_ENABLE_QUEUE_DEBUG=true
+```
+
+Unset it (or set it to `false`) to disable the endpoint again:
+
+```shell
+kubectl -n pipelines-as-code set env deployment/pipelines-as-code-watcher \
+  -c pac-watcher PAC_ENABLE_QUEUE_DEBUG-
+```
 
 ### Querying it
 

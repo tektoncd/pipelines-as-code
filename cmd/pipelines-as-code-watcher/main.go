@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,13 +19,23 @@ import (
 
 const globalProbesPort = "8080"
 
-func main() {
-	probesPort := globalProbesPort
-	envProbePort := os.Getenv("PAC_WATCHER_PORT")
-	if envProbePort != "" {
-		probesPort = envProbePort
+// queueDebugEnabled reports whether PAC_ENABLE_QUEUE_DEBUG asks for the
+// /debug/queue endpoint. It fails closed: unset or unparseable never enables
+// it, and an invalid value is logged so a typo does not silently do nothing.
+func queueDebugEnabled() bool {
+	val, ok := os.LookupEnv("PAC_ENABLE_QUEUE_DEBUG")
+	if !ok {
+		return false
 	}
+	enabled, err := strconv.ParseBool(val)
+	if err != nil {
+		log.Printf("PAC_ENABLE_QUEUE_DEBUG=%q is not a valid boolean, leaving /debug/queue disabled: %v", val, err)
+		return false
+	}
+	return enabled
+}
 
+func newProbeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/live", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -33,8 +44,25 @@ func main() {
 
 	// Read-only view of the concurrency queues, so a test or an operator can
 	// tell whether the queue still agrees with the cluster.
-	mux.HandleFunc("/debug/queue", queue.DebugHandler())
+	//
+	// This is unauthenticated and reachable from any pod that can route to
+	// this one, including untrusted PipelineRun workloads, so it stays off
+	// unless explicitly enabled. An absent route beats one that answers 403,
+	// since it does not confirm the feature exists to probe further.
+	if queueDebugEnabled() {
+		mux.HandleFunc("/debug/queue", queue.DebugHandler())
+	}
+	return mux
+}
 
+func main() {
+	probesPort := globalProbesPort
+	envProbePort := os.Getenv("PAC_WATCHER_PORT")
+	if envProbePort != "" {
+		probesPort = envProbePort
+	}
+
+	mux := newProbeMux()
 	c := make(chan struct{})
 	go func() {
 		log.Println("started goroutine for watcher")
