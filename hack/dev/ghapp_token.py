@@ -148,8 +148,8 @@ def main(args):
     if args.cache_file and os.path.exists(args.cache_file):
         mtime = os.path.getmtime(args.cache_file)
         if datetime.datetime.fromtimestamp(
-            mtime, tz=datetime.timezone.utc
-        ) < datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(
+            mtime, tz=datetime.UTC
+        ) < datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(
             seconds=args.jwt_token_expiration_time
         ):
             os.remove(args.cache_file)
