@@ -299,11 +299,12 @@ func TestParsePayloadPullRequest(t *testing.T) {
 
 func TestParsePayloadPush(t *testing.T) {
 	tests := []struct {
-		name         string
-		payload      string
-		wantSHA      string
-		wantSHAURL   string
-		wantSHATitle string
+		name           string
+		payload        string
+		wantSHA        string
+		wantSHAURL     string
+		wantSHATitle   string
+		wantBaseBranch string
 	}{
 		{
 			name: "head commit provides sha url and title",
@@ -342,6 +343,23 @@ func TestParsePayloadPush(t *testing.T) {
 			}`,
 			wantSHA: "before999",
 		},
+		{
+			name: "missing head commit falls back to after sha on tag push",
+			payload: `{
+				"ref": "refs/tags/v1.0.0",
+				"before": "0000000000000000000000000000000000000000",
+				"after": "targetcommitsha123",
+				"repository": {
+					"name": "test-repo",
+					"owner": {"login": "test-org"},
+					"html_url": "https://gitea.example/test-org/test-repo",
+					"default_branch": "main"
+				},
+				"sender": {"login": "pusher-user"}
+			}`,
+			wantSHA:        "targetcommitsha123",
+			wantBaseBranch: "refs/tags/v1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -349,6 +367,11 @@ func TestParsePayloadPush(t *testing.T) {
 			got, err := parseGiteaPayload("push", tt.payload)
 			assert.NilError(t, err)
 			assert.Assert(t, got != nil)
+
+			wantBaseBranch := tt.wantBaseBranch
+			if wantBaseBranch == "" {
+				wantBaseBranch = "refs/heads/main"
+			}
 
 			assert.Equal(t, got.SHA, tt.wantSHA)
 			assert.Equal(t, got.SHAURL, tt.wantSHAURL)
@@ -361,7 +384,7 @@ func TestParsePayloadPush(t *testing.T) {
 			// In push events HeadURL mirrors BaseURL.
 			assert.Equal(t, got.HeadURL, got.BaseURL)
 			assert.Equal(t, got.Sender, "pusher-user")
-			assert.Equal(t, got.BaseBranch, "refs/heads/main")
+			assert.Equal(t, got.BaseBranch, wantBaseBranch)
 			// In push events HeadBranch mirrors BaseBranch.
 			assert.Equal(t, got.HeadBranch, got.BaseBranch)
 			assert.Equal(t, got.EventType, "push")
@@ -377,6 +400,16 @@ func TestParsePayloadErrors(t *testing.T) {
 		payload   string
 		wantErr   string
 	}{
+		{
+			name:      "push event for deleted ref is skipped/errored",
+			eventType: "push",
+			payload: `{
+				"ref": "refs/tags/v1.0.0",
+				"before": "commit123",
+				"after": "0000000000000000000000000000000000000000"
+			}`,
+			wantErr: "ref refs/tags/v1.0.0 has been deleted, skipping",
+		},
 		{
 			name:      "missing event type header",
 			eventType: "",
