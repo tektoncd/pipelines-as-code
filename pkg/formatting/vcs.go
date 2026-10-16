@@ -13,23 +13,20 @@ import (
 // SanitizeBranch remove refs/heads from string, only removing the first prefix
 // in case we have branch that are actually called refs-heads 🙃.
 func SanitizeBranch(s string) string {
-	if strings.HasPrefix(s, "refs/heads/") {
-		return strings.TrimPrefix(s, "refs/heads/")
+	if branch, ok := strings.CutPrefix(s, "refs/heads/"); ok {
+		return branch
 	}
-	if strings.HasPrefix(s, "refs-heads-") {
-		return strings.TrimPrefix(s, "refs-heads-")
+	if branch, ok := strings.CutPrefix(s, "refs-heads-"); ok {
+		return branch
 	}
 	return s
 }
 
 var shortShaLength = 7
 
-// ShortSHA returns a shortsha.
+// ShortSHA returns a shortsha, shorter values are returned as is.
 func ShortSHA(sha string) string {
-	if sha == "" {
-		return ""
-	}
-	if shortShaLength >= len(sha)+1 {
+	if len(sha) < shortShaLength-1 {
 		return sha
 	}
 	return sha[0:shortShaLength]

@@ -35,11 +35,12 @@ type byStartTime []tektonv1.PipelineRun
 func (prs byStartTime) Len() int      { return len(prs) }
 func (prs byStartTime) Swap(i, j int) { prs[i], prs[j] = prs[j], prs[i] }
 func (prs byStartTime) Less(i, j int) bool {
-	if prs[j].Status.StartTime == nil {
-		return false
-	}
+	// PipelineRuns that have not started yet are listed first
 	if prs[i].Status.StartTime == nil {
 		return true
+	}
+	if prs[j].Status.StartTime == nil {
+		return false
 	}
 	// If times are equal, sort by name descending
 	if prs[j].Status.StartTime.Time.Equal(prs[i].Status.StartTime.Time) {
