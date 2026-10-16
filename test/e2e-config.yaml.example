@@ -42,6 +42,9 @@ github_enterprise:
   smee_url: ""  # For GitHub App tests
   webhook_smee_url: ""  # For webhook-based tests with dynamic repo creation
   webhook_org: ""  # Optional: Different org for webhook tests (uses repo_owner_githubapp org if not set)
+  webhook_token: ""  # Token for webhook-based tests (may differ from main token)
+  webhook_secret: ""  # Webhook secret for GHE controller
+  application_id: ""  # GitHub App application ID
 
 # GitLab
 gitlab:
@@ -73,6 +76,7 @@ bitbucket_cloud:
   # Username from "Personal Bitbucket settings"
   user: ""
   token: ""
+  webhook_secret: ""
   # Format: workspace/repo
   e2e_repository: ""
 
