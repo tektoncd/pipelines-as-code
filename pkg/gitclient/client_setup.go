@@ -50,7 +50,7 @@ func SetupAuthenticatedClient(
 	// a local endpoint cannot be hidden by the global Repository defaults.
 	if event.InstallationID <= 0 {
 		var err error
-		secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo)
+		secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo, event)
 		if err != nil {
 			return err
 		}

@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/vcshost"
 )
 
@@ -21,7 +23,7 @@ import (
 // Every path that resolves a provider secret must go through here: the adapter
 // and the watcher each used to carry their own copy of this decision, and a
 // guard that only one of them applies is not a guard.
-func ResolveInheritedSecret(repo, globalRepo *v1alpha1.Repository) (string, bool, error) {
+func ResolveInheritedSecret(repo, globalRepo *v1alpha1.Repository, event *info.Event) (string, bool, error) {
 	namespace := repo.GetNamespace()
 	if globalRepo == nil || repo.Spec.GitProvider == nil || repo.Spec.GitProvider.Secret != nil ||
 		globalRepo.Spec.GitProvider == nil || globalRepo.Spec.GitProvider.Secret == nil {
@@ -30,7 +32,32 @@ func ResolveInheritedSecret(repo, globalRepo *v1alpha1.Repository) (string, bool
 	if err := checkInheritedEndpoint(repo, globalRepo); err != nil {
 		return namespace, false, err
 	}
+	if err := checkInheritedCloneHost(repo, globalRepo, event); err != nil {
+		return namespace, false, err
+	}
 	return globalRepo.GetNamespace(), true, nil
+}
+
+// checkInheritedCloneHost keeps an inherited global credential on its own host:
+// the clone endpoint it is written to must share the global git_provider.url host.
+func checkInheritedCloneHost(repo, globalRepo *v1alpha1.Repository, event *info.Event) error {
+	globalURL := globalRepo.Spec.GitProvider.URL
+	if globalURL == "" || event == nil {
+		return nil
+	}
+	cloneEndpoint := event.CloneURL
+	if cloneEndpoint == "" {
+		cloneEndpoint = event.URL
+	}
+	if cloneEndpoint == "" || provider.CompareHostOfURLS(cloneEndpoint, globalURL) {
+		return nil
+	}
+	return fmt.Errorf(
+		"repository %s/%s inherits its git_provider.secret from the global repository %s/%s "+
+			"but its clone endpoint %q is not on the same host as git_provider.url %q",
+		repo.GetNamespace(), repo.GetName(), globalRepo.GetNamespace(), globalRepo.GetName(),
+		cloneEndpoint, globalURL,
+	)
 }
 
 func checkInheritedEndpoint(repo, globalRepo *v1alpha1.Repository) error {
