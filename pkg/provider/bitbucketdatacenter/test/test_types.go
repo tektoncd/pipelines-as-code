@@ -62,6 +62,7 @@ type BuildStatus struct {
 	Name        string `json:"name"`
 	URL         string `json:"url"`
 	Description string `json:"description"`
+	Parent      string `json:"parent"`
 	DateAdded   int64  `json:"dateAdded"`
 }
 

@@ -556,13 +556,33 @@ func TestCheckValidPayload(t *testing.T) {
 
 func TestParsePayload(t *testing.T) {
 	ev1 := &info.Event{
+		AccountID:      "12345",
+		Sender:         "sender",
+		Organization:   "PROJ",
+		BBDCProjectKey: "PROJ",
+		Repository:     "repo",
+		URL:            "http://forge/PROJ/repo/browse",
+		SHA:            "abcd",
+		CloneURL:       "http://clone/PROJ/repo",
+	}
+	personalRepoPayload := &info.Event{
 		AccountID:    "12345",
 		Sender:       "sender",
-		Organization: "PROJ",
+		Organization: "~joe",
 		Repository:   "repo",
-		URL:          "http://forge/PROJ/repo/browse",
+		URL:          "http://forge/~joe/repo/browse",
 		SHA:          "abcd",
-		CloneURL:     "http://clone/PROJ/repo",
+		CloneURL:     "http://clone/~joe/repo",
+	}
+	personalRepoEvent := &info.Event{
+		AccountID:      "12345",
+		Sender:         "sender",
+		Organization:   "joe",
+		Repository:     "repo",
+		URL:            "http://forge/~joe/repo/browse",
+		SHA:            "abcd",
+		CloneURL:       "http://clone/~joe/repo",
+		BBDCProjectKey: "~joe",
 	}
 
 	tests := []struct {
@@ -621,6 +641,14 @@ func TestParsePayload(t *testing.T) {
 			expEvent:         ev1,
 			expEventType:     "push",
 			expTriggerTarget: "push",
+		},
+		{
+			name:             "good/pull_request personal repository",
+			eventType:        "pr:opened",
+			payloadEvent:     bbv1test.MakePREvent(personalRepoPayload, ""),
+			expEvent:         personalRepoEvent,
+			expEventType:     "pull_request",
+			expTriggerTarget: "pull_request",
 		},
 		{
 			name:          "bad/changes are empty in push",
@@ -756,6 +784,7 @@ func TestParsePayload(t *testing.T) {
 			assert.Equal(t, got.URL+"/browse", tt.expEvent.URL)
 
 			assert.Equal(t, got.CloneURL, tt.expEvent.CloneURL)
+			assert.Equal(t, got.BBDCProjectKey, tt.expEvent.BBDCProjectKey)
 
 			if tt.targetPipelinerun != "" {
 				assert.Equal(t, got.TargetTestPipelineRun, tt.targetPipelinerun)

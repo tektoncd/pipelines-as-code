@@ -14,6 +14,7 @@ import (
 
 	"github.com/jenkins-x/go-scm/scm"
 	"github.com/jenkins-x/go-scm/scm/driver/stash"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
@@ -31,6 +32,7 @@ func SetupBBDataCenterClient(t *testing.T) (*scm.Client, *http.ServeMux, func(),
 	mux := http.NewServeMux()
 	apiHandler := http.NewServeMux()
 	apiHandler.Handle(defaultAPIURL+"/", http.StripPrefix(defaultAPIURL, mux))
+	apiHandler.Handle("/rest/api/latest/", http.StripPrefix("/rest/api/latest", mux))
 	apiHandler.Handle(buildAPIURL+"/", http.StripPrefix(buildAPIURL, mux))
 	apiHandler.Handle(defaultApplinksURL+"/", http.StripPrefix(defaultApplinksURL, mux))
 	apiHandler.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -60,7 +62,14 @@ func SetupBBDataCenterClient(t *testing.T) (*scm.Client, *http.ServeMux, func(),
 func MuxCreateComment(t *testing.T, mux *http.ServeMux, event *info.Event, expectedCommentSubstr string, prID int) {
 	assert.Assert(t, event.Event != nil)
 
-	path := fmt.Sprintf("/projects/%s/repos/%s/pull-requests/%d/comments", event.Organization, event.Repository, prID)
+	projectKey := event.Organization
+	// since createstatus uses bbdcprojectkey
+	// we need to use it here too, otherwise the mux won't match the request
+	if event.BBDCProjectKey != "" {
+		projectKey = event.BBDCProjectKey
+	}
+
+	path := fmt.Sprintf("/projects/%s/repos/%s/pull-requests/%d/comments", projectKey, event.Repository, prID)
 	mux.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
 		cso := &Comment{}
 		bit, _ := io.ReadAll(r.Body)
@@ -95,6 +104,9 @@ func MakeEvent(event *info.Event) *info.Event {
 	}
 	if rev.Organization == "" {
 		rev.Organization = "owner"
+	}
+	if rev.BBDCProjectKey == "" {
+		rev.BBDCProjectKey = "~owner"
 	}
 	if rev.Repository == "" {
 		rev.Repository = "repo"
@@ -206,6 +218,14 @@ func MuxListDir(t *testing.T, mux *http.ServeMux, event *info.Event, path string
 
 func MuxCreateAndTestCommitStatus(t *testing.T, mux *http.ServeMux, event *info.Event, expectedDescSubstr string, expStatus status.StatusOpts) {
 	path := fmt.Sprintf("/commits/%s", event.SHA)
+	if expStatus.PipelineRun != nil &&
+		expStatus.PipelineRun.GetAnnotations()[keys.BitbucketRequiredBuildParent] != "" {
+		projectKey := event.Organization
+		if annotatedProjectKey := expStatus.PipelineRun.GetAnnotations()[keys.BitbucketProjectKey]; annotatedProjectKey != "" {
+			projectKey = annotatedProjectKey
+		}
+		path = fmt.Sprintf("/projects/%s/repos/%s/commits/%s/builds", projectKey, event.Repository, event.SHA)
+	}
 	mux.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
 		cso := &BuildStatus{}
 		bit, _ := io.ReadAll(r.Body)
@@ -218,6 +238,11 @@ func MuxCreateAndTestCommitStatus(t *testing.T, mux *http.ServeMux, event *info.
 		if expectedDescSubstr != "" {
 			assert.Assert(t, strings.Contains(cso.Description, expectedDescSubstr),
 				"description: %s doesn't have: %s", cso.Description, expectedDescSubstr)
+		}
+		if expStatus.PipelineRun != nil {
+			assert.Equal(t,
+				expStatus.PipelineRun.GetAnnotations()[keys.BitbucketRequiredBuildParent],
+				cso.Parent)
 		}
 
 		fmt.Fprintf(rw, "{}")

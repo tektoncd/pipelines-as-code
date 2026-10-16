@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	pacerrors "github.com/openshift-pipelines/pipelines-as-code/pkg/errors"
@@ -43,6 +44,12 @@ type FetchedResourcesForRun struct {
 	PipelineURL string
 }
 
+// Contains a validation rule for an annotation key, with a function to validate the value of the annotation.
+type AnnotationValidationRule struct {
+	Key      string
+	Validate func(string) error
+}
+
 func NewTektonTypes() TektonTypes {
 	return TektonTypes{
 		ValidationErrors: []*pacerrors.PacYamlValidations{},
@@ -50,6 +57,23 @@ func NewTektonTypes() TektonTypes {
 }
 
 var yamlDocSeparatorRe = regexp.MustCompile(`(?m)^---\s*$`)
+
+// Hardcoded list of annotation validation rules for PipelineRun annotations.
+// Each rule specifies an annotation key and a validation function that checks the value of the annotation.
+var pipelineRunAnnotationRules = []AnnotationValidationRule{
+	{
+		Key: apipac.BitbucketRequiredBuildParent,
+		Validate: func(value string) error {
+			if !utf8.ValidString(value) {
+				return fmt.Errorf("value is not valid UTF-8")
+			}
+			if utf8.RuneCountInString(value) > 210 {
+				return fmt.Errorf("value must not exceed 210 characters")
+			}
+			return nil
+		},
+	},
+}
 
 // detectAtleastNameOrGenerateNameAndSchemaFromPipelineRun detects the name or
 // generateName of a yaml files even if there is an error decoding it as tekton types.
@@ -242,6 +266,28 @@ func Resolve(ctx context.Context, cs *params.Run, logger *zap.SugaredLogger, pro
 	return fetchedResources, nil
 }
 
+func validatePipelineRunAnnotations(pr *tektonv1.PipelineRun) error {
+	for _, rule := range pipelineRunAnnotationRules {
+		value, exists := pr.GetAnnotations()[rule.Key]
+		if !exists {
+			continue
+		}
+
+		if err := rule.Validate(value); err != nil {
+			return fmt.Errorf("annotation %s: %w", rule.Key, err)
+		}
+	}
+
+	return nil
+}
+
+func pipelineRunName(pr *tektonv1.PipelineRun) string {
+	if name := pr.GetName(); name != "" {
+		return name
+	}
+	return pr.GetGenerateName()
+}
+
 func MetadataResolve(prs []*tektonv1.PipelineRun) ([]*tektonv1.PipelineRun, error) {
 	if err := pipelineRunsWithSameName(prs); err != nil {
 		return []*tektonv1.PipelineRun{}, err
@@ -264,6 +310,12 @@ func MetadataResolve(prs []*tektonv1.PipelineRun) ([]*tektonv1.PipelineRun, erro
 		// Don't overwrite the annotation if there is some who already exist set by the user in repo
 		if prun.GetAnnotations() == nil {
 			prun.Annotations = map[string]string{}
+		}
+		// validate pr annotations after they are initialized to avoid nil pointer dereference.
+		// this will stop all pipeline runs from being processed if any of them have invalid annotations
+		// and return an error indicating which pipeline run has the issue.
+		if err := validatePipelineRunAnnotations(prun); err != nil {
+			return []*tektonv1.PipelineRun{}, fmt.Errorf("invalid pipeline run %s annotations: %w", pipelineRunName(prun), err)
 		}
 		prun.GetLabels()[apipac.OriginalPRName] = formatting.CleanValueKubernetes(originPipelineRunName)
 		prun.GetAnnotations()[apipac.OriginalPRName] = originPipelineRunName
