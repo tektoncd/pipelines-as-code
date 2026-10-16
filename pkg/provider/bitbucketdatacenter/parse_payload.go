@@ -198,6 +198,11 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 	processedEvent.Organization = sanitizeOwner(processedEvent.Organization)
 	processedEvent.URL = sanitizeEventURL(processedEvent.URL)
 
+	// Clone URL must share the repository's host before building git credentials.
+	if processedEvent.CloneURL != "" && !provider.CompareHostOfURLS(processedEvent.CloneURL, processedEvent.URL) {
+		return nil, fmt.Errorf("bitbucket clone URL %q does not match the host of repository URL %q", processedEvent.CloneURL, processedEvent.URL)
+	}
+
 	// TODO: is this the right way? I guess i have no way to know what is the
 	// baseURL of a bitbucket data center unless there is something in the API?
 	// remove everything after /project in the URL to get the basePath

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,6 +32,7 @@ func TestResolveInheritedSecret(t *testing.T) {
 		name          string
 		repo          *v1alpha1.Repository
 		globalRepo    *v1alpha1.Repository
+		event         *info.Event
 		wantNamespace string
 		wantInherited bool
 		wantErr       string
@@ -89,10 +91,26 @@ func TestResolveInheritedSecret(t *testing.T) {
 			wantNamespace: "tenant",
 			wantErr:       "must not be sent to an endpoint chosen by another namespace",
 		},
+		{
+			name:          "inheriting for a clone endpoint on the global host is allowed",
+			repo:          inheritTestRepo("tenant", "repo", "", false),
+			globalRepo:    inheritTestRepo("pipelines-as-code", "global", "https://ghe.example.com", true),
+			event:         &info.Event{URL: "https://ghe.example.com/org/repo", CloneURL: "https://ghe.example.com/org/repo.git"},
+			wantNamespace: "pipelines-as-code",
+			wantInherited: true,
+		},
+		{
+			name:          "inheriting for a clone endpoint on another host is refused",
+			repo:          inheritTestRepo("tenant", "repo", "", false),
+			globalRepo:    inheritTestRepo("pipelines-as-code", "global", "https://ghe.example.com", true),
+			event:         &info.Event{URL: "https://ghe.example.com/org/repo", CloneURL: "https://other.example.com/org/repo.git"},
+			wantNamespace: "tenant",
+			wantErr:       "is not on the same host as git_provider.url",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			namespace, inherited, err := ResolveInheritedSecret(tt.repo, tt.globalRepo)
+			namespace, inherited, err := ResolveInheritedSecret(tt.repo, tt.globalRepo, tt.event)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
 				assert.Equal(t, inherited, false)

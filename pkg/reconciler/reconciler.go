@@ -352,7 +352,7 @@ func (r *Reconciler) reportFinalStatus(ctx context.Context, logger *zap.SugaredL
 	inheritedGlobalSecret := false
 	if globalRepo, gerr := r.repoLister.Repositories(r.run.Info.Kube.Namespace).Get(r.run.Info.Controller.GlobalRepository); gerr == nil && globalRepo != nil {
 		if event.InstallationID <= 0 {
-			if secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo); err != nil {
+			if secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo, event); err != nil {
 				return nil, err
 			}
 		}
@@ -547,7 +547,7 @@ func (r *Reconciler) initGitProviderClient(ctx context.Context, logger *zap.Suga
 	secretNS := repo.GetNamespace()
 	inheritedGlobalSecret := false
 	if event.InstallationID <= 0 && globalRepo != nil {
-		secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo)
+		secretNS, inheritedGlobalSecret, err = secrets.ResolveInheritedSecret(repo, globalRepo, event)
 		if err != nil {
 			return nil, nil, err
 		}
