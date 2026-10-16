@@ -70,54 +70,6 @@ jobs:
       KUBECONFIG: /home/runner/.kube/config.local
       TARGET_TEAM_SLUGS: "pipelines-as-code.maintainers,pipelines-as-code.collaborators"
       TEST_EL_URL: https://paac.paac-127-0-0-1.nip.io
-      TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-
-      # GitHub (Public)
-      TEST_GITHUB_API_URL: api.github.com
-      TEST_GITHUB_PRIVATE_TASK_NAME: task-remote
-      TEST_GITHUB_PRIVATE_TASK_URL: https://github.com/openshift-pipelines/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml
-      TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
-      TEST_GITHUB_REPO_OWNER_GITHUBAPP: openshift-pipelines/pipelines-as-code-e2e-tests
-      TEST_GITHUB_REPO_OWNER_WEBHOOK: openshift-pipelines/pipelines-as-code-e2e-tests-webhook
-      TEST_GITHUB_TOKEN: ${{ secrets.GH_APPS_TOKEN }}
-
-      # GitHub Enterprise (Second)
-      TEST_GITHUB_SECOND_API_URL: ghe.pipelinesascode.com
-      TEST_GITHUB_SECOND_EL_URL: https://ghe.paac-127-0-0-1.nip.io
-      TEST_GITHUB_SECOND_REPO_INSTALLATION_ID: 1
-      TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP: pipelines-as-code/e2e
-      TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
-      TEST_GITHUB_SECOND_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_TOKEN }}
-      TEST_GITHUB_SECOND_WEBHOOK_ORG: pac-e2e-webhook-tests
-      TEST_GITHUB_SECOND_WEBHOOK_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_TOKEN }}
-      TEST_GITHUB_SECOND_WEBHOOK_SECRET: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_SECRET }}
-      TEST_GITHUB_SECOND_APPLICATION_ID: ${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}
-
-      # GitLab
-      TEST_GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-      TEST_GITLAB_SECOND_TOKEN: ${{ secrets.TEST_GITLAB_SECOND_TOKEN }}
-      TEST_GITLAB_SECOND_GROUP: ${{ vars.TEST_GITLAB_SECOND_GROUP }}
-
-      # Gitea
-      TEST_GITEA_API_URL: http://localhost:3000
-      TEST_GITEA_INTERNAL_URL: http://forgejo-http.forgejo.svc.cluster.local:3000
-      TEST_GITEA_PASSWORD: pac
-      TEST_GITEA_REPO_OWNER: pac/pac
-      TEST_GITEA_USERNAME: pac
-
-      # Bitbucket Cloud
-      TEST_BITBUCKET_CLOUD_API_URL: https://api.bitbucket.org/2.0
-      TEST_BITBUCKET_CLOUD_E2E_REPOSITORY: cboudjna/pac-e2e-tests
-      TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
-      TEST_BITBUCKET_CLOUD_USER: cboudjna@redhat.com
-      TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_CLOUD_WEBHOOK_SECRET }}
-
-      # Bitbucket Data Center
-      TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
-      TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY: PAC/pac-e2e-tests
-      TEST_BITBUCKET_DATA_CENTER_TOKEN: ${{ secrets.BITBUCKET_DATA_CENTER_TOKEN }}
-      TEST_BITBUCKET_DATA_CENTER_USER: pipelines
-      TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_DATA_CENTER_WEBHOOK_SECRET }}
     steps:
       # Safe: external contributor PRs do not run this workflow without
       # an explicit maintainer ok-to-test approval (see the permission
@@ -145,6 +97,13 @@ jobs:
           else
             echo "Rate-limit check not available on this branch, skipping"
           fi
+
+      - name: Write E2E configuration file
+        env:
+          E2E_CONFIG_YAML: ${{ secrets.E2E_CONFIG_YAML }}
+        run: |
+          echo "$E2E_CONFIG_YAML" > /tmp/e2e-config.yaml
+          echo "PAC_E2E_CONFIG=/tmp/e2e-config.yaml" >> "$GITHUB_ENV"
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -227,6 +186,8 @@ jobs:
 
       - name: Run gosmee for second controller GHE App
         if: startsWith(matrix.provider, 'github_ghe') || matrix.provider == 'concurrency'
+        env:
+          TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
         run: |
           nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-ghe "${TEST_GITHUB_SECOND_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" > /tmp/gosmee-ghe.log 2>&1 &
 
@@ -377,19 +338,6 @@ jobs:
         if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request_target' }}
         env:
           TEST_PROVIDER: ${{ matrix.provider }}
-          TEST_BITBUCKET_CLOUD_TOKEN: ${{ secrets.BITBUCKET_CLOUD_TOKEN }}
-          TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_CLOUD_WEBHOOK_SECRET }}
-          TEST_EL_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-          TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
-          TEST_GITHUB_TOKEN: ${{ secrets.GH_APPS_TOKEN }}
-          TEST_GITHUB_SECOND_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_TOKEN }}
-          TEST_GITHUB_SECOND_WEBHOOK_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_TOKEN }}
-          TEST_GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-          TEST_GITLAB_SECOND_TOKEN: ${{ secrets.TEST_GITLAB_SECOND_TOKEN }}
-          TEST_GITLAB_SECOND_GROUP: ${{ vars.TEST_GITLAB_SECOND_GROUP }}
-          TEST_BITBUCKET_DATA_CENTER_TOKEN: ${{ secrets.BITBUCKET_DATA_CENTER_TOKEN }}
-          TEST_BITBUCKET_DATA_CENTER_API_URL: ${{ secrets.BITBUCKET_DATA_CENTER_API_URL }}
-          TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET: ${{ secrets.BITBUCKET_DATA_CENTER_WEBHOOK_SECRET }}
           TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
           TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
@@ -406,7 +354,6 @@ jobs:
       - name: Collect logs
         if: ${{ always() }}
         env:
-          TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
           TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
         run: |
