@@ -7,7 +7,9 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -207,6 +209,18 @@ func TestNewWarnsWhenBothBackendsConfigured(t *testing.T) {
 
 	matches := observed.FilterMessageSnippet("OpenTelemetry and Knative tracing both configured").All()
 	assert.Assert(t, len(matches) == 1, "should emit exactly one dual-config warning")
+}
+
+func TestSemconvSchemaURLCompatibleWithResourceDefault(t *testing.T) {
+	merged, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName("test"),
+		),
+	)
+	assert.NilError(t, err)
+	assert.Assert(t, merged != nil)
 }
 
 func TestNewDoesNotWarnWhenOnlyOTelConfigured(t *testing.T) {
