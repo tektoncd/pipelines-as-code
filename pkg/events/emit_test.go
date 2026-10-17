@@ -145,3 +145,29 @@ func TestEventEmitterEmitMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestEventEmitterWithLoggerLeavesOriginalUnchanged(t *testing.T) {
+	originalCore, originalLogs := zapobserver.New(zap.InfoLevel)
+	originalLogger := zap.New(originalCore).Sugar().With("namespace", "ns-a")
+	copiedCore, copiedLogs := zapobserver.New(zap.InfoLevel)
+	copiedLogger := zap.New(copiedCore).Sugar().With("namespace", "ns-b", "pipeline-run", "repo-b-run")
+
+	emitter := NewEventEmitter(nil, originalLogger)
+	cloned := emitter.WithLogger(copiedLogger)
+
+	emitter.EmitMessage(nil, zap.WarnLevel, "probe", "original-line")
+	cloned.EmitMessage(nil, zap.WarnLevel, "probe", "copied-line")
+
+	originalEntries := originalLogs.TakeAll()
+	assert.Equal(t, 1, len(originalEntries))
+	assert.Equal(t, "original-line", originalEntries[0].Message)
+	assert.Equal(t, "ns-a", originalEntries[0].ContextMap()["namespace"])
+
+	copiedEntries := copiedLogs.TakeAll()
+	assert.Equal(t, 1, len(copiedEntries))
+	assert.Equal(t, "copied-line", copiedEntries[0].Message)
+	assert.Equal(t, "ns-b", copiedEntries[0].ContextMap()["namespace"])
+	assert.Equal(t, "repo-b-run", copiedEntries[0].ContextMap()["pipeline-run"])
+
+	assert.Assert(t, (*EventEmitter)(nil).WithLogger(copiedLogger) == nil)
+}
