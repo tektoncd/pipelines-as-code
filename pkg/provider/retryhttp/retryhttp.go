@@ -3,6 +3,7 @@
 package retryhttp
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math/rand"
@@ -31,15 +32,24 @@ type Options struct {
 	Logger *zap.SugaredLogger
 }
 
+type readOnlyPostRetryKey struct{}
+
+// WithReadOnlyPostRetry marks a POST request as safe to retry after transient
+// failures. Use it only for requests that perform read-only operations.
+func WithReadOnlyPostRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, readOnlyPostRetryKey{}, struct{}{})
+}
+
 type transport struct {
 	base http.RoundTripper
 	opts Options
 }
 
 // Wrap returns a RoundTripper retrying rate-limited (429, or 403 with rate
-// limit headers as used by GitHub) and transient (5xx on idempotent methods)
-// failures with jittered exponential backoff. Retry-After and
-// X-RateLimit-Reset headers are honored, capped at opts.MaxWait.
+// limit headers as used by GitHub) and transient (5xx on idempotent requests
+// and explicitly marked read-only POSTs) failures with jittered exponential
+// backoff. Retry-After and X-RateLimit-Reset headers are honored, capped at
+// opts.MaxWait.
 func Wrap(base http.RoundTripper, opts Options) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -100,11 +110,12 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (t *transport) shouldRetry(req *http.Request, resp *http.Response, err error) bool {
-	idempotent := req.Method == http.MethodGet || req.Method == http.MethodHead || req.Method == http.MethodOptions
+	retrySafe := req.Method == http.MethodGet || req.Method == http.MethodHead || req.Method == http.MethodOptions ||
+		(req.Method == http.MethodPost && req.Context().Value(readOnlyPostRetryKey{}) != nil)
 	if err != nil || resp == nil {
-		// network level errors: only retry idempotent requests, the server
+		// Network errors: only retry requests known to be safe to replay; the
 		// may have processed the request without us seeing the response.
-		return idempotent
+		return retrySafe
 	}
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
@@ -113,7 +124,7 @@ func (t *transport) shouldRetry(req *http.Request, resp *http.Response, err erro
 		// GitHub primary/secondary rate limits use 403 with rate limit headers.
 		return true
 	case resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented:
-		return idempotent
+		return retrySafe
 	}
 	return false
 }

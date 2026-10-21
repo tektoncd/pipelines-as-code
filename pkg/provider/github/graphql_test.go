@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v91/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
@@ -237,4 +240,30 @@ func TestFetchFilesBatchPreservesGitHubHeaders(t *testing.T) {
 	res, err := c.fetchFilesBatch(context.Background(), "o", "r", "main", []string{"a"})
 	assert.NilError(t, err)
 	assert.Check(t, cmp.Len(res, 1))
+}
+
+func TestFetchFilesBatchRetriesTransient502(t *testing.T) {
+	var calls atomic.Int64
+	srv := withServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			http.Error(w, "temporary failure", http.StatusBadGateway)
+			return
+		}
+		graphqlOK(mockRepo(1))(w, nil)
+	}))
+
+	provider, _ := newTestProvider(srv.URL + "/api/v3/")
+	client, _, _, err := MakeClient(t.Context(), srv.URL+"/api/v3/", "token", &retryhttp.Options{
+		MaxAttempts: 2,
+		MaxWait:     time.Millisecond,
+	})
+	assert.NilError(t, err)
+	provider.ghClient = client
+
+	c, err := newGraphQLClient(provider)
+	assert.NilError(t, err)
+	result, err := c.fetchFilesBatch(t.Context(), "owner", "repo", "main", []string{"file.yaml"})
+	assert.NilError(t, err)
+	assert.Equal(t, int64(2), calls.Load())
+	assert.DeepEqual(t, result, map[string][]byte{"file.yaml": []byte("content-0")})
 }

@@ -363,7 +363,14 @@ jobs:
       - name: Enable debug logging for e2e
         run: |
           set -euo pipefail
-          kubectl -n pipelines-as-code patch configmap pac-config-logging --type merge -p '{"data":{"loglevel.pipelinesascode":"debug","loglevel.pac-watcher":"debug","loglevel.pipelines-as-code-webhook":"debug"}}'
+          kubectl -n pipelines-as-code patch configmap pac-config-logging --type merge \
+            -p '{"data":{"loglevel.pipelinesascode":"debug","loglevel.pac-watcher":"debug","loglevel.pipelines-as-code-webhook":"debug"}}'
+          for cm in pipelines-as-code ghe-configmap; do
+            if kubectl -n pipelines-as-code get configmap "$cm" &>/dev/null; then
+              kubectl -n pipelines-as-code patch configmap "$cm" --type merge \
+                -p '{"data":{"enable-api-retry":"true"}}'
+            fi
+          done
           kubectl -n pipelines-as-code rollout restart deployment/pipelines-as-code-controller deployment/pipelines-as-code-webhook deployment/pipelines-as-code-watcher
           for name in controller webhook watcher; do
             echo "=== Waiting for $name to be ready ==="

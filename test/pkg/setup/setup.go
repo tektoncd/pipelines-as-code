@@ -3,7 +3,16 @@ package setup
 import (
 	"fmt"
 	"os"
+
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 )
+
+// PacOptsWithAPIRetry returns the default PAC options with API retries enabled.
+func PacOptsWithAPIRetry() *info.PacOpts {
+	pacOpts := info.NewPacOpts()
+	pacOpts.EnableAPIRetry = true
+	return pacOpts
+}
 
 // RequireEnvs checks if all required environment variables are set.
 // It takes a variadic list of environment variable keys and returns an error

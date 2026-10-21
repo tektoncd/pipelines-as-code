@@ -26,6 +26,7 @@ func CreateProvider(ctx context.Context, giteaURL, user, password string) (gitea
 		Token:    new(password),
 	}
 	gprovider.SetLogger(run.Clients.Log)
+	gprovider.SetPacInfo(setup.PacOptsWithAPIRetry())
 	event := info.NewEvent()
 	event.Provider = &info.Provider{
 		URL:   giteaURL,
