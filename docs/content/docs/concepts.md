@@ -276,6 +276,7 @@ Supported events:
 
 - `pull_request` - PR opened, synchronized, or reopened
 - `push` - Code pushed to a branch
+- `release` - Release released (GitHub only, supports annotated and lightweight tags)
 - `incoming` - Manual trigger via incoming webhook
 
 #### `on-target-branch`
@@ -318,6 +319,7 @@ Pipelines-as-Code provides template variables that are substituted at runtime:
 | `{{ source_branch }}` | Source branch (for PRs) | `feature-123` |
 | `{{ sender }}` | User who triggered the event | `developer123` |
 | `{{ event_type }}` | Type of event | `pull_request` |
+| `{{ release_body }}` | Body of the release (GitHub `release` events only) | `## Changelog` |
 
 ### Example pipeline
 
