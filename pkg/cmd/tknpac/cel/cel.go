@@ -430,7 +430,7 @@ func pacParamsFromEvent(event *info.Event) map[string]string {
 
 	// Get event title based on trigger type
 	eventTitle := event.PullRequestTitle
-	if event.TriggerTarget == triggertype.Push {
+	if event.TriggerTarget == triggertype.Push || event.TriggerTarget == triggertype.Release {
 		eventTitle = event.SHATitle
 	}
 

@@ -55,6 +55,7 @@ func (p *CustomParams) makeStandardParamsFromEvent(ctx context.Context) (map[str
 		"event_type":          opscomments.EventTypeBackwardCompat(p.eventEmitter, p.repo, p.event.EventType),
 		"trigger_comment":     triggerCommentAsSingleLine,
 		"pull_request_labels": pullRequestLabels,
+		"release_body":        strings.ReplaceAll(strings.ReplaceAll(p.event.ReleaseBody, "\r\n", "\\n"), "\n", "\\n"),
 	}
 	changedFilesParams := map[string]any{
 		"all":      changedFiles.All,

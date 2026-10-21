@@ -59,6 +59,7 @@ type Event struct {
 	PullRequestTitle  string   // Title of the pull Request
 	PullRequestLabel  []string // Labels of the pull Request
 	TriggerComment    string   // The comment triggering the pipelinerun when using on-comment annotation
+	ReleaseBody       string   // Body/description of the release (GitHub only)
 
 	// HasSkipCommand indicates whether the commit message contains a skip CI command
 	// (e.g., [skip ci], [ci skip], [skip tkn], [tkn skip]). When true, PipelineRun
