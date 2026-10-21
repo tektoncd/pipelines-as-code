@@ -2425,6 +2425,92 @@ func TestMatchPipelinerunByAnnotation(t *testing.T) {
 			wantUnmatchedPRs: []string{"pipeline-on-label"},
 			wantLog:          []string{"PipelineRun pipeline-on-label: label annotation did not match, skipping"},
 		},
+		{
+			name: "release event matches on-event annotation",
+			args: args{
+				pruns: []*tektonv1.PipelineRun{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "pipeline-release",
+							Annotations: map[string]string{
+								keys.OnEvent:        "[release]",
+								keys.OnTargetBranch: "[refs/tags/*]",
+							},
+						},
+					},
+				},
+				runevent: info.Event{
+					TriggerTarget: triggertype.Release,
+					EventType:     "release",
+					BaseBranch:    "refs/tags/v1.0.0",
+					HeadBranch:    "refs/tags/v1.0.0",
+				},
+			},
+			wantErr:    false,
+			wantPrName: "pipeline-release",
+		},
+		{
+			name: "release event matches CEL expression",
+			args: args{
+				pruns: []*tektonv1.PipelineRun{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "pipeline-release-cel",
+							Annotations: map[string]string{
+								keys.OnCelExpression: `event == "release" && target_branch.startsWith("refs/tags/")`,
+							},
+						},
+					},
+				},
+				runevent: info.Event{
+					TriggerTarget: triggertype.Release,
+					EventType:     "release",
+					BaseBranch:    "refs/tags/v1.0.0",
+					HeadBranch:    "refs/tags/v1.0.0",
+					Request: &info.Request{
+						Header: http.Header{},
+					},
+				},
+			},
+			wantErr:    false,
+			wantPrName: "pipeline-release-cel",
+		},
+		{
+			name: "release event does not match pull request pipeline",
+			args: args{
+				pruns: []*tektonv1.PipelineRun{pipelineGood},
+				runevent: info.Event{
+					TriggerTarget: triggertype.Release,
+					EventType:     "release",
+					BaseBranch:    "refs/tags/v1.0.0",
+					HeadBranch:    "refs/tags/v1.0.0",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "release event unmatched when tag does not match target branch",
+			args: args{
+				pruns: []*tektonv1.PipelineRun{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "pipeline-release-specific",
+							Annotations: map[string]string{
+								keys.OnEvent:        "[release]",
+								keys.OnTargetBranch: "[refs/tags/v2.*]",
+							},
+						},
+					},
+				},
+				runevent: info.Event{
+					TriggerTarget: triggertype.Release,
+					EventType:     "release",
+					BaseBranch:    "refs/tags/v1.0.0",
+					HeadBranch:    "refs/tags/v1.0.0",
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

@@ -40,6 +40,8 @@ func StringToType(s string) Trigger {
 		return Comment
 	case PullRequestLabeled.String():
 		return PullRequestLabeled
+	case Release.String():
+		return Release
 	}
 	return ""
 }
@@ -53,6 +55,7 @@ const (
 	PullRequestLabeled    Trigger = "pull_request_labeled"
 	OkToTest              Trigger = "ok-to-test"
 	PullRequestClosed     Trigger = "pull_request_closed"
+	Release               Trigger = "release"
 	PullRequest           Trigger = "pull_request" // it's should be "pull_request_opened_updated" but let's keep it simple.
 	Push                  Trigger = "push"
 	Retest                Trigger = "retest"

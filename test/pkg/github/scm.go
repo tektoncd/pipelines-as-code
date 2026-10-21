@@ -29,7 +29,7 @@ func CreateGHERepo(ctx context.Context, client *github.Client, org, name, hookUR
 
 	active := true
 	_, _, err = client.Repositories.CreateHook(ctx, org, name, &github.Hook{
-		Events: []string{"push", "pull_request", "issue_comment", "check_run", "check_suite"},
+		Events: []string{"push", "pull_request", "issue_comment", "check_run", "check_suite", "release"},
 		Config: &github.HookConfig{
 			URL:         new(hookURL),
 			ContentType: new("json"),

@@ -48,3 +48,17 @@ func DeleteTag(ctx context.Context, ghcnx *pacgithub.Provider, opts options.E2E,
 	_, err := ghcnx.Client().Git.DeleteRef(ctx, opts.Organization, opts.Repo, "refs/tags/"+tagName)
 	return err
 }
+
+func CreateRelease(ctx context.Context, ghcnx *pacgithub.Provider, opts options.E2E, tagName string) (*github.RepositoryRelease, error) {
+	release, _, err := ghcnx.Client().Repositories.CreateRelease(ctx, opts.Organization, opts.Repo, github.CreateReleaseRequest{
+		TagName:    tagName,
+		Name:       new("Release " + tagName),
+		MakeLatest: new("false"),
+	})
+	return release, err
+}
+
+func DeleteRelease(ctx context.Context, ghcnx *pacgithub.Provider, opts options.E2E, releaseID int64) error {
+	_, err := ghcnx.Client().Repositories.DeleteRelease(ctx, opts.Organization, opts.Repo, releaseID)
+	return err
+}
