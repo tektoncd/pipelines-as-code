@@ -57,12 +57,17 @@ func (ac *reconciler) Admit(ctx context.Context, request *v1.AdmissionRequest) *
 			return webhook.MakeErrorStatus("%s", err.Error())
 		}
 
-		allowed, err := ac.canCreatePipelineRuns(ctx, request)
-		if err != nil {
-			return webhook.MakeErrorStatus("validation failed: %v", err)
-		}
-		if !allowed {
-			return webhook.MakeErrorStatus("user %s does not have permission to create PipelineRuns in namespace %s", request.UserInfo.Username, request.Namespace)
+		// Only check PipelineRun create permission on Repository CREATE operations.
+		// UPDATE/DELETE operations don't need this check (e.g., the watcher appending
+		// PipelineRun status to Repository.Status).
+		if request.Operation == v1.Create {
+			allowed, err := ac.canCreatePipelineRuns(ctx, request)
+			if err != nil {
+				return webhook.MakeErrorStatus("validation failed: %v", err)
+			}
+			if !allowed {
+				return webhook.MakeErrorStatus("user %s does not have permission to create PipelineRuns in namespace %s", request.UserInfo.Username, request.Namespace)
+			}
 		}
 	}
 

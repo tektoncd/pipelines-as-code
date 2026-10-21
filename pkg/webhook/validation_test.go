@@ -39,6 +39,7 @@ func TestReconcilerAdmit(t *testing.T) {
 		allowed bool
 		result  string
 		sars    []*authorizationv1.SubjectAccessReview
+		op      v1.Operation
 	}{
 		{
 			name: "allow",
@@ -242,8 +243,33 @@ func TestReconcilerAdmit(t *testing.T) {
 					Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false},
 				},
 			},
+			op:      v1.Create,
 			allowed: false,
 			result:  "user unauthorized-user does not have permission to create PipelineRuns in namespace ns",
+		},
+		{
+			name: "allow update by user without PipelineRun create permission",
+			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
+				Name:             "test-run",
+				InstallNamespace: "ns",
+				URL:              "https://github.com/owner/new-repo",
+			}),
+			sars: []*authorizationv1.SubjectAccessReview{
+				{
+					Spec: authorizationv1.SubjectAccessReviewSpec{
+						User: "pac-watcher",
+						ResourceAttributes: &authorizationv1.ResourceAttributes{
+							Namespace: "ns",
+							Verb:      "create",
+							Group:     pipeline.PipelineRunResource.Group,
+							Resource:  pipeline.PipelineRunResource.Resource,
+						},
+					},
+					Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false},
+				},
+			},
+			op:      v1.Update,
+			allowed: true,
 		},
 		{
 			name: "allow user with PipelineRun create permission",
@@ -266,6 +292,7 @@ func TestReconcilerAdmit(t *testing.T) {
 					Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
 				},
 			},
+			op:      v1.Create,
 			allowed: true,
 		},
 	}
@@ -303,6 +330,7 @@ func TestReconcilerAdmit(t *testing.T) {
 			assert.NilError(t, err)
 			req := &v1.AdmissionRequest{
 				Namespace: tt.repo.GetNamespace(),
+				Operation: tt.op,
 				UserInfo:  authenticationv1.UserInfo{Username: username},
 				Object:    runtime.RawExtension{Raw: userRepo},
 			}
