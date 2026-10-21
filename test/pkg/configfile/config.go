@@ -43,6 +43,9 @@ type GitHubEnterpriseConfig struct {
 	SmeeURL            string `env:"TEST_GITHUB_SECOND_SMEE_URL"             json:"smee_url"             yaml:"smee_url"`
 	WebhookSmeeURL     string `env:"TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL"     json:"webhook_smee_url"     yaml:"webhook_smee_url"`
 	WebhookOrg         string `env:"TEST_GITHUB_SECOND_WEBHOOK_ORG"          json:"webhook_org"          yaml:"webhook_org"`
+	WebhookToken       string `env:"TEST_GITHUB_SECOND_WEBHOOK_TOKEN"        json:"webhook_token"        yaml:"webhook_token"`
+	WebhookSecret      string `env:"TEST_GITHUB_SECOND_WEBHOOK_SECRET"       json:"webhook_secret"       yaml:"webhook_secret"`
+	ApplicationID      string `env:"TEST_GITHUB_SECOND_APPLICATION_ID"       json:"application_id"       yaml:"application_id"`
 }
 
 type GitLabConfig struct {
@@ -67,7 +70,7 @@ type BitbucketCloudConfig struct {
 	APIURL        string `env:"TEST_BITBUCKET_CLOUD_API_URL"        json:"api_url"        yaml:"api_url"`
 	User          string `env:"TEST_BITBUCKET_CLOUD_USER"           json:"user"           yaml:"user"`
 	Token         string `env:"TEST_BITBUCKET_CLOUD_TOKEN"          json:"token"          yaml:"token"`
-	Secret        string `env:"TEST_BITBUCKET_CLOUD_SECRET"         json:"secret"         yaml:"secret"`
+	WebhookSecret string `env:"TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET" json:"webhook_secret" yaml:"webhook_secret"`
 	E2ERepository string `env:"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
 }
 
