@@ -22,6 +22,10 @@ import (
 
 func celEvaluate(ctx context.Context, expr string, event *info.Event, vcx provider.Interface, customParams map[string]string, eventEmitter *events.EventEmitter, repo *apipac.Repository) (ref.Val, error) {
 	eventTitle := event.PullRequestTitle
+	if eventTitle == "" {
+		eventTitle = event.ReleaseName
+	}
+
 	if event.TriggerTarget == triggertype.Push {
 		eventTitle = event.SHATitle
 	}

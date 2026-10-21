@@ -46,6 +46,7 @@ To create the GitHub App manually:
   - Issue comment
   - Pull request
   - Push
+  - Release
 
 {{< callout type="info" >}}
 > You can see a screenshot of how the GitHub App permissions look like [here](https://user-images.githubusercontent.com/98980/124132813-7e53f580-da81-11eb-9eb4-e4f1487cf7a0.png)

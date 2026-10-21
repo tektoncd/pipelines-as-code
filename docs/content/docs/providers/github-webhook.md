@@ -122,6 +122,7 @@ If you prefer to configure the webhook yourself, follow these steps.
     - Issue comments
     - Pull request
     - Pushes
+    - Releases
 
     [Refer to this screenshot](/images/pac-direct-webhook-create.png) to verify you have properly configured the webhook.
 
