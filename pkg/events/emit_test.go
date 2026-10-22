@@ -2,7 +2,9 @@ package events
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
@@ -170,4 +172,57 @@ func TestEventEmitterWithLoggerLeavesOriginalUnchanged(t *testing.T) {
 	assert.Equal(t, "repo-b-run", copiedEntries[0].ContextMap()["pipeline-run"])
 
 	assert.Assert(t, (*EventEmitter)(nil).WithLogger(copiedLogger) == nil)
+}
+
+func TestTruncateEventMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		wantLen int
+		wantCut bool
+	}{
+		{name: "ShortMessageUnchanged", message: "short message", wantLen: 13},
+		{name: "ExactLimitUnchanged", message: strings.Repeat("a", maxEventMessageLen), wantLen: maxEventMessageLen},
+		{name: "LargeMessageCapped", message: strings.Repeat("a", 50*1024), wantLen: maxEventMessageLen, wantCut: true},
+		{name: "MultibyteCutStaysValid", message: strings.Repeat("é", maxEventMessageLen), wantLen: maxEventMessageLen - 1, wantCut: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateEventMessage(tt.message)
+			assert.Equal(t, tt.wantLen, len(got))
+			assert.Assert(t, utf8.ValidString(got))
+			assert.Equal(t, tt.wantCut, strings.HasSuffix(got, eventTruncatedSuffix))
+			if !tt.wantCut {
+				assert.Equal(t, tt.message, got)
+			}
+		})
+	}
+}
+
+func TestEventEmitterTruncatesEventButLogsFullMessage(t *testing.T) {
+	observer, logs := zapobserver.New(zap.InfoLevel)
+	ctx, _ := rtesting.SetupFakeContext(t)
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+	repo := &v1alpha1.Repository{ObjectMeta: metav1.ObjectMeta{Name: "test-repo", Namespace: "test-ns"}}
+	message := "Object 'Kind' is missing in '" + strings.Repeat("x", 50*1024) + "'"
+
+	NewEventEmitter(stdata.Kube, zap.New(observer).Sugar()).EmitMessage(repo, zap.ErrorLevel, "ParseError", message)
+
+	events, err := stdata.Kube.CoreV1().Events(repo.Namespace).List(context.Background(), metav1.ListOptions{})
+	assert.NilError(t, err)
+	assert.Equal(t, 1, len(events.Items))
+	assert.Equal(t, maxEventMessageLen, len(events.Items[0].Message))
+	entries := logs.TakeAll()
+	assert.Equal(t, 1, len(entries))
+	assert.Equal(t, message, entries[0].Message)
+}
+
+func TestTruncateEventMessageKeepsBeginning(t *testing.T) {
+	message := "Object 'Kind' is missing in '" + strings.Repeat("0123456789", 500) + "'"
+
+	got := truncateEventMessage(message)
+
+	head := strings.TrimSuffix(got, eventTruncatedSuffix)
+	assert.Equal(t, maxEventMessageLen-len(eventTruncatedSuffix), len(head))
+	assert.Equal(t, message[:len(head)], head)
 }
