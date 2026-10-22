@@ -1,6 +1,6 @@
 TARGET_NAMESPACE=pipelines-as-code
 GOLANGCI_LINT_VERSION ?= v2.12.2
-GO_TOOLCHAIN ?= go1.25.11
+GO_TOOLCHAIN ?= go1.26.10
 GOFUMPT=gofumpt
 TKN_BINARY_NAME := tkn
 TKN_BINARY_URL := https://tekton.dev/docs/cli/\#installation
