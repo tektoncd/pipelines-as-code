@@ -1,6 +1,6 @@
 module github.com/openshift-pipelines/pipelines-as-code
 
-go 1.27.1
+go 1.27.3
 
 require (
 	cel.dev/cel-go v0.32.0
