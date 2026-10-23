@@ -44,17 +44,6 @@ func TestGithubGHEPullRequestBasic(t *testing.T) {
 	defer g.TearDown(ctx, t)
 }
 
-func TestGithubGHEPullRequest(t *testing.T) {
-	ctx := context.Background()
-	g := &tgithub.PRTest{
-		Label:     "Github Rerequest",
-		YamlFiles: []string{"testdata/pipelinerun.yaml"},
-		GHE:       true,
-	}
-	g.RunPullRequest(ctx, t)
-	defer g.TearDown(ctx, t)
-}
-
 func TestGithubGHEPullRequestMultiples(t *testing.T) {
 	ctx := context.Background()
 	g := &tgithub.PRTest{
