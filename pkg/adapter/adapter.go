@@ -223,10 +223,10 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 
 		isIncoming, targettedRepo, err := l.detectIncoming(ctx, event, request, payload)
 		if err != nil {
-			if errors.Is(err, errMissingFields) {
-				l.writeResponse(response, http.StatusBadRequest, err.Error())
-			}
+			// detectIncoming returns errors only for /incoming requests.
+			// Reject failed incoming requests without further event processing.
 			l.logger.Errorf("error processing incoming webhook: %v", err)
+			l.writeResponse(response, http.StatusBadRequest, "error processing incoming webhook: invalid request")
 			return
 		}
 

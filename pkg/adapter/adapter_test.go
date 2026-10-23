@@ -383,6 +383,12 @@ func TestHandleEventIncomingMissingFields(t *testing.T) {
 			path:       "/incoming",
 			statusCode: http.StatusBadRequest,
 		},
+		{
+			name:       "incoming request repo is not found",
+			method:     http.MethodPost,
+			path:       "/incoming?repository=not-found&branch=main&pipelinerun=plr-1&secret=secret",
+			statusCode: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
