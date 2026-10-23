@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v91/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
 	"gotest.tools/v3/assert"
 )
@@ -14,13 +15,14 @@ import (
 func TestProviderDetect(t *testing.T) {
 	idd := int64(123)
 	tests := []struct {
-		name          string
-		wantErrString string
-		isGH          bool
-		processReq    bool
-		event         any
-		eventType     string
-		wantReason    string
+		name                  string
+		wantErrString         string
+		isGH                  bool
+		processReq            bool
+		event                 any
+		supportEditedComments bool
+		eventType             string
+		wantReason            string
 	}{
 		{
 			name:       "not a github Event",
@@ -268,6 +270,47 @@ func TestProviderDetect(t *testing.T) {
 			processReq: true,
 		},
 		{
+			name: "issue comment Event with edited action",
+			event: github.IssueCommentEvent{
+				Action: new("edited"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						URL: new("url"),
+					},
+					State: new("open"),
+				},
+				Installation: &github.Installation{
+					ID: &idd,
+				},
+				Comment: &github.IssueComment{Body: new("I am edited")},
+			},
+			eventType:             "issue_comment",
+			supportEditedComments: true,
+			isGH:                  true,
+			processReq:            true,
+		},
+		{
+			name: "issue comment Event with edited action and support edited comments is disabled",
+			event: github.IssueCommentEvent{
+				Action: new("edited"),
+				Issue: &github.Issue{
+					PullRequestLinks: &github.PullRequestLinks{
+						URL: new("url"),
+					},
+					State: new("open"),
+				},
+				Installation: &github.Installation{
+					ID: &idd,
+				},
+				Comment: &github.IssueComment{Body: new("I am edited")},
+			},
+			eventType:             "issue_comment",
+			supportEditedComments: false,
+			isGH:                  true,
+			processReq:            false,
+			wantReason:            "issue_comment: unsupported action \"edited\"",
+		},
+		{
 			name: "commit comment event with cancel comment",
 			event: github.CommitCommentEvent{
 				Action: new("created"),
@@ -279,6 +322,33 @@ func TestProviderDetect(t *testing.T) {
 			eventType:  "commit_comment",
 			isGH:       true,
 			processReq: true,
+		},
+		{
+			name: "commit comment Event with edited action",
+			event: github.CommitCommentEvent{
+				Action: new("edited"),
+				Installation: &github.Installation{
+					ID: &idd,
+				},
+			},
+			eventType:             "commit_comment",
+			supportEditedComments: true,
+			isGH:                  true,
+			processReq:            true,
+		},
+		{
+			name: "commit comment Event with edited action and support edited comments is disabled",
+			event: github.CommitCommentEvent{
+				Action: new("edited"),
+				Installation: &github.Installation{
+					ID: &idd,
+				},
+			},
+			eventType:             "commit_comment",
+			supportEditedComments: false,
+			isGH:                  true,
+			processReq:            false,
+			wantReason:            "commit_comment: unsupported action \"edited\"",
 		},
 		{
 			name: "commit comment Event with retest",
@@ -323,7 +393,11 @@ func TestProviderDetect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gprovider := Provider{}
+			gprovider := Provider{
+				pacInfo: &info.PacOpts{
+					SupportEditedComments: tt.supportEditedComments,
+				},
+			}
 			logger, logCatcher := logger.GetLogger()
 			jeez, err := json.Marshal(tt.event)
 			if err != nil {
