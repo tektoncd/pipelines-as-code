@@ -74,3 +74,22 @@ Pipeline execution appears to be unstable due to external factors. Retesting thi
 {{< callout type="info" >}}
 GitOps commands such as `/test` and others do not work on closed pull requests or merge requests.
 {{< /callout >}}
+
+### Edited Comments
+
+{{< tech_preview "Support for edited comments" >}}
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="false" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
+
+By default, Pipelines-as-Code only processes **newly created** comments. If you edit an existing comment to add or change a GitOps command, it is ignored.
+
+When the `support-edited-comments` setting is enabled in the [Pipelines-as-Code ConfigMap]({{< relref "/docs/api/configmap" >}}), edited comments are processed just like new ones. This means you can edit a comment to fix a typo in a command or change a PipelineRun name, and Pipelines-as-Code triggers the updated command.
+
+To enable this feature, set the following in the `pipelines-as-code` ConfigMap:
+
+```yaml
+support-edited-comments: "true"
+```
+
+{{< callout type="warning" >}}
+Enabling edited comment support means that editing any comment on a pull request that contains a GitOps command (such as `/test` or `/retest`) will re-trigger the associated PipelineRuns. Be cautious when editing older comments that contain commands.
+{{< /callout >}}

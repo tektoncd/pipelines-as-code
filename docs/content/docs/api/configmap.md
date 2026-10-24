@@ -399,6 +399,22 @@ require-ok-to-test-sha: "false"
 
 {{< /param >}}
 
+{{< tech_preview "Support for edited comments" >}}
+
+{{< param name="support-edited-comments" type="boolean" default="false" id="param-support-edited-comments" >}}
+
+Enables processing of edited comment events. When enabled, editing a comment that contains a GitOps command (such as `/test` or `/retest`) triggers the command as if it were a new comment. This is useful when you need to fix a typo in a command or change a PipelineRun name without posting a new comment.
+
+When disabled (the default), only newly created comments trigger PipelineRuns. Edited comments are ignored.
+
+Currently supported on GitHub only.
+
+```yaml
+support-edited-comments: "false"
+```
+
+{{< /param >}}
+
 {{< param name="skip-push-event-for-pr-commits" type="boolean" default="true" id="param-skip-push-event-for-pr-commits" >}}
 Prevents duplicate PipelineRuns when a commit appears in both a push event and a pull request. When a push event arrives from a commit that belongs to an open pull request, Pipelines-as-Code skips the push event.
 

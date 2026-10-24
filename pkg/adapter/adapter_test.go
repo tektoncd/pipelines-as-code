@@ -269,7 +269,7 @@ func TestWhichProvider(t *testing.T) {
 				Header: tt.header,
 			}
 
-			_, _, err = l.detectProvider(req, string(jeez))
+			_, _, err = l.detectProvider(req, string(jeez), &info.PacOpts{})
 			if tt.wantErrString != "" {
 				assert.ErrorContains(t, err, tt.wantErrString)
 				return
@@ -359,9 +359,10 @@ func TestDetectProviderAdditionalProviders(t *testing.T) {
 				assert.NilError(t, err)
 				body = string(payload)
 			}
+			pacInfo := &info.PacOpts{}
 
 			req := &http.Request{Header: tt.header}
-			gotProvider, gotLogger, err := l.detectProvider(req, body)
+			gotProvider, gotLogger, err := l.detectProvider(req, body, pacInfo)
 			assert.NilError(t, err)
 			assert.Assert(t, gotProvider != nil)
 			assert.Assert(t, gotLogger != nil)

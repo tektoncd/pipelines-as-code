@@ -233,7 +233,7 @@ func (l listener) handleEvent(ctx context.Context) http.HandlerFunc {
 		if isIncoming {
 			gitProvider, logger, err = l.processIncoming(event, targettedRepo)
 		} else {
-			gitProvider, logger, err = l.detectProvider(request, string(payload))
+			gitProvider, logger, err = l.detectProvider(request, string(payload), &pacInfo)
 		}
 
 		// figure out which provider request coming from
@@ -335,7 +335,7 @@ func (l listener) processRes(processEvent bool, provider provider.Interface, log
 	return nil, logger, fmt.Errorf("skipping non supported event")
 }
 
-func (l listener) detectProvider(req *http.Request, reqBody string) (provider.Interface, *zap.SugaredLogger, error) {
+func (l listener) detectProvider(req *http.Request, reqBody string, pacInfo *info.PacOpts) (provider.Interface, *zap.SugaredLogger, error) {
 	log := *l.logger
 
 	// payload validation
@@ -346,6 +346,7 @@ func (l listener) detectProvider(req *http.Request, reqBody string) (provider.In
 
 	gitHub := github.New()
 	gitHub.Run = l.run
+	gitHub.SetPacInfo(pacInfo)
 	isGH, processReq, logger, reason, err := gitHub.Detect(req, reqBody, &log)
 	if isGH {
 		return l.processRes(processReq, gitHub, logger, reason, err)

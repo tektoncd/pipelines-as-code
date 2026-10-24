@@ -108,6 +108,9 @@ type Settings struct {
 	RememberOKToTest   bool `json:"remember-ok-to-test"`
 	RequireOkToTestSHA bool `json:"require-ok-to-test-sha"`
 
+	// SupportEditedComments enables or disables the feature to support edited comments events.
+	SupportEditedComments bool `default:"false" json:"support-edited-comments"`
+
 	// Retry Git provider API requests on rate limits and transient errors.
 	// Disabled by default.
 	EnableAPIRetry         bool `default:"false" json:"enable-api-retry"`
