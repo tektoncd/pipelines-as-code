@@ -416,9 +416,11 @@ func TestReportBadTektonYaml(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
 			data, err := os.ReadFile("testdata/" + tt.filename + ".yaml")
 			assert.NilError(t, err)
-			types, err := ReadTektonTypes(context.TODO(), nil, string(data))
+			types, err := ReadTektonTypes(context.TODO(), logger, string(data))
 			assert.NilError(t, err)
 
 			// Find the validation error by name
@@ -510,7 +512,9 @@ spec:
         taskSpec:
           invalid-field: "this should cause an error"`
 
-	types, err := ReadTektonTypes(context.TODO(), nil, testYaml)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+	types, err := ReadTektonTypes(context.TODO(), logger, testYaml)
 	assert.NilError(t, err)
 
 	// Each validation error should have the proper structure
@@ -599,7 +603,9 @@ func TestErrorMessageFormat(t *testing.T) {
   - this: should
     cause: [an error`
 
-	types, err := ReadTektonTypes(context.TODO(), nil, testYaml)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(observer).Sugar()
+	types, err := ReadTektonTypes(context.TODO(), logger, testYaml)
 	assert.NilError(t, err)
 
 	// Should have at least one validation error
@@ -793,7 +799,9 @@ func TestV1Beta1ConversionFixturesAreAcceptedByReadTektonTypes(t *testing.T) {
 			data, err := os.ReadFile("testdata/" + tt.filename + ".yaml")
 			assert.NilError(t, err)
 
-			types, err := ReadTektonTypes(context.TODO(), nil, string(data))
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observer).Sugar()
+			types, err := ReadTektonTypes(context.TODO(), logger, string(data))
 			assert.NilError(t, err)
 			assert.Equal(t, len(types.PipelineRuns), tt.pipelineRuns)
 			assert.Equal(t, len(types.Pipelines), tt.pipelines)

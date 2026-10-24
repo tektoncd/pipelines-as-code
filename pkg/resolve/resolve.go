@@ -203,7 +203,7 @@ func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (
 		obj, _, err := decoder.Decode([]byte(doc), nil, nil)
 		if err != nil {
 			dt, dv := detectAtleastNameOrGenerateNameAndSchemaFromPipelineRun(doc)
-			debugf(log, "ReadTektonTypes: decode error for doc name=%s schema=%s err=%v", dt, dv, err)
+			warnf(log, "ReadTektonTypes: decode error for doc name=%s schema=%s err=%v", dt, dv, err)
 			types.ValidationErrors = append(types.ValidationErrors, &pacerrors.PacYamlValidations{
 				Name:   dt,
 				Err:    fmt.Errorf("error decoding yaml document: %w", err),
