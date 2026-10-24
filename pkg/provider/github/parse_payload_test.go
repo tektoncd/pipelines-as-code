@@ -568,6 +568,8 @@ func TestParsePayLoad(t *testing.T) {
 	samplePRNoRepo.Repo = nil
 	samplePrEventClosed := samplePRevent
 	samplePrEventClosed.Action = new("closed")
+	releaseBody := `## Changelog
+- Fixed bug #123`
 
 	sampleGhPRs := []*github.PullRequest{
 		{
@@ -611,6 +613,7 @@ func TestParsePayLoad(t *testing.T) {
 		gitopscommentprefix        string
 		wantRepoCRError            bool
 		wantRequestSet             bool
+		wantedReleaseBody          string
 	}{
 		{
 			name:          "bad/unknown event",
@@ -1833,6 +1836,151 @@ func TestParsePayLoad(t *testing.T) {
 			wantRepoCRError: true,
 			wantErrString:   "no repository found matching URL",
 		},
+		{
+			name:          "bad/release event ghClient initialization failure",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  false,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v1.0.0",
+				},
+			},
+			wantErrString: "cannot initialize GitHub webhook client",
+		},
+		{
+			name:          "bad/release event no matching repo",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v1.0.0",
+				},
+			},
+			wantRepoCRError: true,
+			wantErrString:   "no repository found matching URL",
+		},
+		{
+			name:          "bad/release event nil repo",
+			eventType:     "release",
+			triggerTarget: "pull_request",
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+			},
+			wantErrString: "error parsing payload the repository should not be nil",
+		},
+		{
+			name:          "good/release event with annotated tag",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v1.0.0",
+					Body:    new(releaseBody),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/git/ref/tags/v1.0.0": &github.Reference{
+					Object: &github.GitObject{
+						SHA:  new("tagObjectSHA"),
+						Type: new("tag"),
+					},
+				},
+				"/repos/owner/reponame/git/tags/tagObjectSHA": &github.Tag{
+					Object: &github.GitObject{
+						SHA: new("releaseCommitSHA"),
+					},
+				},
+			},
+			shaRet:           "releaseCommitSHA",
+			objectType:       "tag",
+			wantedSender:     "releaser",
+			wantedUserType:   "User",
+			wantedHeadBranch: "refs/tags/v1.0.0",
+			wantedHeadURL:    "https://github.com/owner/repo",
+			wantedReleaseBody: `|-
+    ## Changelog
+    - Fixed bug #123
+`,
+		},
+		{
+			name:          "good/release event with lightweight tag",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v2.0.0",
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/git/ref/tags/v2.0.0": &github.Reference{
+					Object: &github.GitObject{
+						SHA:  new("lightweightCommitSHA"),
+						Type: new("commit"),
+					},
+				},
+			},
+			shaRet:           "lightweightCommitSHA",
+			objectType:       "commit",
+			wantedSender:     "releaser",
+			wantedUserType:   "User",
+			wantedHeadBranch: "refs/tags/v2.0.0",
+			wantedHeadURL:    "https://github.com/owner/repo",
+		},
+		{
+			name:          "bad/release event with invalid tag object type",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v3.0.0",
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/git/ref/tags/v3.0.0": &github.Reference{
+					Object: &github.GitObject{
+						SHA:  new("blobSHA"),
+						Type: new("blob"),
+					},
+				},
+			},
+			wantErrString: "invalid object type for tag v3.0.0: blob",
+		},
+		{
+			name:          "bad/release event error getting ref",
+			eventType:     "release",
+			triggerTarget: triggertype.Release.String(),
+			githubClient:  true,
+			payloadEventStruct: github.ReleaseEvent{
+				Action: new("released"),
+				Repo:   sampleRepo,
+				Sender: &github.User{Login: new("releaser"), Type: new("User")},
+				Release: &github.RepositoryRelease{
+					TagName: "v404.0.0",
+				},
+			},
+			wantErrString: "error getting ref for tag v404.0.0",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2022,6 +2170,9 @@ func TestParsePayLoad(t *testing.T) {
 				assert.Assert(t, ret.Request != nil, "Request should be set on returned event")
 				assert.Equal(t, ret.Request.Header.Get("X-GitHub-Event"), tt.eventType)
 				assert.Assert(t, len(ret.Request.Payload) > 0, "Payload should be set on returned event")
+			}
+			if tt.wantedReleaseBody != "" {
+				assert.Equal(t, tt.wantedReleaseBody, ret.ReleaseBody)
 			}
 			assert.Equal(t, tt.triggerTarget, string(ret.TriggerTarget))
 		})

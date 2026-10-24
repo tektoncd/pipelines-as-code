@@ -119,6 +119,11 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 		// are allowed to run CI on pushed commits. Therefore, the `ok-to-test` command holds no significance in this context.
 		// However, it is left to be processed by the `on-comment` annotation rather than returning an error.
 		return triggertype.Comment, ""
+	case *github.ReleaseEvent:
+		if event.GetAction() == "released" {
+			return triggertype.Release, ""
+		}
+		return "", fmt.Sprintf("release: unsupported action \"%s\"", event.GetAction())
 	}
 	return "", fmt.Sprintf("github: event \"%v\" is not supported", ghEventType)
 }

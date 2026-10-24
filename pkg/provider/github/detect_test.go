@@ -60,12 +60,10 @@ func TestProviderDetect(t *testing.T) {
 			processReq: true,
 		},
 		{
-			name: "unsupported Event",
-			event: github.CommitCommentEvent{
-				Action: new("something"),
-			},
-			eventType:  "release",
-			wantReason: "event \"release\" is not supported",
+			name:       "unsupported Event",
+			event:      github.WorkflowDispatchEvent{},
+			eventType:  "workflow_dispatch",
+			wantReason: "github: event \"workflow_dispatch\" is not supported",
 			isGH:       true,
 			processReq: false,
 		},
@@ -318,6 +316,24 @@ func TestProviderDetect(t *testing.T) {
 			eventType:  "commit_comment",
 			isGH:       true,
 			processReq: true,
+		},
+		{
+			name: "github release event with released action",
+			event: github.ReleaseEvent{
+				Action: new("released"),
+			},
+			eventType:  "release",
+			isGH:       true,
+			processReq: true,
+		},
+		{
+			name: "github release event with unsupported published action",
+			event: github.ReleaseEvent{
+				Action: new("published"),
+			},
+			eventType:  "release",
+			isGH:       true,
+			processReq: false,
 		},
 	}
 
