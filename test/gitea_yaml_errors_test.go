@@ -33,7 +33,7 @@ func TestGiteaBadYamlReportingOnPR(t *testing.T) {
 	topts.Regexp = regexp.MustCompile(`.*bad-valid | .json: cannot unmarshal array into Go struct field PipelineRunSpec.spec.pipelineSpec of type v1.PipelineSpec.*`)
 	tgitea.WaitForPullRequestCommentMatch(t, topts)
 
-	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+	comments, _, err := topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 	assert.NilError(t, err)
 	assert.Equal(t, len(comments), 1, "should have only one comment")
 
@@ -57,7 +57,7 @@ func TestGiteaBadYamlReportingOnPR(t *testing.T) {
 	entries := map[string]string{".tekton/pr-bad-validation.yaml": processed}
 	_ = scm.PushFilesToRefGit(t, scmOpts, entries)
 
-	comments, _, err = topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+	comments, _, err = topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 	assert.NilError(t, err)
 	assert.Equal(t, len(comments), 1, "should have only one comment")
 }
@@ -71,7 +71,7 @@ func TestGiteaYamlReportingNotReportingNotTektonResources(t *testing.T) {
 
 	_, f := tgitea.TestPR(t, topts)
 	defer f()
-	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+	comments, _, err := topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 	assert.NilError(t, err)
 	assert.Equal(t, len(comments), 0, "should have zero comments")
 }
@@ -151,9 +151,10 @@ func TestGiteaPipelineRunWithSameName(t *testing.T) {
 	// comment was posted (not duplicates from re-triggered no-op comment events).
 	time.Sleep(10 * time.Second)
 
-	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(
+	comments, _, err := topts.GiteaCNX.Client().ListIssueComments(
 		topts.PullRequest.Base.Repository.Owner.UserName,
 		topts.PullRequest.Base.Repository.Name,
+		topts.PullRequest.Index,
 		forgejo.ListIssueCommentOptions{},
 	)
 	assert.NilError(t, err)
