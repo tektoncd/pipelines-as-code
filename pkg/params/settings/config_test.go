@@ -42,6 +42,7 @@ func TestSyncConfig(t *testing.T) {
 				EnableCancelInProgressOnPullRequests: false,
 				EnableCancelInProgressOnPush:         false,
 				SkipPushEventForPRCommits:            true,
+				SupportEditedComments:                false,
 				StatusShowSteps:                      true,
 				CustomConsoleName:                    "",
 				CustomConsoleURL:                     "",
@@ -80,6 +81,7 @@ func TestSyncConfig(t *testing.T) {
 				"custom-console-url-namespace":            "https://custom-console-namespace",
 				"remember-ok-to-test":                     "false",
 				"skip-push-event-for-pr-commits":          "true",
+				"support-edited-comments":                 "false",
 				"require-ok-to-test-sha":                  "true",
 			},
 			expectedStruct: Settings{
@@ -105,6 +107,7 @@ func TestSyncConfig(t *testing.T) {
 				EnableCancelInProgressOnPullRequests: false,
 				EnableCancelInProgressOnPush:         false,
 				SkipPushEventForPRCommits:            true,
+				SupportEditedComments:                false,
 				StatusShowSteps:                      true,
 				CustomConsoleName:                    "custom-console",
 				CustomConsoleURL:                     "https://custom-console",

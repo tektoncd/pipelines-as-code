@@ -237,6 +237,11 @@ data:
   # step of a task using StepActions. Set it to false to only report the tasks.
   status-show-steps: "true"
 
+  # Enable or disable the feature to support edited comments events.
+  # When enabled, edited comments will be processed and PipelineRuns will be triggered on them.
+  # Default: false
+  support-edited-comments: "false"
+
 kind: ConfigMap
 metadata:
   name: pipelines-as-code
