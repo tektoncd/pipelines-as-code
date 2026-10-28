@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-github/scrape"
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
 )
 
 // generateManifest generate manifest from the given options.

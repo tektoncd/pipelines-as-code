@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
 )
 
 // terminationReasonSkipped is set by Tekton on the steps which have not been

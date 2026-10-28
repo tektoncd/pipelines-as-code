@@ -7,14 +7,14 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
 )
 
 var eventTypes = map[string]string{triggertype.PullRequest.String(): "Pull Request", "push": "Push to a Branch or a Tag"}

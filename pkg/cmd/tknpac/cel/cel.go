@@ -13,12 +13,12 @@ import (
 	_ "embed"
 
 	"github.com/chzyer/readline"
-	pkgcel "github.com/openshift-pipelines/pipelines-as-code/pkg/cel"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	"github.com/spf13/cobra"
+	pkgcel "github.com/tektoncd/pipelines-as-code/pkg/cel"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
 	"golang.org/x/term"
 )
 

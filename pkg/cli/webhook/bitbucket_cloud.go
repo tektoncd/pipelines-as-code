@@ -8,10 +8,10 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/ktrysmt/go-bitbucket"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud"
 )
 
 type bitbucketCloudConfig struct {

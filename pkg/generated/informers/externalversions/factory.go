@@ -23,9 +23,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
-	internalinterfaces "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/internalinterfaces"
-	pipelinesascode "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode"
+	versioned "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned"
+	internalinterfaces "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/internalinterfaces"
+	pipelinesascode "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

@@ -21,8 +21,8 @@ package fake
 import (
 	context "context"
 
-	fake "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/factory/fake"
-	repository "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
+	fake "github.com/tektoncd/pipelines-as-code/pkg/generated/injection/informers/factory/fake"
+	repository "github.com/tektoncd/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 )

@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
 	v1 "k8s.io/api/core/v1"

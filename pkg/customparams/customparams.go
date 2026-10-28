@@ -7,16 +7,16 @@ import (
 	celTypes "cel.dev/cel-go/common/types"
 	"go.uber.org/zap"
 
-	apincoming "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/incoming"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	pacCel "github.com/openshift-pipelines/pipelines-as-code/pkg/cel"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	sectypes "github.com/openshift-pipelines/pipelines-as-code/pkg/secrets/types"
+	apincoming "github.com/tektoncd/pipelines-as-code/pkg/apis/incoming"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	pacCel "github.com/tektoncd/pipelines-as-code/pkg/cel"
+	"github.com/tektoncd/pipelines-as-code/pkg/events"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/tektoncd/pipelines-as-code/pkg/opscomments"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	sectypes "github.com/tektoncd/pipelines-as-code/pkg/secrets/types"
 )
 
 type CustomParams struct {

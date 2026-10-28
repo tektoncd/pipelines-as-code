@@ -10,12 +10,12 @@ import (
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"gotest.tools/v3/assert"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 // TestGiteaBadYamlReportingOnPR makes sure that we can catch a bad yaml file

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	pacrepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	pacrepo "github.com/tektoncd/pipelines-as-code/test/pkg/repository"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/secret"
 
 	"github.com/jenkins-x/go-scm/scm"
 	"gotest.tools/v3/assert"

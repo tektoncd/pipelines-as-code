@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
+	tgithub "github.com/tektoncd/pipelines-as-code/test/pkg/github"
 )
 
 func TestGithubGHEWebhookPush(t *testing.T) {

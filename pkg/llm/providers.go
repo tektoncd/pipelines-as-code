@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/tektoncd/pipelines-as-code/pkg/secrets/types"
 )
 
 // ProviderConfig is the unified configuration passed to every provider constructor.

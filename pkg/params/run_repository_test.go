@@ -3,16 +3,16 @@ package params
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	testnewrepo "github.com/tektoncd/pipelines-as-code/pkg/test/repository"
 	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 )
 
 func TestGetRepository(t *testing.T) {

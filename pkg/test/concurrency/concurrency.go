@@ -3,11 +3,11 @@ package concurrency
 import (
 	"context"
 
-	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	pacVersionedClient "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	tektonVersionedClient "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	pacv1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	pacVersionedClient "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned"
+	"github.com/tektoncd/pipelines-as-code/pkg/queue"
 )
 
 type TestQMI struct {

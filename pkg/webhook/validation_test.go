@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	testnewrepo "github.com/tektoncd/pipelines-as-code/pkg/test/repository"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
 	v1 "k8s.io/api/admission/v1"
@@ -49,7 +49,7 @@ func TestReconcilerAdmit(t *testing.T) {
 			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
 				Name:             "test-run",
 				InstallNamespace: "namespace",
-				URL:              "https://github.com/openshift-pipelines/pipelines-as-code",
+				URL:              "https://github.com/tektoncd/pipelines-as-code",
 			}),
 			allowed: true,
 			result:  "",
@@ -88,20 +88,20 @@ func TestReconcilerAdmit(t *testing.T) {
 			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
 				Name:             "test-run",
 				InstallNamespace: "namespace",
-				URL:              "h t t p s://github.com/openshift-pipelines/pipelines-as-code", // nolint: dupword
+				URL:              "h t t p s://github.com/tektoncd/pipelines-as-code", // nolint: dupword
 			}),
 			allowed: false,
-			result:  `invalid URL format: parse "h t t p s://github.com/openshift-pipelines/pipelines-as-code": first path segment in URL cannot contain colon`, // nolint: dupword
+			result:  `invalid URL format: parse "h t t p s://github.com/tektoncd/pipelines-as-code": first path segment in URL cannot contain colon`, // nolint: dupword
 		},
 		{
 			name: "bad url for global namespace allowed",
 			repo: testnewrepo.NewRepo(testnewrepo.RepoTestcreationOpts{
 				Name:             "test-run",
 				InstallNamespace: globalNamespace,
-				URL:              "h t t p s://github.com/openshift-pipelines/pipelines-as-code", // nolint: dupword
+				URL:              "h t t p s://github.com/tektoncd/pipelines-as-code", // nolint: dupword
 			}),
 			allowed: true,
-			result:  `invalid URL format: parse "h t t p s://github.com/openshift-pipelines/pipelines-as-code": first path segment in URL cannot contain colon`, // nolint: dupword
+			result:  `invalid URL format: parse "h t t p s://github.com/tektoncd/pipelines-as-code": first path segment in URL cannot contain colon`, // nolint: dupword
 		},
 		{
 			name: "reject",

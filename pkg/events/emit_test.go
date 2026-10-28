@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	zapobserver "go.uber.org/zap/zaptest/observer"

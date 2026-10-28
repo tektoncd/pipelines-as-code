@@ -9,9 +9,9 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/gobwas/glob"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
 )
 
 var help = `

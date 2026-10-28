@@ -14,10 +14,10 @@ import (
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 func TestGiteaPullRequestTaskAnnotations(t *testing.T) {

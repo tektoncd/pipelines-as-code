@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
-	kitesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/llm"
+	kitesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/kubernetestint"
 	"gotest.tools/v3/assert"
 
 	// These blank imports exercise the real init() registration path.
-	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/gemini"
-	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/openai"
+	_ "github.com/tektoncd/pipelines-as-code/pkg/llm/providers/gemini"
+	_ "github.com/tektoncd/pipelines-as-code/pkg/llm/providers/openai"
 )
 
 func TestProviderRegistration(t *testing.T) {

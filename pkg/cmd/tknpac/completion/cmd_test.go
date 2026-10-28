@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/test/cli"
 	"gotest.tools/v3/assert"
 )
 

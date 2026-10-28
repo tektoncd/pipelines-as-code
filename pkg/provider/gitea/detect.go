@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/forgejostructs"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/gitea/forgejostructs"
 	"go.uber.org/zap"
 )
 

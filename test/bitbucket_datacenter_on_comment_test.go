@@ -9,12 +9,12 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tbbdc "github.com/openshift-pipelines/pipelines-as-code/test/pkg/bitbucketdatacenter"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tbbdc "github.com/tektoncd/pipelines-as-code/test/pkg/bitbucketdatacenter"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 
 	"github.com/jenkins-x/go-scm/scm"
 	"github.com/tektoncd/pipeline/pkg/names"

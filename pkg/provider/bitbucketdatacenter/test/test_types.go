@@ -1,6 +1,6 @@
 package test
 
-import "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+import "github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 
 type ProjGroup struct {
 	Group      Group  `json:"group"`

@@ -8,7 +8,7 @@ import (
 	"net/url"
 
 	"github.com/jenkins-x/go-scm/scm"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 )
 
 // getMergeCommitChanges gets the changes between two commits for a merge commit.

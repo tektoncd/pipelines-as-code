@@ -3,8 +3,8 @@ package params
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

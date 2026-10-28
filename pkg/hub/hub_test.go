@@ -19,9 +19,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
 	"gotest.tools/v3/assert"
 )
 

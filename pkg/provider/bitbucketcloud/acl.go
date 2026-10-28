@@ -7,9 +7,9 @@ import (
 
 	"github.com/ktrysmt/go-bitbucket"
 	"github.com/mitchellh/mapstructure"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/acl"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/acl"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/types"
 )
 
 func (v *Provider) IsAllowed(ctx context.Context, event *info.Event) (bool, error) {

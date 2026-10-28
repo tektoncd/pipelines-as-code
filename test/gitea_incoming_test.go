@@ -14,14 +14,14 @@ import (
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	tlogs "github.com/openshift-pipelines/pipelines-as-code/test/pkg/podlogs"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	tlogs "github.com/tektoncd/pipelines-as-code/test/pkg/podlogs"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/secret"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 const (

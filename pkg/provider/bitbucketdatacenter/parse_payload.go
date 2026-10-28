@@ -8,12 +8,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/opscomments"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 )
 
 // checkValidPayload checks if the payload is valid.

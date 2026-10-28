@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	tlogs "github.com/openshift-pipelines/pipelines-as-code/test/pkg/podlogs"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	tlogs "github.com/tektoncd/pipelines-as-code/test/pkg/podlogs"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 )

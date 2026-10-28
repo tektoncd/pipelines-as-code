@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/configfile"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/configfile"
 )
 
 func TestMain(m *testing.M) {

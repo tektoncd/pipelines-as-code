@@ -45,7 +45,7 @@ spec:
       serviceAccountName: pipelines-as-code-controller
       containers:
         - name: pac-controller
-          image: "ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-controller"
+          image: "ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-controller"
           imagePullPolicy: Always
           ports:
             - name: api

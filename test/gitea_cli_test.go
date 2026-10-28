@@ -14,17 +14,17 @@ import (
 	"gotest.tools/v3/env"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	pacapi "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	tknpacdelete "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/deleterepo"
-	tknpacdesc "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/describe"
-	tknpacgenerate "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/generate"
-	tknpaclist "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/listcmd"
-	tknpacresolve "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/resolve"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	tknpactest "github.com/openshift-pipelines/pipelines-as-code/test/pkg/cli"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
+	pacapi "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	tknpacdelete "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/deleterepo"
+	tknpacdesc "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/describe"
+	tknpacgenerate "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/generate"
+	tknpaclist "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/listcmd"
+	tknpacresolve "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/resolve"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	tknpactest "github.com/tektoncd/pipelines-as-code/test/pkg/cli"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
 )
 
 func TestGiteaWithCLI(t *testing.T) {

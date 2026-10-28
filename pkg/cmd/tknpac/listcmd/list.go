@@ -9,12 +9,12 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/ansiterm"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/status"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/completion"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/completion"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

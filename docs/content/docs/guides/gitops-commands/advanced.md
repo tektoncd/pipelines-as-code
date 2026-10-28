@@ -44,7 +44,7 @@ This ensures the comment is correctly formatted when processed.
 
 **When to use it:** You want to go beyond the built-in `/test`, `/retest`, and `/cancel` commands and create domain-specific commands for your workflow. See the [on-comment]({{< relref "/docs/guides/event-matching/comment-and-label" >}}) guide for full details.
 
-For a practical example, see the [pac-boussole](https://github.com/openshift-pipelines/pac-boussole) project, which uses the `on-comment` annotation to create a PipelineRun experience similar to [Prow](https://docs.prow.k8s.io/).
+For a practical example, see the [pac-boussole](https://github.com/tektoncd/pac-boussole) project, which uses the `on-comment` annotation to create a PipelineRun experience similar to [Prow](https://docs.prow.k8s.io/).
 
 ## GitOps Command Prefix
 

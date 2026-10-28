@@ -21,9 +21,9 @@ package fake
 import (
 	context "context"
 
-	externalversions "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions"
-	fake "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/client/fake"
-	factory "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/factory"
+	externalversions "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions"
+	fake "github.com/tektoncd/pipelines-as-code/pkg/generated/injection/client/fake"
+	factory "github.com/tektoncd/pipelines-as-code/pkg/generated/injection/informers/factory"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 )

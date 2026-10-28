@@ -75,7 +75,7 @@ jobs:
       # GitHub (Public)
       TEST_GITHUB_API_URL: api.github.com
       TEST_GITHUB_PRIVATE_TASK_NAME: task-remote
-      TEST_GITHUB_PRIVATE_TASK_URL: https://github.com/openshift-pipelines/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml
+      TEST_GITHUB_PRIVATE_TASK_URL: https://github.com/tektoncd/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml
       TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
       TEST_GITHUB_REPO_OWNER_GITHUBAPP: openshift-pipelines/pipelines-as-code-e2e-tests
       TEST_GITHUB_REPO_OWNER_WEBHOOK: openshift-pipelines/pipelines-as-code-e2e-tests-webhook
@@ -264,7 +264,7 @@ jobs:
           APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
           TEST_GITHUB_API_URL: api.github.com
           TEST_GITHUB_PRIVATE_TASK_NAME: task-remote
-          TEST_GITHUB_PRIVATE_TASK_URL: https://github.com/openshift-pipelines/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml
+          TEST_GITHUB_PRIVATE_TASK_URL: https://github.com/tektoncd/pipelines-as-code-e2e-tests-private/blob/main/remote_task.yaml
           TEST_GITHUB_REPO_INSTALLATION_ID: ${{ vars.INSTALLATION_ID }}
           TEST_GITHUB_REPO_OWNER_GITHUBAPP: openshift-pipelines/pipelines-as-code-e2e-tests
           TEST_GITHUB_REPO_OWNER_WEBHOOK: openshift-pipelines/pipelines-as-code-e2e-tests-webhook

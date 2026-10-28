@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/test/logger"
 	"gotest.tools/v3/assert"
 )
 

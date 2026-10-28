@@ -1,22 +1,22 @@
 package tknpac
 
 import (
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/bootstrap"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/cel"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/completion"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/create"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/deleterepo"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/describe"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/generate"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/info"
-	list "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/listcmd"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/logs"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/resolve"
-	versioncmd "github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/versioncmd"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/webhook"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/bootstrap"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/cel"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/completion"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/create"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/deleterepo"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/describe"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/generate"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/info"
+	list "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/listcmd"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/logs"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/resolve"
+	versioncmd "github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/versioncmd"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/webhook"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 )
 
 func Root(clients *params.Run) *cobra.Command {

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	validationWebhook "github.com/openshift-pipelines/pipelines-as-code/pkg/webhook"
+	validationWebhook "github.com/tektoncd/pipelines-as-code/pkg/webhook"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection"

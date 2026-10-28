@@ -1,4 +1,4 @@
-module github.com/openshift-pipelines/pipelines-as-code
+module github.com/tektoncd/pipelines-as-code
 
 go 1.27.3
 

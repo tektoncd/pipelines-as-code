@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/changedfiles"
+	"github.com/tektoncd/pipelines-as-code/pkg/events"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	providerstatus "github.com/tektoncd/pipelines-as-code/pkg/provider/status"
 	"go.uber.org/zap"
 )
 

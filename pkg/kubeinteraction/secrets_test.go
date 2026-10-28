@@ -3,10 +3,10 @@ package kubeinteraction
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"

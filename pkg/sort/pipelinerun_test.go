@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	tektontest "github.com/tektoncd/pipelines-as-code/pkg/test/tekton"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"

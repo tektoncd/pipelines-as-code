@@ -11,9 +11,9 @@ import (
 	"github.com/google/go-github/v91/github"
 	"gotest.tools/v3/assert"
 
-	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
-	tstatus "github.com/openshift-pipelines/pipelines-as-code/test/pkg/status"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	tgithub "github.com/tektoncd/pipelines-as-code/test/pkg/github"
+	tstatus "github.com/tektoncd/pipelines-as-code/test/pkg/status"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 // TestGithubGHEStatusStepBreakdown checks the step breakdown shown in the check

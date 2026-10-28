@@ -8,9 +8,9 @@ import (
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/random"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/random"
 )
 
 type forgejoConfig struct {

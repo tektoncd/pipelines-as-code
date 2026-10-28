@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/fs"
 )

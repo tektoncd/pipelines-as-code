@@ -3,8 +3,8 @@ package secret
 import (
 	"context"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

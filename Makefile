@@ -32,7 +32,7 @@ MD_YAML_PATTERNS := '*.md' '*.yml' '*.yaml' ':!docs/themes/*' ':!.vale/*' ':!ven
 ifeq ($(PAC_VERSION),)
 	PAC_VERSION="$(shell git describe --tags --exact-match 2>/dev/null || echo nightly-`date +'%Y%m%d'`-`git rev-parse --short HEAD`)"
 endif
-FLAGS += -ldflags "-X github.com/openshift-pipelines/pipelines-as-code/pkg/params/version.Version=$(PAC_VERSION) $(LDFLAGS) -X github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings.TknBinaryName=$(TKN_BINARY_NAME) -X github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings.TknBinaryURL=$(TKN_BINARY_URL)"
+FLAGS += -ldflags "-X github.com/tektoncd/pipelines-as-code/pkg/params/version.Version=$(PAC_VERSION) $(LDFLAGS) -X github.com/tektoncd/pipelines-as-code/pkg/params/settings.TknBinaryName=$(TKN_BINARY_NAME) -X github.com/tektoncd/pipelines-as-code/pkg/params/settings.TknBinaryURL=$(TKN_BINARY_URL)"
 
 
 ##@ General
@@ -111,7 +111,7 @@ NILAWAY_VERSION = v0.0.0-20260720194628-9fd1b8d7bac8
 lint-nilaway: ## runs nilaway nil-flow analysis on production code
 	@echo "Linting go files with nilaway..."
 	@GOFLAGS=-mod=readonly $(GO) run go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VERSION) \
-							-include-pkgs=github.com/openshift-pipelines/pipelines-as-code \
+							-include-pkgs=github.com/tektoncd/pipelines-as-code \
 							-exclude-test-files \
 							./pkg/... ./cmd/...
 

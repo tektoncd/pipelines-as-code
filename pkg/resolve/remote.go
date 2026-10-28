@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/matcher"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/matcher"
 )
 
 type NamedItem interface {

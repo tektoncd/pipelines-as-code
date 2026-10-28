@@ -11,10 +11,10 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 func TestGiteaOnPathChange(t *testing.T) {

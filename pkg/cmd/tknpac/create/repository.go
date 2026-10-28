@@ -9,18 +9,18 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	pacInfo "github.com/openshift-pipelines/pipelines-as-code/pkg/cli/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/webhook"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/bootstrap"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/generate"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/spf13/cobra"
+	apipac "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	pacInfo "github.com/tektoncd/pipelines-as-code/pkg/cli/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/webhook"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/bootstrap"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/generate"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -153,10 +153,10 @@ func (r *RepoOptions) Create(ctx context.Context) (string, string, error) {
 	return repoName, repoNamespace, err
 }
 
-// checkSystemNamespace errors for openshift-pipelines, tekton-pipelines, openshift and openshift-* namespaces;
+// checkSystemNamespace errors for tektoncd, tekton-pipelines, openshift and openshift-* namespaces;
 // gives warnings, but allows, kube-* and tekton-* prefixed namespaces.
 func checkSystemNamespace(ns string, opts *RepoOptions) error {
-	if ns == "openshift-pipelines" || ns == "tekton-pipelines" || ns == "openshift" {
+	if ns == "tektoncd" || ns == "tekton-pipelines" || ns == "openshift" {
 		return fmt.Errorf("namespace %s is not supported as a target for repositories", ns)
 	}
 	if strings.HasPrefix(ns, "openshift-") {

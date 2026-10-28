@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/acl"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/acl"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 

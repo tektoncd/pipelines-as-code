@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"testing"
 
-	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	apipac "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/fs"
 )

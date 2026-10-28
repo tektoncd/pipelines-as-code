@@ -13,16 +13,16 @@ import (
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	pacrepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/cctx"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	pacrepo "github.com/tektoncd/pipelines-as-code/test/pkg/repository"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 )
 
 // TestGiteaProvenanceForDefaultBranch tests the provenance feature of the PipelineRun.

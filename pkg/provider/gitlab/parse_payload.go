@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/matcher"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/tektoncd/pipelines-as-code/pkg/matcher"
+	"github.com/tektoncd/pipelines-as-code/pkg/opscomments"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/secrets"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )

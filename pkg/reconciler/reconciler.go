@@ -17,25 +17,25 @@ import (
 	pkgreconciler "knative.dev/pkg/reconciler"
 	"knative.dev/pkg/system"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/action"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/customparams"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	pacapi "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
-	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/gemini" // register Gemini provider via init
-	_ "github.com/openshift-pipelines/pipelines-as-code/pkg/llm/providers/openai" // register OpenAI provider via init
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
-	queuepkg "github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
+	"github.com/tektoncd/pipelines-as-code/pkg/action"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/customparams"
+	"github.com/tektoncd/pipelines-as-code/pkg/events"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	pacapi "github.com/tektoncd/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/tektoncd/pipelines-as-code/pkg/llm"
+	_ "github.com/tektoncd/pipelines-as-code/pkg/llm/providers/gemini" // register Gemini provider via init
+	_ "github.com/tektoncd/pipelines-as-code/pkg/llm/providers/openai" // register OpenAI provider via init
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	prmetrics "github.com/tektoncd/pipelines-as-code/pkg/pipelinerunmetrics"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	providerstatus "github.com/tektoncd/pipelines-as-code/pkg/provider/status"
+	queuepkg "github.com/tektoncd/pipelines-as-code/pkg/queue"
+	"github.com/tektoncd/pipelines-as-code/pkg/secrets"
 )
 
 // Reconciler implements controller.Reconciler for PipelineRun resources.

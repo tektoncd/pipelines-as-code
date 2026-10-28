@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
-	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/cctx"
+	tgithub "github.com/tektoncd/pipelines-as-code/test/pkg/github"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 )
 

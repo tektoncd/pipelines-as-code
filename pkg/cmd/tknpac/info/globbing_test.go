@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tknpactest "github.com/openshift-pipelines/pipelines-as-code/test/pkg/cli"
+	tknpactest "github.com/tektoncd/pipelines-as-code/test/pkg/cli"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/fs"
 	"gotest.tools/v3/golden"

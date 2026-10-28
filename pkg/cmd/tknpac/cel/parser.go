@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/forgejostructs"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/gitea/forgejostructs"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 )
 

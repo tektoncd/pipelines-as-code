@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )

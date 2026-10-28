@@ -21,7 +21,7 @@ package versioned
 import (
 	"fmt"
 
-	pipelinesascodev1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1"
+	pipelinesascodev1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

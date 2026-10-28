@@ -3,9 +3,9 @@ package customparams
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	testprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	testprovider "github.com/tektoncd/pipelines-as-code/pkg/test/provider"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	rectesting "knative.dev/pkg/reconciler/testing"

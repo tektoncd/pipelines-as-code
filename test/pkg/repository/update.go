@@ -5,7 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
 )
 
 func UpdateRepo(ctx context.Context, repoName, targetNs string, clients clients.Clients) error {

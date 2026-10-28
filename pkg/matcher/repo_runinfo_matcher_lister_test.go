@@ -3,12 +3,12 @@ package matcher
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	testnewrepo "github.com/tektoncd/pipelines-as-code/pkg/test/repository"
 	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"

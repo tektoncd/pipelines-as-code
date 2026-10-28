@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/test"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	tgitea "github.com/tektoncd/pipelines-as-code/pkg/provider/gitea/test"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"

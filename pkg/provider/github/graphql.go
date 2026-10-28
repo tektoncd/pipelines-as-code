@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/retryhttp"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	providerMetrics "github.com/tektoncd/pipelines-as-code/pkg/provider/providermetrics"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/retryhttp"
 	"go.uber.org/zap"
 )
 

@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitlab "github.com/tektoncd/pipelines-as-code/test/pkg/gitlab"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

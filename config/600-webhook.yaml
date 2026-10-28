@@ -44,7 +44,7 @@ spec:
       serviceAccountName: pipelines-as-code-webhook
       containers:
         - name: pac-webhook
-          image: "ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-webhook"
+          image: "ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-webhook"
           env:
             - name: CONFIG_LOGGING_NAME
               value: pac-config-logging

@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	bbv1test "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	bbv1test "github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 
 	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"

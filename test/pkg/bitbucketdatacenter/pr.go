@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
 
 	goscm "github.com/jenkins-x/go-scm/scm"
 	"gotest.tools/v3/assert"

@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/acl"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/policy"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/acl"
+	"github.com/tektoncd/pipelines-as-code/pkg/opscomments"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/policy"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
 )
 
 // CheckPolicyAllowing check that policy is allowing the event to be processed

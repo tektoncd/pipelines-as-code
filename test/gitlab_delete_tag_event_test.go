@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"testing"
 
-	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"github.com/tektoncd/pipeline/pkg/names"
+	tgitlab "github.com/tektoncd/pipelines-as-code/test/pkg/gitlab"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 )
 

@@ -1,8 +1,8 @@
 package providermetrics
 
 import (
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	prmetrics "github.com/tektoncd/pipelines-as-code/pkg/pipelinerunmetrics"
 	"go.uber.org/zap"
 )
 

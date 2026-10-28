@@ -18,4 +18,4 @@ limitations under the License.
 // +groupName=pipelinesascode.tekton.dev
 
 // Package v1alpha1 is the v1alpha1 version of the API.
-package v1alpha1 // import "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+package v1alpha1 // import "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"

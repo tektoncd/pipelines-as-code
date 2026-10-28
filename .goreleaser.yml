@@ -24,7 +24,7 @@ builds:
     ldflags:
       - -w
       - -s
-      - -X github.com/openshift-pipelines/pipelines-as-code/pkg/params/version.Version={{.Version}}
+      - -X github.com/tektoncd/pipelines-as-code/pkg/params/version.Version={{.Version}}
 archives:
   - name_template: >-
       {{ .Binary }}_

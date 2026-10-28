@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/types"
 	"go.uber.org/zap"
 )
 

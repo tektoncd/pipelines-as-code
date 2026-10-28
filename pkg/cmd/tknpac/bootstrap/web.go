@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/browser"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/browser"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
 )
 
 // startWebServer starts a webserver that will redirect the user to the github app creation page.

@@ -5,10 +5,10 @@ package test
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitlab "github.com/tektoncd/pipelines-as-code/test/pkg/gitlab"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 )

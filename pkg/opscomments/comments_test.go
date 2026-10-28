@@ -9,12 +9,12 @@ import (
 	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/events"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	testnewrepo "github.com/openshift-pipelines/pipelines-as-code/pkg/test/repository"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/events"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	testnewrepo "github.com/tektoncd/pipelines-as-code/pkg/test/repository"
 )
 
 const (

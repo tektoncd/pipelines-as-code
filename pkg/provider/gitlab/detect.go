@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"go.uber.org/zap"
 )

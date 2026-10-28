@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/jenkins-x/go-scm/scm"
-	bbtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
-	bbtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
+	bbtest "github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
+	bbtypes "github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )

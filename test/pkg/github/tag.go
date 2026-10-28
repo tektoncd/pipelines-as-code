@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	pacgithub "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	pacgithub "github.com/tektoncd/pipelines-as-code/pkg/provider/github"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
 	"gotest.tools/v3/assert"
 )
 

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/versiondata"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/versiondata"
 )
 
 func Command(ioStreams *cli.IOStreams) *cobra.Command {

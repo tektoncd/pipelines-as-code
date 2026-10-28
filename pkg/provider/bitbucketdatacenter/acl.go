@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/acl"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/acl"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 
 	"github.com/jenkins-x/go-scm/scm"
 )

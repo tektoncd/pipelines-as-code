@@ -1,8 +1,8 @@
 package formatting
 
 import (
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/status"
 	corev1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/apis"
 )

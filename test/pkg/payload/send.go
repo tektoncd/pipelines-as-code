@@ -17,7 +17,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 )
 
 func Send(ctx context.Context, cs *params.Run, elURL, elWebHookSecret, githubURL, installationID string, event any, eventType string) error {

@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	ghprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/options"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	ghprovider "github.com/tektoncd/pipelines-as-code/pkg/provider/github"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/options"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/repository"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/secret"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

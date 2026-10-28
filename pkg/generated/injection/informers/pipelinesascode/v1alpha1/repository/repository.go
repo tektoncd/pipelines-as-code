@@ -21,8 +21,8 @@ package repository
 import (
 	context "context"
 
-	v1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1"
-	factory "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/factory"
+	v1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1"
+	factory "github.com/tektoncd/pipelines-as-code/pkg/generated/injection/informers/factory"
 	controller "knative.dev/pkg/controller"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
@@ -46,7 +46,7 @@ func Get(ctx context.Context) v1alpha1.RepositoryInformer {
 	untyped := ctx.Value(Key{})
 	if untyped == nil {
 		logging.FromContext(ctx).Panic(
-			"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1.RepositoryInformer from context.",
+			"Unable to fetch github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1.RepositoryInformer from context.",
 		)
 	}
 	return untyped.(v1alpha1.RepositoryInformer)

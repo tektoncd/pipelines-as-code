@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
 )
 
 // NewIOStream return a fake iostreams.

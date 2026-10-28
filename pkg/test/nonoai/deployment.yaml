@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: server
-          image: "ko://github.com/openshift-pipelines/pipelines-as-code/pkg/test/nonoai"
+          image: "ko://github.com/tektoncd/pipelines-as-code/pkg/test/nonoai"
           ports:
             - containerPort: 8765
 ---

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	thelp "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitlab/test"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	thelp "github.com/tektoncd/pipelines-as-code/pkg/provider/gitlab/test"
 	"gotest.tools/v3/assert"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )

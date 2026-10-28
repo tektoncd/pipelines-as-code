@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
+	"github.com/tektoncd/pipelines-as-code/pkg/secrets"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

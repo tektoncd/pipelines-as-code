@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	giteatest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/test"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	giteatest "github.com/tektoncd/pipelines-as-code/pkg/provider/gitea/test"
 	"gotest.tools/v3/assert"
 )
 

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
 )
 
 func TestGiteaCreateContainerConfigErrorSnippet(t *testing.T) {

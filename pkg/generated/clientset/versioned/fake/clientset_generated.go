@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
-	clientset "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
-	pipelinesascodev1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1"
-	fakepipelinesascodev1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1/fake"
+	clientset "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned"
+	pipelinesascodev1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1"
+	fakepipelinesascodev1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned/typed/pipelinesascode/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

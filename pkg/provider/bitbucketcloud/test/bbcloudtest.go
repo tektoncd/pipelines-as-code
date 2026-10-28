@@ -12,11 +12,11 @@ import (
 	"testing"
 
 	"github.com/ktrysmt/go-bitbucket"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/status"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"
 )

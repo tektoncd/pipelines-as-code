@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
 	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/env"

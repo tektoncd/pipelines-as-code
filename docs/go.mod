@@ -1,4 +1,4 @@
-module github.com/openshift-pipelines/pipelines-as-code/docs
+module github.com/tektoncd/pipelines-as-code/docs
 
 go 1.26
 

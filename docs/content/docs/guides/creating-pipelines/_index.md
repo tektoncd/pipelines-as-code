@@ -35,7 +35,7 @@ The following table lists all available dynamic variables. The most commonly use
 | pull_request_number | The pull request or merge request number. Only defined for a `pull_request` event or a push event that occurs when a pull request is merged. | `{{pull_request_number}}` | 1 |
 | repo_name | The repository name. | `{{repo_name}}` | pipelines-as-code |
 | repo_owner | The repository owner on the Git provider. For providers with owner hierarchies (for example, GitLab orgs, namespaces, groups, and subgroups), this contains the full ownership slug. | `{{repo_owner}}` | openshift-pipelines |
-| repo_url | The full repository URL. | `{{repo_url}}` | <https://github.com/openshift-pipelines/pipelines-as-code> |
+| repo_url | The full repository URL. | `{{repo_url}}` | <https://github.com/tektoncd/pipelines-as-code> |
 | revision | The full SHA of the commit. | `{{revision}}` | 1234567890abcdef |
 | sender | The username (or account ID on some providers) of the user who triggered the commit. | `{{sender}}` | johndoe |
 | source_branch | The branch name where the event originates. | `{{source_branch}}` | main |

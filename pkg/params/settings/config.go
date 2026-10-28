@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/configutil"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/vcshost"
+	"github.com/tektoncd/pipelines-as-code/pkg/configutil"
+	"github.com/tektoncd/pipelines-as-code/pkg/vcshost"
 	"go.uber.org/zap"
 )
 

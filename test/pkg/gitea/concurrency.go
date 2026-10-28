@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

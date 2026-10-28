@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	kitesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	kitesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/kubernetestint"
 	"gotest.tools/v3/assert"
 )
 

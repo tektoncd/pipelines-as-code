@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 )
 
 // PacOptsWithAPIRetry returns the default PAC options with API retries enabled.

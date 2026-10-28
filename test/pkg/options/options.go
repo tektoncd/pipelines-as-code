@@ -1,6 +1,6 @@
 package options
 
-import "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+import "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 
 type E2E struct {
 	Repo, Organization string

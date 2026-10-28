@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/queue"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/reconciler"
+	"github.com/tektoncd/pipelines-as-code/pkg/queue"
+	"github.com/tektoncd/pipelines-as-code/pkg/reconciler"
 	"k8s.io/client-go/rest"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"

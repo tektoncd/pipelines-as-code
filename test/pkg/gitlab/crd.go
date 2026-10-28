@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	pacrepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	pacrepo "github.com/tektoncd/pipelines-as-code/test/pkg/repository"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/secret"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

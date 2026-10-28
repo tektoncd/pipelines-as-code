@@ -21,7 +21,7 @@ package client
 import (
 	context "context"
 
-	versioned "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
+	versioned "github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned"
 	rest "k8s.io/client-go/rest"
 	injection "knative.dev/pkg/injection"
 	logging "knative.dev/pkg/logging"
@@ -44,11 +44,11 @@ func Get(ctx context.Context) versioned.Interface {
 	if untyped == nil {
 		if injection.GetConfig(ctx) == nil {
 			logging.FromContext(ctx).Panic(
-				"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned.Interface from context. This context is not the application context (which is typically given to constructors via sharedmain).",
+				"Unable to fetch github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned.Interface from context. This context is not the application context (which is typically given to constructors via sharedmain).",
 			)
 		} else {
 			logging.FromContext(ctx).Panic(
-				"Unable to fetch github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned.Interface from context.",
+				"Unable to fetch github.com/tektoncd/pipelines-as-code/pkg/generated/clientset/versioned.Interface from context.",
 			)
 		}
 	}

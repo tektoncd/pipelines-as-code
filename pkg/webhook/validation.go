@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	pac "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	pac "github.com/tektoncd/pipelines-as-code/pkg/generated/listers/pipelinesascode/v1alpha1"
 	v1 "k8s.io/api/admission/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

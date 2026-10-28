@@ -22,16 +22,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	ghtesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/github"
+	"github.com/tektoncd/pipelines-as-code/pkg/test/logger"
 )
 
 // script kiddies, don't get too excited, this has been randomly generated with random words.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	ktypes "github.com/openshift-pipelines/pipelines-as-code/pkg/secrets/types"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	ktypes "github.com/tektoncd/pipelines-as-code/pkg/secrets/types"
 )
 
 const leakedReplacement = "*****"

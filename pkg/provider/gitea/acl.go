@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/acl"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/policy"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/gitea/forgejostructs"
+	"github.com/tektoncd/pipelines-as-code/pkg/acl"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/policy"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/gitea/forgejostructs"
 )
 
 func (v *Provider) CheckPolicyAllowing(_ context.Context, event *info.Event, allowedTeams []string) (bool, string) {

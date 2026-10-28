@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 )
 
 func main() {

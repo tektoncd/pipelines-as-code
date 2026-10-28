@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/completion"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/completion"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

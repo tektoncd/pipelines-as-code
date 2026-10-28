@@ -8,11 +8,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tbbs "github.com/openshift-pipelines/pipelines-as-code/test/pkg/bitbucketdatacenter"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tbbs "github.com/tektoncd/pipelines-as-code/test/pkg/bitbucketdatacenter"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 
 	"github.com/tektoncd/pipeline/pkg/names"
 	"gotest.tools/v3/assert"

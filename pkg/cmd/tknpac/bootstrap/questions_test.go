@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
 	"gotest.tools/v3/assert"
 )
 

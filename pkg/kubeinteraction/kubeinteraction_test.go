@@ -3,7 +3,7 @@ package kubeinteraction
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	"gotest.tools/v3/assert"
 )
 

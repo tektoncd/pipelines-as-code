@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
 	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 )

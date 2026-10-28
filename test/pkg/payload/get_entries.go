@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/random"
+	"github.com/tektoncd/pipelines-as-code/pkg/random"
 )
 
 func vinceMap(a, b map[string]string) map[string]string {

@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	fake "github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	informers "github.com/tektoncd/pipeline/pkg/client/informers/externalversions"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"

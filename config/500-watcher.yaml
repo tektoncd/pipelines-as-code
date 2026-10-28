@@ -45,7 +45,7 @@ spec:
       serviceAccountName: pipelines-as-code-watcher
       containers:
         - name: pac-watcher
-          image: "ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-watcher"
+          image: "ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-watcher"
           imagePullPolicy: Always
           env:
           - name: CONFIG_LOGGING_NAME

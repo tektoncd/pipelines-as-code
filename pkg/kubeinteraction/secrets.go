@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	ktypes "github.com/openshift-pipelines/pipelines-as-code/pkg/secrets/types"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	ktypes "github.com/tektoncd/pipelines-as-code/pkg/secrets/types"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

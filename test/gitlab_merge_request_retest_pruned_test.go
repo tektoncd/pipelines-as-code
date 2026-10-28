@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/names"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitlab "github.com/tektoncd/pipelines-as-code/test/pkg/gitlab"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,7 @@ import (
 // re-runs all pipelines instead of only the failed ones when PipelineRun
 // objects have been pruned from the cluster.
 //
-// See: https://github.com/openshift-pipelines/pipelines-as-code/issues/2580
+// See: https://github.com/tektoncd/pipelines-as-code/issues/2580
 //
 // Flow:
 // 1. Create MR with 2 pipelines: one that succeeds, one that fails

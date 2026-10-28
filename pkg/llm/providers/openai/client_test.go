@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
-	httptesting "github.com/openshift-pipelines/pipelines-as-code/pkg/test/http"
+	"github.com/tektoncd/pipelines-as-code/pkg/llm"
+	httptesting "github.com/tektoncd/pipelines-as-code/pkg/test/http"
 	"gotest.tools/v3/assert"
 )
 

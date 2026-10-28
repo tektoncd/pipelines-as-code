@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	gl "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 )

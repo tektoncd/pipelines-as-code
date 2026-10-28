@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v91/github"
-	providerMetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/providermetrics"
+	providerMetrics "github.com/tektoncd/pipelines-as-code/pkg/provider/providermetrics"
 	"go.uber.org/zap"
 )
 

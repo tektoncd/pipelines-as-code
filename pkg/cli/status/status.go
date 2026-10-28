@@ -5,12 +5,12 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	kstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction/status"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	pacv1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	kstatus "github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
 )

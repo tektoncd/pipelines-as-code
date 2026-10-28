@@ -3,9 +3,9 @@ package secrets
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets/types"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/secrets/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/test/kubernetestint"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"

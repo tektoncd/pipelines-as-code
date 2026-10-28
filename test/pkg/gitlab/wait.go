@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/kubeinteraction"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
 	"go.uber.org/zap"
 )

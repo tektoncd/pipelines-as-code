@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"

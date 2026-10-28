@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	testtracing "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tracing"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/tracing"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	testtracing "github.com/tektoncd/pipelines-as-code/pkg/test/tracing"
+	"github.com/tektoncd/pipelines-as-code/pkg/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitlab "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitlab"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
 	"github.com/tektoncd/pipeline/pkg/names"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitlab "github.com/tektoncd/pipelines-as-code/test/pkg/gitlab"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
 	clientGitlab "gitlab.com/gitlab-org/api/client-go"
 	"gotest.tools/v3/assert"
 )

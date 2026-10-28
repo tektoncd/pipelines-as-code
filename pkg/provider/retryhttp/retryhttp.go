@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
 	"go.uber.org/zap"
 )
 

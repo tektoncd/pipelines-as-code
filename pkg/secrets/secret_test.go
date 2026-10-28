@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"testing"
 
-	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	kitesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
+	apipac "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	kitesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/kubernetestint"
 
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"

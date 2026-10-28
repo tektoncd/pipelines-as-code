@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
 )
 
 type Event struct {

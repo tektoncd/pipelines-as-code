@@ -3,8 +3,8 @@ package consoleui
 import (
 	"context"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	"k8s.io/client-go/dynamic"
 )
 

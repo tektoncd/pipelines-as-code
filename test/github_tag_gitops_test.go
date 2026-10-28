@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v91/github"
-	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
 	"github.com/tektoncd/pipeline/pkg/names"
+	tgithub "github.com/tektoncd/pipelines-as-code/test/pkg/github"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/scm"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 )
 

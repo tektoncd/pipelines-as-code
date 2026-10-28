@@ -19,18 +19,18 @@ import (
 
 	"github.com/google/go-github/v91/github"
 	"github.com/jonboulle/clockwork"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	prmetrics "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerunmetrics"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
-	ghtesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/logger"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	prmetrics "github.com/tektoncd/pipelines-as-code/pkg/pipelinerunmetrics"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
+	ghtesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/github"
+	"github.com/tektoncd/pipelines-as-code/pkg/test/logger"
 
 	"go.opentelemetry.io/otel"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -125,60 +125,60 @@ func TestGithubSplitURL(t *testing.T) {
 	}{
 		{
 			name:     "Split URL",
-			url:      "https://github.com/openshift-pipelines/pipelines-as-code/blob/main/testdatas/remote_task.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://github.com/tektoncd/pipelines-as-code/blob/main/testdatas/remote_task.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "main",
 			wantPath: "testdatas/remote_task.yaml",
 		},
 		{
 			name:     "Split URL with slash in branch",
-			url:      "https://github.com/openshift-pipelines/pipelines-as-code/blob/feature%2Fbranch/testdatas/remote_task.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://github.com/tektoncd/pipelines-as-code/blob/feature%2Fbranch/testdatas/remote_task.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "feature/branch",
 			wantPath: "testdatas/remote_task.yaml",
 		},
 		{
 			name:     "Split URL with encoding emoji in branch",
-			url:      "https://github.com/openshift-pipelines/pipelines-as-code/blob/%F0%9F%99%83/filename.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://github.com/tektoncd/pipelines-as-code/blob/%F0%9F%99%83/filename.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "🙃",
 			wantPath: "filename.yaml",
 		},
 		{
 			name:     "Split URL with url encoding emoji in filename",
-			url:      "https://github.com/openshift-pipelines/pipelines-as-code/blob/branch/anemoji%F0%9F%99%83.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://github.com/tektoncd/pipelines-as-code/blob/branch/anemoji%F0%9F%99%83.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "branch",
 			wantPath: "anemoji🙃.yaml",
 		},
 		{
 			name:     "Split raw URL",
-			url:      "https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/main/testdatas/remote_task.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://raw.githubusercontent.com/tektoncd/pipelines-as-code/main/testdatas/remote_task.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "main",
 			wantPath: "testdatas/remote_task.yaml",
 		},
 		{
 			name:     "Split raw URL2",
-			url:      "https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/main/remote_task.yaml",
-			wantOrg:  "openshift-pipelines",
+			url:      "https://raw.githubusercontent.com/tektoncd/pipelines-as-code/main/remote_task.yaml",
+			wantOrg:  "tektoncd",
 			wantRepo: "pipelines-as-code",
 			wantRef:  "main",
 			wantPath: "remote_task.yaml",
 		},
 		{
 			name:    "Too small URL",
-			url:     "https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code",
+			url:     "https://raw.githubusercontent.com/tektoncd/pipelines-as-code",
 			wantErr: true,
 		},
 		{
 			name:    "Invalid no path URL",
-			url:     "https://raw.githubusercontent.com/openshift-pipelines/pipelines-as-code/main",
+			url:     "https://raw.githubusercontent.com/tektoncd/pipelines-as-code/main",
 			wantErr: true,
 		},
 		{

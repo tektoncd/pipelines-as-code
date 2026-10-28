@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/go-github/v91/github"
 	"github.com/juju/ansiterm"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	githubprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	githubprovider "github.com/tektoncd/pipelines-as-code/pkg/provider/github"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

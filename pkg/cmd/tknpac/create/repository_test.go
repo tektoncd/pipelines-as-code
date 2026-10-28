@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cmd/tknpac/generate"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/git"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	apipac "github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/cmd/tknpac/generate"
+	"github.com/tektoncd/pipelines-as-code/pkg/git"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
 	"gotest.tools/v3/assert"
 	testfs "gotest.tools/v3/fs"
 	"gotest.tools/v3/golden"
@@ -188,11 +188,11 @@ func TestGetNamespace(t *testing.T) {
 			},
 		},
 		{
-			name: "error on openshift-pipelines namespace via prompt",
+			name: "error on tektoncd namespace via prompt",
 			askStubs: func(as *prompt.AskStubber) {
-				as.StubOne("openshift-pipelines")
+				as.StubOne("tektoncd")
 			},
-			wantErrStr: "namespace openshift-pipelines is not supported as a target for repositories",
+			wantErrStr: "namespace tektoncd is not supported as a target for repositories",
 			runInfo: info.Info{
 				Kube: &info.KubeOpts{},
 			},
@@ -239,11 +239,11 @@ func TestGetNamespace(t *testing.T) {
 			},
 		},
 		{
-			name: "error on openshift-pipelines namespace via flag",
+			name: "error on tektoncd namespace via flag",
 			repo: apipac.Repository{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "openshift-pipelines"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: "tektoncd"},
 			},
-			wantErrStr: "namespace openshift-pipelines is not supported as a target for repositories",
+			wantErrStr: "namespace tektoncd is not supported as a target for repositories",
 		},
 		{
 			name: "error on openshift namespace via flag",
@@ -337,23 +337,23 @@ func TestCleanUpURL(t *testing.T) {
 	}{
 		{
 			name:    "normal url",
-			repoURL: "https://github.com/openshift-pipelines/pipelines-as-code",
-			wantURL: "https://github.com/openshift-pipelines/pipelines-as-code",
+			repoURL: "https://github.com/tektoncd/pipelines-as-code",
+			wantURL: "https://github.com/tektoncd/pipelines-as-code",
 		},
 		{
 			name:    "url with creds",
-			repoURL: "https://username:password@github.com/openshift-pipelines/pipelines-as-code",
-			wantURL: "https://github.com/openshift-pipelines/pipelines-as-code",
+			repoURL: "https://username:password@github.com/tektoncd/pipelines-as-code",
+			wantURL: "https://github.com/tektoncd/pipelines-as-code",
 		},
 		{
 			name:    "url with creds",
-			repoURL: "http://username@github.com/openshift-pipelines/pipelines-as-code",
-			wantURL: "http://github.com/openshift-pipelines/pipelines-as-code",
+			repoURL: "http://username@github.com/tektoncd/pipelines-as-code",
+			wantURL: "http://github.com/tektoncd/pipelines-as-code",
 		},
 		{
 			name:    "url with creds and port",
-			repoURL: "https://username:password@githubenteprise.company.com:8080/openshift-pipelines/pipelines-as-code",
-			wantURL: "https://githubenteprise.company.com:8080/openshift-pipelines/pipelines-as-code",
+			repoURL: "https://username:password@githubenteprise.company.com:8080/tektoncd/pipelines-as-code",
+			wantURL: "https://githubenteprise.company.com:8080/tektoncd/pipelines-as-code",
 		},
 	}
 

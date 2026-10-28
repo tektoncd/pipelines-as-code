@@ -19,8 +19,8 @@ limitations under the License.
 package pipelinesascode
 
 import (
-	internalinterfaces "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1"
+	internalinterfaces "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/tektoncd/pipelines-as-code/pkg/generated/informers/externalversions/pipelinesascode/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

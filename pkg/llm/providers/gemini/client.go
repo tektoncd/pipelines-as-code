@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/llm"
+	"github.com/tektoncd/pipelines-as-code/pkg/llm"
 )
 
 const (

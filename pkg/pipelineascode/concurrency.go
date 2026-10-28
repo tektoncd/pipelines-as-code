@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/sort"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 

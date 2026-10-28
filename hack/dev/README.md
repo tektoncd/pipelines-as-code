@@ -31,7 +31,7 @@
 ### Goland
 
 * Add a new "Go build" configuration.
-* Package Path to `github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-controller`
+* Package Path to `github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-controller`
 * Environment variables to: `KUBECONFIG=$HOME/.kube/config;SYSTEM_NAMESPACE=pipelines-as-code`
 
 ## Run

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/customparams"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/templates"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/customparams"
+	"github.com/tektoncd/pipelines-as-code/pkg/templates"
 	"go.uber.org/zap"
 )
 

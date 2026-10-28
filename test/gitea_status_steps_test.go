@@ -9,9 +9,9 @@ import (
 	"codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 	"gotest.tools/v3/assert"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	tstatus "github.com/openshift-pipelines/pipelines-as-code/test/pkg/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	tstatus "github.com/tektoncd/pipelines-as-code/test/pkg/status"
 )
 
 // TestGiteaStatusStepBreakdown checks that the status comment breaks down every

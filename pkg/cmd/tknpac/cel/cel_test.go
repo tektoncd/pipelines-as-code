@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	pkgcel "github.com/openshift-pipelines/pipelines-as-code/pkg/cel"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	pkgcel "github.com/tektoncd/pipelines-as-code/pkg/cel"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/fs"
 )
@@ -461,18 +461,18 @@ func TestEventFromGitHub(t *testing.T) {
     "base": {
       "ref": "main",
       "repo": {
-        "html_url": "https://github.com/openshift-pipelines/pipelines-as-code"
+        "html_url": "https://github.com/tektoncd/pipelines-as-code"
       }
     },
     "labels": []
   },
   "repository": {
     "name": "pipelines-as-code",
-    "full_name": "openshift-pipelines/pipelines-as-code",
+    "full_name": "tektoncd/pipelines-as-code",
     "owner": {
-      "login": "openshift-pipelines"
+      "login": "tektoncd"
     },
-    "html_url": "https://github.com/openshift-pipelines/pipelines-as-code",
+    "html_url": "https://github.com/tektoncd/pipelines-as-code",
     "default_branch": "main"
   },
   "sender": {
@@ -517,7 +517,7 @@ func TestEventFromGitHub(t *testing.T) {
 			wantErr: false,
 			checks: func(t *testing.T, event *info.Event) {
 				assert.Equal(t, event.EventType, "pull_request")
-				assert.Equal(t, event.Organization, "openshift-pipelines")
+				assert.Equal(t, event.Organization, "tektoncd")
 				assert.Equal(t, event.Repository, "pipelines-as-code")
 				assert.Equal(t, event.BaseBranch, "main")
 				assert.Equal(t, event.HeadBranch, "parsepayload")
@@ -804,14 +804,14 @@ func TestPacParamsFromEvent(t *testing.T) {
 			name: "pull request event",
 			event: &info.Event{
 				EventType:        "pull_request",
-				Organization:     "OpenShift-Pipelines",
+				Organization:     "tektoncd",
 				Repository:       "Pipelines-As-Code",
 				BaseBranch:       "main",
 				HeadBranch:       "feature-branch",
 				Sender:           "TestUser",
 				SHA:              "abc123",
-				URL:              "https://github.com/openshift-pipelines/pipelines-as-code",
-				BaseURL:          "https://github.com/openshift-pipelines/pipelines-as-code",
+				URL:              "https://github.com/tektoncd/pipelines-as-code",
+				BaseURL:          "https://github.com/tektoncd/pipelines-as-code",
 				HeadURL:          "https://github.com/user/pipelines-as-code",
 				PullRequestTitle: "Add new feature",
 				TriggerTarget:    triggertype.PullRequest,
@@ -820,14 +820,14 @@ func TestPacParamsFromEvent(t *testing.T) {
 			},
 			want: map[string]string{
 				"revision":            "abc123",
-				"repo_url":            "https://github.com/openshift-pipelines/pipelines-as-code",
-				"repo_owner":          "openshift-pipelines",
+				"repo_url":            "https://github.com/tektoncd/pipelines-as-code",
+				"repo_owner":          "tektoncd",
 				"repo_name":           "pipelines-as-code",
 				"target_branch":       "main",
 				"source_branch":       "feature-branch",
 				"git_tag":             "",
 				"source_url":          "https://github.com/user/pipelines-as-code",
-				"target_url":          "https://github.com/openshift-pipelines/pipelines-as-code",
+				"target_url":          "https://github.com/tektoncd/pipelines-as-code",
 				"sender":              "testuser",
 				"target_namespace":    "",
 				"event_type":          "pull_request",
@@ -996,7 +996,7 @@ func TestCommandExecution(t *testing.T) {
     "base": {
       "ref": "main",
       "repo": {
-        "html_url": "https://github.com/openshift-pipelines/pipelines-as-code"
+        "html_url": "https://github.com/tektoncd/pipelines-as-code"
       }
     },
     "labels": [],
@@ -1004,11 +1004,11 @@ func TestCommandExecution(t *testing.T) {
   },
   "repository": {
     "name": "pipelines-as-code",
-    "full_name": "openshift-pipelines/pipelines-as-code",
+    "full_name": "tektoncd/pipelines-as-code",
     "owner": {
-      "login": "openshift-pipelines"
+      "login": "tektoncd"
     },
-    "html_url": "https://github.com/openshift-pipelines/pipelines-as-code",
+    "html_url": "https://github.com/tektoncd/pipelines-as-code",
     "default_branch": "main"
   },
   "sender": {
@@ -1395,7 +1395,7 @@ func TestCELExpressionEvaluation(t *testing.T) {
     "base": {
       "ref": "main",
       "repo": {
-        "html_url": "https://github.com/openshift-pipelines/pipelines-as-code"
+        "html_url": "https://github.com/tektoncd/pipelines-as-code"
       }
     },
     "labels": [],
@@ -1403,11 +1403,11 @@ func TestCELExpressionEvaluation(t *testing.T) {
   },
   "repository": {
     "name": "pipelines-as-code",
-    "full_name": "openshift-pipelines/pipelines-as-code",
+    "full_name": "tektoncd/pipelines-as-code",
     "owner": {
-      "login": "openshift-pipelines"
+      "login": "tektoncd"
     },
-    "html_url": "https://github.com/openshift-pipelines/pipelines-as-code",
+    "html_url": "https://github.com/tektoncd/pipelines-as-code",
     "default_branch": "main"
   },
   "sender": {

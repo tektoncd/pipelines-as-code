@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/google/go-github/v91/github"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
-	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
-	twait "github.com/openshift-pipelines/pipelines-as-code/test/pkg/wait"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/cctx"
+	tgithub "github.com/tektoncd/pipelines-as-code/test/pkg/github"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/payload"
+	twait "github.com/tektoncd/pipelines-as-code/test/pkg/wait"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

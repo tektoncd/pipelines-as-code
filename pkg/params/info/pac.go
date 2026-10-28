@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/spf13/cobra"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
 )
 
 type PacOpts struct {

@@ -14,12 +14,12 @@ import (
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/cctx"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/configmap"
-	tgitea "github.com/openshift-pipelines/pipelines-as-code/test/pkg/gitea"
-	pacrepo "github.com/openshift-pipelines/pipelines-as-code/test/pkg/repository"
-	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/secret"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/triggertype"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/cctx"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/configmap"
+	tgitea "github.com/tektoncd/pipelines-as-code/test/pkg/gitea"
+	pacrepo "github.com/tektoncd/pipelines-as-code/test/pkg/repository"
+	"github.com/tektoncd/pipelines-as-code/test/pkg/secret"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 

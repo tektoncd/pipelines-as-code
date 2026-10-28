@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1i "k8s.io/client-go/kubernetes/typed/core/v1"

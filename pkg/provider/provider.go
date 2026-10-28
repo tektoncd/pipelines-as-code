@@ -8,11 +8,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/tektoncd/pipelines-as-code/pkg/formatting"
+	"github.com/tektoncd/pipelines-as-code/pkg/opscomments"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	providerstatus "github.com/tektoncd/pipelines-as-code/pkg/provider/status"
 	"gopkg.in/yaml.v2"
 )
 

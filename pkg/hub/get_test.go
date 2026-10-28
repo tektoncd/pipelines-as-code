@@ -5,11 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/clients"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
-	httptesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/http"
+	"github.com/tektoncd/pipelines-as-code/pkg/params"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/clients"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/settings"
+	httptesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/http"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 

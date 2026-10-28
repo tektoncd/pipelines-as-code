@@ -1,7 +1,7 @@
 package cel
 
 import (
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
 )
 
 // eventFromBitbucketDataCenter parses Bitbucket Data Center webhook payload for CEL evaluation.

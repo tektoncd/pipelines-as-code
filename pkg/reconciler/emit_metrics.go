@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	corev1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/apis"
 )

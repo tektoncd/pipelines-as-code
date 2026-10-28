@@ -36,9 +36,9 @@ fi
 
 for file in ${files}; do
   sed -e '/^$/d' -e '/^#/d' ${file} | head -1 | grep -q -- "---" || echo -e "---\n"
-  sed -r -e "s,(.*image:.*)ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-controller.*,\1${TARGET_REPO_CONTROLLER}:${TARGET_BRANCH}\"," \
-    -r -e "s,(.*image:.*)ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-watcher.*,\1${TARGET_REPO_WATCHER}:${TARGET_BRANCH}\"," \
-    -r -e "s,(.*image:.*)ko://github.com/openshift-pipelines/pipelines-as-code/cmd/pipelines-as-code-webhook.*,\1${TARGET_REPO_WEBHOOK}:${TARGET_BRANCH}\"," \
+  sed -r -e "s,(.*image:.*)ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-controller.*,\1${TARGET_REPO_CONTROLLER}:${TARGET_BRANCH}\"," \
+    -r -e "s,(.*image:.*)ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-watcher.*,\1${TARGET_REPO_WATCHER}:${TARGET_BRANCH}\"," \
+    -r -e "s,(.*image:.*)ko://github.com/tektoncd/pipelines-as-code/cmd/pipelines-as-code-webhook.*,\1${TARGET_REPO_WEBHOOK}:${TARGET_BRANCH}\"," \
     -e "s/(namespace: )\w+.*/\1${TARGET_NAMESPACE}/g" \
     -e "s,app.kubernetes.io/version:.*,app.kubernetes.io/version: \"${TARGET_PAC_VERSION}\"," \
     -e "s/Copyright[ ]*[0-9]{4}/Copyright $(date "+%Y")/" \

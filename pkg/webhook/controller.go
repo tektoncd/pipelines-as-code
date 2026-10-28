@@ -3,7 +3,7 @@ package webhook
 import (
 	"context"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
+	"github.com/tektoncd/pipelines-as-code/pkg/generated/injection/informers/pipelinesascode/v1alpha1/repository"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	kubeclient "knative.dev/pkg/client/injection/kube/client"

@@ -4,9 +4,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	testclient "github.com/tektoncd/pipelines-as-code/pkg/test/clients"
 	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

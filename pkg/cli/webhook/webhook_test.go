@@ -3,7 +3,7 @@ package webhook
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/cli/prompt"
+	"github.com/tektoncd/pipelines-as-code/pkg/cli/prompt"
 	"gotest.tools/v3/assert"
 )
 

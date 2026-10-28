@@ -3,9 +3,9 @@ package bitbucketcloud
 import (
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	bbcloudtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/test"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketcloud/types"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	bbcloudtest "github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/test"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider/bitbucketcloud/types"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 

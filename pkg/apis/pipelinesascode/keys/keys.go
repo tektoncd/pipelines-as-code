@@ -19,7 +19,7 @@ package keys
 import (
 	"regexp"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode"
 )
 
 const (

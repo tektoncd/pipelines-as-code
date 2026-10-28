@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
-	pacerrors "github.com/openshift-pipelines/pipelines-as-code/pkg/errors"
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
-	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	pacerrors "github.com/tektoncd/pipelines-as-code/pkg/errors"
+	"github.com/tektoncd/pipelines-as-code/pkg/provider"
+	providerstatus "github.com/tektoncd/pipelines-as-code/pkg/provider/status"
 	"go.uber.org/zap"
 )
 

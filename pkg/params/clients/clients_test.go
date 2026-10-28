@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
-	httptesthelper "github.com/openshift-pipelines/pipelines-as-code/pkg/test/http"
+	"github.com/tektoncd/pipelines-as-code/pkg/params/info"
+	httptesthelper "github.com/tektoncd/pipelines-as-code/pkg/test/http"
 	"gotest.tools/v3/assert"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
