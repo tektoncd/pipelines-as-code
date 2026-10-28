@@ -1995,6 +1995,7 @@ func TestParsePayLoad(t *testing.T) {
 			if tt.eventType == "commit_comment" {
 				assert.Equal(t, tt.wantedBranchName, ret.HeadBranch)
 				assert.Equal(t, tt.wantedBranchName, ret.BaseBranch)
+				assert.Equal(t, sampleRepo.GetDefaultBranch(), ret.DefaultBranch)
 				assert.Equal(t, tt.isCancelPipelineRunEnabled, ret.CancelPipelineRuns)
 			}
 			if tt.wantedHeadBranch != "" {
