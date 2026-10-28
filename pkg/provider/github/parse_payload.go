@@ -982,6 +982,7 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	opscomments.SetEventTypeAndTargetPR(runevent, event.GetComment().GetBody(), gitOpsCommentPrefix)
 
 	defaultBranch := event.GetRepo().GetDefaultBranch()
+	runevent.DefaultBranch = defaultBranch
 	// Set Event.Repository.DefaultBranch as default branch to runevent.HeadBranch, runevent.BaseBranch
 
 	commit, _, err := v.Client().Git.GetCommit(ctx, runevent.Organization, runevent.Repository, runevent.SHA)
