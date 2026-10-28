@@ -13,6 +13,11 @@ const (
 	DefaultPipelinesAscodeConfigmapName = "pipelines-as-code"
 	DefaultGlobalRepoName               = "pipelines-as-code"
 	defaultControllerLabel              = "default"
+
+	// GHE second controller info defaults for E2E tests.
+	DefaultGHESecondControllerLabel     = "ghe-controller"
+	DefaultGHESecondControllerSecret    = "ghe-secret"
+	DefaultGHESecondControllerConfigmap = "ghe-configmap"
 )
 
 var InstallNamespaces = []string{"openshift-pipelines", "pipelines-as-code"}
@@ -39,6 +44,31 @@ func GetControllerInfoFromEnvOrDefault() *ControllerInfo {
 	controllerConfigMap, ok := os.LookupEnv("PAC_CONTROLLER_CONFIGMAP")
 	if !ok {
 		controllerConfigMap = DefaultPipelinesAscodeConfigmapName
+	}
+	globalRepo, ok := os.LookupEnv("PAC_CONTROLLER_GLOBAL_REPOSITORY")
+	if !ok {
+		globalRepo = DefaultGlobalRepoName
+	}
+	return &ControllerInfo{
+		Name:             controllerlabel,
+		Secret:           controllerSecret,
+		Configmap:        controllerConfigMap,
+		GlobalRepository: globalRepo,
+	}
+}
+
+func GetControllerInfoFromEnvOrDefaultGHE() *ControllerInfo {
+	controllerlabel, ok := os.LookupEnv("PAC_CONTROLLER_LABEL")
+	if !ok {
+		controllerlabel = DefaultGHESecondControllerLabel
+	}
+	controllerSecret, ok := os.LookupEnv("PAC_CONTROLLER_SECRET")
+	if !ok {
+		controllerSecret = DefaultGHESecondControllerSecret
+	}
+	controllerConfigMap, ok := os.LookupEnv("PAC_CONTROLLER_CONFIGMAP")
+	if !ok {
+		controllerConfigMap = DefaultGHESecondControllerConfigmap
 	}
 	globalRepo, ok := os.LookupEnv("PAC_CONTROLLER_GLOBAL_REPOSITORY")
 	if !ok {

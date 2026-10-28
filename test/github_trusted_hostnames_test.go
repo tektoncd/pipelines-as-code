@@ -43,7 +43,7 @@ const gheControllerName = "ghe-controller"
 func TestGithubGHETrustOnFirstUse(t *testing.T) {
 	ctx := context.Background()
 	onGHE := true
-	ctx, runcnx, _, ghprovider, err := tgithub.Setup(ctx, onGHE, false)
+	ctx, runcnx, opts, ghprovider, err := tgithub.Setup(ctx, onGHE, false)
 	assert.NilError(t, err)
 
 	configMapName := tgithub.ControllerConfigMapName(onGHE)
@@ -56,6 +56,9 @@ func TestGithubGHETrustOnFirstUse(t *testing.T) {
 		configMapName, host)
 
 	g := &tgithub.PRTest{
+		Cnx:       runcnx,
+		Options:   opts,
+		Provider:  ghprovider,
 		Label:     "Github trust on first use",
 		YamlFiles: []string{"testdata/pipelinerun.yaml"},
 		GHE:       true,
