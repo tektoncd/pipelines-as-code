@@ -128,9 +128,21 @@ type PRTest struct {
 
 func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
 	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-ns")
+	var (
+		runcnx *params.Run
+		opts   options.E2E
+		ghcnx  *ghprovider.Provider
+		err    error
+	)
 
-	ctx, runcnx, opts, ghcnx, err := Setup(ctx, g.GHE, g.Webhook)
-	assert.NilError(t, err)
+	if g.Cnx == nil || g.Provider == nil || g.Options == (options.E2E{}) {
+		ctx, runcnx, opts, ghcnx, err = Setup(ctx, g.GHE, g.Webhook)
+		assert.NilError(t, err)
+	} else {
+		runcnx = g.Cnx
+		opts = g.Options
+		ghcnx = g.Provider
+	}
 	g.Logger = runcnx.Clients.Log
 	g.Cnx = runcnx
 	settings := g.Options.Settings
