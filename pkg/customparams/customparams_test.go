@@ -158,6 +158,7 @@ func TestProcessTemplates(t *testing.T) {
 				"target_namespace":      "",
 				"trigger_comment":       "",
 				"pull_request_labels":   "",
+				"release_body":          "",
 			},
 			repository: &v1alpha1.Repository{
 				Spec: v1alpha1.RepositorySpec{},

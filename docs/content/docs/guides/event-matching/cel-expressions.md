@@ -24,7 +24,7 @@ The following fields are available inside CEL expressions:
 
 | **Field** | **Description** |
 | --- | --- |
-| `event` | `push`, `pull_request`, or `incoming`. |
+| `event` | `push`, `pull_request`, `release`, or `incoming`. |
 | `event_type` | The event type from the webhook payload header. This value is provider-specific (for example, GitHub sends `pull_request`, GitLab sends `Merge Request`). |
 | `target_branch` | The branch the event targets (for example, `main` in a pull request that merges into `main`). |
 | `source_branch` | The branch the pull request originates from. On `push` events, this equals `target_branch`. |
@@ -185,6 +185,19 @@ pipelinesascode.tekton.dev/on-cel-expression: |
 ```
 
 For `pull_request` events, `event_title` contains the pull request title. For `push` events, it contains the commit title.
+
+## Matching release events
+
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="false" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
+
+To match a `release` event for tags that follow a semver pattern:
+
+```yaml
+pipelinesascode.tekton.dev/on-cel-expression: |
+  event == "release" && target_branch.startsWith("refs/tags/v")
+```
+
+This runs the PipelineRun only when a release is released with a tag starting with `v`, such as `v1.0.0` or `v2.3.1`.
 
 ## Matching by body payload
 

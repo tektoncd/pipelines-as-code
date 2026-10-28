@@ -13,6 +13,9 @@ import (
 	"time"
 
 	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
+	"go.uber.org/zap/zapcore"
+	"go.yaml.in/yaml/v3"
+
 	// ghinstallation.Transport.InstallationTokenOptions is typed against this
 	// specific go-github major version; keep in sync with its go.mod.
 	githubv88 "github.com/google/go-github/v88/github"
@@ -736,6 +739,11 @@ func (v *Provider) processEvent(ctx context.Context, event *info.Event, eventInt
 		for _, label := range gitEvent.GetPullRequest().Labels {
 			processedEvent.PullRequestLabel = append(processedEvent.PullRequestLabel, label.GetName())
 		}
+	case *github.ReleaseEvent:
+		processedEvent, err = v.handleReleaseEvent(ctx, gitEvent, processedEvent)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("this event is not supported")
 	}
@@ -1090,6 +1098,84 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	return runevent, nil
 }
 
+func (v *Provider) handleReleaseEvent(ctx context.Context, event *github.ReleaseEvent, runevent *info.Event) (*info.Event, error) {
+	if event.GetRepo() == nil {
+		return nil, errors.New("error parsing payload the repository should not be nil")
+	}
+	runevent.Organization = event.GetRepo().GetOwner().GetLogin()
+	runevent.Repository = event.GetRepo().GetName()
+	runevent.URL = event.GetRepo().GetHTMLURL()
+	runevent.Sender = event.GetSender().GetLogin()
+	v.userType = event.GetSender().GetType()
+	runevent.HeadURL = runevent.URL
+	runevent.BaseURL = runevent.HeadURL
+	runevent.TriggerTarget = triggertype.Release
+	runevent.EventType = triggertype.Release.String()
+	runevent.DefaultBranch = event.GetRepo().GetDefaultBranch()
+	v.RepositoryIDs = []int64{event.GetRepo().GetID()}
+
+	repo, repoErr := MatchEventURLRepo(ctx, v.Run, runevent, "")
+	if repoErr != nil {
+		return nil, repoErr
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("no repository found matching URL: %s", runevent.URL)
+	}
+
+	// release body is a multiline string which if used in pipelinerun will cause yaml parsing error
+	// even if defined with `|-` so we need to marshal it to a string to avoid the error.
+	marshalledBody, err := getMarshalledReleaseBody(event.GetRelease().GetBody())
+	if err != nil {
+		msg := fmt.Sprintf("error marshalling release body: any use of {{ release_body }} dynamic variable will be replaced with an empty string :%v", err)
+		v.eventEmitter.EmitMessage(repo, zapcore.ErrorLevel, "RepositoryReleaseEventBodyMarshallingError", msg)
+	}
+	runevent.ReleaseBody = marshalledBody
+
+	// if v.ghClient is nil, then it means that it's Github webhook and client is not initialized yet
+	// because we initialize the client above only for github app events.
+	if v.ghClient == nil {
+		err := v.initGitHubWebhookClient(ctx, runevent, repo)
+		if err != nil {
+			return nil, fmt.Errorf("cannot initialize GitHub webhook client: %w", err)
+		}
+	}
+
+	tagName := event.GetRelease().GetTagName()
+	tagPath := fmt.Sprintf("refs/tags/%s", tagName)
+	// here in GitHub TAG_SHA and the commit which is tagged for a tag are different
+	// so we need to get the ref for the tag and then get the tag object to get the tag SHA
+	ref, _, err := wrapAPI(v, "get_ref", func() (*github.Reference, *github.Response, error) {
+		return v.Client().Git.GetRef(ctx, runevent.Organization, runevent.Repository, tagPath)
+	})
+	if err != nil {
+		return runevent, fmt.Errorf("error getting ref for tag %s: %w", tagName, err)
+	}
+
+	switch ref.GetObject().GetType() {
+	case "tag":
+		// annotated tag - get the tag object to resolve the commit SHA
+		tag, _, err := wrapAPI(v, "get_tag", func() (*github.Tag, *github.Response, error) {
+			return v.Client().Git.GetTag(ctx, runevent.Organization, runevent.Repository, ref.GetObject().GetSHA())
+		})
+		if err != nil {
+			return runevent, fmt.Errorf("error getting tag %s: %w", tagName, err)
+		}
+		runevent.SHA = tag.GetObject().GetSHA()
+	case "commit":
+		// lightweight tag - ref contains the commit SHA directly.
+		// trying to get the tag object would return an error.
+		runevent.SHA = ref.GetObject().GetSHA()
+	default:
+		return runevent, fmt.Errorf("invalid object type for tag %s: %s", tagName, ref.GetObject().GetType())
+	}
+
+	runevent.HeadBranch = tagPath
+	runevent.BaseBranch = tagPath
+
+	v.Logger.Infof("github release: pipelineruns on %s/%s#%s has been requested", runevent.Organization, runevent.Repository, runevent.SHA)
+	return runevent, nil
+}
+
 func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, ns string) (*v1alpha1.Repository, error) {
 	// Read through cs.ListRepositories so this path benefits from the cached
 	// repository lister when one is configured, matching matcher.MatchEventURLRepo.
@@ -1109,4 +1195,12 @@ func MatchEventURLRepo(ctx context.Context, cs *params.Run, event *info.Event, n
 	}
 
 	return nil, nil
+}
+
+func getMarshalledReleaseBody(body string) (string, error) {
+	marshalledBody, err := yaml.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+	return string(marshalledBody), nil
 }

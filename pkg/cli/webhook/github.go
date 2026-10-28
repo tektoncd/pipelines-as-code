@@ -136,6 +136,7 @@ func (gh *gitHubConfig) create(ctx context.Context) error {
 			"issue_comment",
 			triggertype.PullRequest.String(),
 			"push",
+			triggertype.Release.String(),
 		},
 		Config: &github.HookConfig{
 			URL:         new(gh.controllerURL),
