@@ -256,8 +256,11 @@ func (v *Provider) GetTektonDir(ctx context.Context, event *info.Event, path, pr
 
 func (v *Provider) GetFileInsideRepo(ctx context.Context, event *info.Event, path, targetBranch string) (string, error) {
 	branch := event.SHA
-	// TODO: this may be buggy? we need to figure out how to get the fromSource ref
-	if targetBranch == event.DefaultBranch {
+	if targetBranch != "" {
+		branch = targetBranch
+	}
+
+	if targetBranch == event.DefaultBranch || (targetBranch == "" && v.provenance == provider.ProvenanceDefaultBranch) {
 		branch = v.defaultBranchLatestCommit
 	}
 

@@ -128,7 +128,7 @@ func MakeEvent(event *info.Event) *info.Event {
 	return rev
 }
 
-func MuxDirContent(t *testing.T, mux *http.ServeMux, event *info.Event, testDir, targetDirName string, wantDirErr, wantFilesErr bool) {
+func MuxDirContent(t *testing.T, mux *http.ServeMux, event *info.Event, testDir, targetDirName, wantAt string, wantDirErr, wantFilesErr bool) {
 	files, err := os.ReadDir(testDir)
 	if err != nil {
 		// no error just disappointed
@@ -149,8 +149,8 @@ func MuxDirContent(t *testing.T, mux *http.ServeMux, event *info.Event, testDir,
 		filecontents[path] = string(content)
 	}
 
-	MuxListDir(t, mux, event, targetDirName, filenames, wantDirErr)
-	MuxFiles(t, mux, event, event.HeadBranch, targetDirName, filecontents, wantFilesErr)
+	MuxListDir(t, mux, event, targetDirName, wantAt, filenames, wantDirErr)
+	MuxFiles(t, mux, event, wantAt, targetDirName, filecontents, wantFilesErr)
 }
 
 func MuxCommitInfo(t *testing.T, mux *http.ServeMux, event *info.Event, commit scm.Commit) {
@@ -176,10 +176,11 @@ func MuxDefaultBranch(t *testing.T, mux *http.ServeMux, event *info.Event, defau
 	})
 }
 
-func MuxFiles(_ *testing.T, mux *http.ServeMux, event *info.Event, _, targetDirName string, filescontents map[string]string, wantErr bool) {
+func MuxFiles(t *testing.T, mux *http.ServeMux, event *info.Event, wantAt, targetDirName string, filescontents map[string]string, wantErr bool) {
 	for filename := range filescontents {
 		path := fmt.Sprintf("/projects/%s/repos/%s/raw/%s", event.Organization, event.Repository, filename)
 		mux.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, wantAt, r.URL.Query().Get("at"))
 			if wantErr {
 				rw.WriteHeader(http.StatusUnauthorized)
 			}
@@ -194,9 +195,10 @@ func MuxFiles(_ *testing.T, mux *http.ServeMux, event *info.Event, _, targetDirN
 	}
 }
 
-func MuxListDir(t *testing.T, mux *http.ServeMux, event *info.Event, path string, files []string, wantErr bool) {
+func MuxListDir(t *testing.T, mux *http.ServeMux, event *info.Event, path, wantAt string, files []string, wantErr bool) {
 	url := fmt.Sprintf("/projects/%s/repos/%s/files/%s", event.Organization, event.Repository, path)
-	mux.HandleFunc(url, func(rw http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc(url, func(rw http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, wantAt, r.URL.Query().Get("at"))
 		if wantErr {
 			rw.WriteHeader(http.StatusUnauthorized)
 		}

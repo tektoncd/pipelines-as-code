@@ -86,6 +86,7 @@ type Provider struct {
 	eventEmitter      *events.EventEmitter
 	repo              *v1alpha1.Repository
 	triggerEvent      string
+	provenance        string
 	// memberCache caches membership/permission checks by user ID within the
 	// current provider instance lifecycle to avoid repeated API calls.
 	memberCache        map[int64]bool
@@ -745,11 +746,21 @@ func sourceRevision(event *info.Event) string {
 	return event.HeadBranch
 }
 
+// repositoryReadProjectID returns the project ID that repository-local files
+// are read from for the current provenance setting.
+func (v *Provider) repositoryReadProjectID() int64 {
+	if v.provenance == provider.ProvenanceDefaultBranch && v.targetProjectID != 0 {
+		return v.targetProjectID
+	}
+	return v.sourceProjectID
+}
+
 func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, provenance string) (string, error) {
 	if v.gitlabClient == nil {
 		return "", fmt.Errorf("no gitlab client has been initialized, " +
 			"exiting... (hint: did you forget setting a secret on your repo?)")
 	}
+	v.provenance = provenance
 	// Prefer the immutable event revision so later branch updates cannot change
 	// the PipelineRun definitions selected for this event.
 	revision := sourceRevision(event)
@@ -779,7 +790,7 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 	nodes := []*gitlab.TreeNode{}
 
 	for {
-		objects, resp, err := v.Client().Repositories.ListTree(v.sourceProjectID, opt, options...)
+		objects, resp, err := v.Client().Repositories.ListTree(v.repositoryReadProjectID(), opt, options...)
 		if err != nil {
 			return "", fmt.Errorf("failed to list %s dir: %w", path, err)
 		}
@@ -809,7 +820,7 @@ func (v *Provider) concatAllYamlFiles(objects []*gitlab.TreeNode, revision strin
 	for _, value := range objects {
 		if strings.HasSuffix(value.Name, ".yaml") ||
 			strings.HasSuffix(value.Name, ".yml") {
-			data, _, err := v.getObject(value.Path, revision, v.sourceProjectID)
+			data, _, err := v.getObject(value.Path, revision, v.repositoryReadProjectID())
 			if err != nil {
 				return "", err
 			}
@@ -843,11 +854,14 @@ func (v *Provider) getObject(fname, branch string, pid int64) ([]byte, *gitlab.R
 func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, path, targetRevision string) (string, error) {
 	revision := targetRevision
 	if revision == "" {
-		// Default repository-local resources to the same immutable source revision
-		// as the PipelineRun definitions; an explicit provenance revision wins above.
+		// An explicit target revision wins; otherwise follow the provenance
+		// setting, falling back to the immutable source revision.
 		revision = sourceRevision(runevent)
+		if v.provenance == provider.ProvenanceDefaultBranch {
+			revision = runevent.DefaultBranch
+		}
 	}
-	getobj, _, err := v.getObject(path, revision, v.sourceProjectID)
+	getobj, _, err := v.getObject(path, revision, v.repositoryReadProjectID())
 	if err != nil {
 		return "", err
 	}
