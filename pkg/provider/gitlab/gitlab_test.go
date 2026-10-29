@@ -2311,6 +2311,7 @@ func TestGetTektonDir(t *testing.T) {
 			if tt.wantStr != "" {
 				assert.Assert(t, strings.Contains(got, tt.wantStr), "%s is not in %s", tt.wantStr, got)
 			}
+			assert.Equal(t, tt.args.provenance, v.provenance)
 			if tt.filterMessageSnippet != "" {
 				gotcha := exporter.FilterMessageSnippet(tt.filterMessageSnippet)
 				assert.Assert(t, gotcha.Len() > 0, "expected to find %s in logs, found %v", tt.filterMessageSnippet, exporter.All())
@@ -2361,6 +2362,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 		event          *info.Event
 		path           string
 		targetRevision string
+		provenance     string
 		wantRevision   string
 		wantErr        bool
 	}{
@@ -2371,6 +2373,27 @@ func TestGetFileInsideRepo(t *testing.T) {
 				HeadBranch: "branch",
 			},
 			wantRevision: "1111111111111111111111111111111111111111",
+		},
+		{
+			name: "default branch provenance uses default branch",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:   provider.ProvenanceDefaultBranch,
+			wantRevision: "main",
+		},
+		{
+			name: "default branch provenance uses explicit target revision",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:     provider.ProvenanceDefaultBranch,
+			targetRevision: "2222222222222222222222222222222222222222",
+			wantRevision:   "2222222222222222222222222222222222222222",
 		},
 		{
 			name: "empty SHA uses head branch",
@@ -2496,6 +2519,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 			v := Provider{
 				sourceProjectID: 10,
 				gitlabClient:    client,
+				provenance:      tt.provenance,
 			}
 			// Only pr.yaml is registered, so any other path falls through to a 404.
 			mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/pr.yaml/raw", v.sourceProjectID),

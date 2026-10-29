@@ -22,6 +22,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	bbtest "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/test"
 	bbtypes "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/bitbucketdatacenter/types"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
@@ -44,6 +45,7 @@ func TestGetTektonDir(t *testing.T) {
 		name            string
 		event           *info.Event
 		path            string
+		provenance      string
 		testDirPath     string
 		contentContains string
 		wantDirAPIErr   bool
@@ -55,6 +57,14 @@ func TestGetTektonDir(t *testing.T) {
 			name:            "good/get tekton directory",
 			event:           bbtest.MakeEvent(nil),
 			path:            ".tekton",
+			testDirPath:     "../../pipelineascode/testdata/pull_request/.tekton",
+			contentContains: "kind: PipelineRun",
+		},
+		{
+			name:            "good/get tekton directory with default branch provenance",
+			event:           bbtest.MakeEvent(&info.Event{DefaultBranch: "main"}),
+			path:            ".tekton",
+			provenance:      provider.ProvenanceDefaultBranch,
 			testDirPath:     "../../pipelineascode/testdata/pull_request/.tekton",
 			contentContains: "kind: PipelineRun",
 		},
@@ -98,13 +108,14 @@ func TestGetTektonDir(t *testing.T) {
 			defer tearDown()
 			v := &Provider{Logger: logger, baseURL: tURL, client: client, projectKey: tt.event.Organization}
 			bbtest.MuxDirContent(t, mux, tt.event, tt.testDirPath, tt.path, tt.wantDirAPIErr, tt.wantFilesAPIErr)
-			content, err := v.GetTektonDir(ctx, tt.event, tt.path, "")
+			content, err := v.GetTektonDir(ctx, tt.event, tt.path, tt.provenance)
 			if tt.wantErr != "" {
 				assert.Assert(t, err != nil, "we should have get an error here")
 				assert.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			assert.NilError(t, err)
+			assert.Equal(t, tt.provenance, v.provenance)
 			assert.Assert(t, strings.Contains(content, tt.contentContains), "content %s doesn't have %s", content, tt.contentContains)
 		})
 	}
@@ -281,6 +292,8 @@ func TestGetFileInsideRepo(t *testing.T) {
 		event         *info.Event
 		path          string
 		targetbranch  string
+		provenance    string
+		wantRevision  string
 		filescontents map[string]string
 		assertOutput  string
 	}{
@@ -293,6 +306,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 				"foo/file.txt": "hello moto",
 			},
 			targetbranch: "main",
+			wantRevision: "default-latest",
 		},
 		{
 			name:         "get file inside default branch",
@@ -303,6 +317,52 @@ func TestGetFileInsideRepo(t *testing.T) {
 				"foo/file.txt": "hello moto",
 			},
 			targetbranch: "yolo",
+			wantRevision: "default-latest",
+		},
+		{
+			name:         "explicit target branch uses target branch",
+			event:        bbtest.MakeEvent(&info.Event{SHA: "feature-head", DefaultBranch: "yolo"}),
+			path:         "foo/file.txt",
+			assertOutput: "hello moto",
+			filescontents: map[string]string{
+				"foo/file.txt": "hello moto",
+			},
+			targetbranch: "feature",
+			wantRevision: "feature",
+		},
+		{
+			name:         "default branch provenance uses latest default branch commit",
+			event:        bbtest.MakeEvent(&info.Event{SHA: "feature-head", DefaultBranch: "yolo"}),
+			path:         "foo/file.txt",
+			assertOutput: "hello moto",
+			filescontents: map[string]string{
+				"foo/file.txt": "hello moto",
+			},
+			provenance:   provider.ProvenanceDefaultBranch,
+			wantRevision: "default-latest",
+		},
+		{
+			name:         "default branch provenance uses explicit target revision",
+			event:        bbtest.MakeEvent(&info.Event{SHA: "feature-head", DefaultBranch: "yolo"}),
+			path:         "foo/file.txt",
+			assertOutput: "hello moto",
+			filescontents: map[string]string{
+				"foo/file.txt": "hello moto",
+			},
+			targetbranch: "pinned-commit",
+			provenance:   provider.ProvenanceDefaultBranch,
+			wantRevision: "pinned-commit",
+		},
+		{
+			name:         "source provenance uses event SHA",
+			event:        bbtest.MakeEvent(&info.Event{SHA: "feature-head", DefaultBranch: "yolo"}),
+			path:         "foo/file.txt",
+			assertOutput: "hello moto",
+			filescontents: map[string]string{
+				"foo/file.txt": "hello moto",
+			},
+			provenance:   provider.ProvenanceSource,
+			wantRevision: "feature-head",
 		},
 		{
 			name:         "bad/get files api error",
@@ -313,6 +373,7 @@ func TestGetFileInsideRepo(t *testing.T) {
 				"foo/file.txt": "hello moto",
 			},
 			targetbranch: "yolo",
+			wantRevision: "default-latest",
 			wantErr:      "cannot find foo/file.txt inside the repo repository: No message available",
 		},
 	}
@@ -321,8 +382,14 @@ func TestGetFileInsideRepo(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			client, mux, tearDown, tURL := bbtest.SetupBBDataCenterClient(t)
 			defer tearDown()
-			v := &Provider{client: client, baseURL: tURL, defaultBranchLatestCommit: "1234", projectKey: tt.event.Organization}
-			bbtest.MuxFiles(t, mux, tt.event, tt.targetbranch, filepath.Dir(tt.path), tt.filescontents, tt.wantErr != "")
+			v := &Provider{
+				client:                    client,
+				baseURL:                   tURL,
+				defaultBranchLatestCommit: "default-latest",
+				projectKey:                tt.event.Organization,
+				provenance:                tt.provenance,
+			}
+			bbtest.MuxFiles(t, mux, tt.event, tt.wantRevision, filepath.Dir(tt.path), tt.filescontents, tt.wantErr != "")
 			fc, err := v.GetFileInsideRepo(ctx, tt.event, tt.path, tt.targetbranch)
 			if tt.wantErr != "" {
 				assert.Equal(t, err.Error(), tt.wantErr)

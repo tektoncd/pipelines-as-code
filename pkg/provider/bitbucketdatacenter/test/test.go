@@ -150,7 +150,7 @@ func MuxDirContent(t *testing.T, mux *http.ServeMux, event *info.Event, testDir,
 	}
 
 	MuxListDir(t, mux, event, targetDirName, filenames, wantDirErr)
-	MuxFiles(t, mux, event, event.HeadBranch, targetDirName, filecontents, wantFilesErr)
+	MuxFiles(t, mux, event, "", targetDirName, filecontents, wantFilesErr)
 }
 
 func MuxCommitInfo(t *testing.T, mux *http.ServeMux, event *info.Event, commit scm.Commit) {
@@ -176,10 +176,13 @@ func MuxDefaultBranch(t *testing.T, mux *http.ServeMux, event *info.Event, defau
 	})
 }
 
-func MuxFiles(_ *testing.T, mux *http.ServeMux, event *info.Event, _, targetDirName string, filescontents map[string]string, wantErr bool) {
+func MuxFiles(t *testing.T, mux *http.ServeMux, event *info.Event, wantAt, targetDirName string, filescontents map[string]string, wantErr bool) {
 	for filename := range filescontents {
 		path := fmt.Sprintf("/projects/%s/repos/%s/raw/%s", event.Organization, event.Repository, filename)
 		mux.HandleFunc(path, func(rw http.ResponseWriter, r *http.Request) {
+			if wantAt != "" {
+				assert.Equal(t, wantAt, r.URL.Query().Get("at"))
+			}
 			if wantErr {
 				rw.WriteHeader(http.StatusUnauthorized)
 			}
