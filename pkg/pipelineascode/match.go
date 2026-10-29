@@ -144,7 +144,7 @@ func (p *PacRun) verifyRepoAndUser(ctx context.Context) (*v1alpha1.Repository, e
 
 // getPipelineRunsFromRepo fetches pipelineruns from git repository and prepare them for creation.
 func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository) ([]matcher.Match, map[string]*tektonv1.PipelineRun, error) {
-	provenance := "source"
+	provenance := provider.ProvenanceSource
 	if repo.Spec.Settings != nil && repo.Spec.Settings.PipelineRunProvenance != "" {
 		provenance = repo.Spec.Settings.PipelineRunProvenance
 	}
@@ -414,7 +414,7 @@ func getRepositoryRevisionForProvenance(event *info.Event, provenance string) st
 	if event.PipelineRunSourceRevision == "" {
 		return ""
 	}
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		return event.DefaultBranch
 	}
 	return event.PipelineRunSourceRevision
