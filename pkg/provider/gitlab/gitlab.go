@@ -753,7 +753,7 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 	// Prefer the immutable event revision so later branch updates cannot change
 	// the PipelineRun definitions selected for this event.
 	revision := sourceRevision(event)
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		revision = event.DefaultBranch
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", event.DefaultBranch)
 	} else {

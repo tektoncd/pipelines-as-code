@@ -222,7 +222,7 @@ func (v *Provider) GetTektonDir(ctx context.Context, event *info.Event, path, pr
 	v.provenance = provenance
 	// If "at" is empty string "" then default branch will be used as source
 	at := ""
-	if v.provenance == "source" {
+	if v.provenance == provider.ProvenanceSource {
 		at = event.SHA
 		v.Logger.Infof("Using PipelineRun definition from source %s commit SHA: %s", event.TriggerTarget.String(), event.SHA)
 	} else {
