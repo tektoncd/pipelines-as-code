@@ -37,6 +37,11 @@ func Setup(ctx context.Context, onGHE, viaDirectWebhook bool) (context.Context, 
 	if err != nil {
 		return ctx, nil, options.E2E{}, github.New(), err
 	}
+	if onGHE {
+		run.Info.Controller = info.GetControllerInfoFromEnvOrDefaultGHE()
+		run.Clients.Log.Infof("Pipelines as Code Controller: %+v", run.Info.Controller)
+		ctxWithInfo = info.StoreCurrentControllerName(ctxWithInfo, run.Info.Controller.Name)
+	}
 	ctx = ctxWithInfo
 	e2eoptions := options.E2E{
 		Organization:  split[0],
@@ -50,7 +55,7 @@ func Setup(ctx context.Context, onGHE, viaDirectWebhook bool) (context.Context, 
 	gprovider.SetPacInfo(setup.PacOptsWithAPIRetry())
 	event := info.NewEvent()
 
-	if err := setupGithubAppToken(ctx, config, viaDirectWebhook, run, gprovider); err != nil {
+	if err := setupGithubAppToken(ctx, config, onGHE, viaDirectWebhook, run, gprovider); err != nil {
 		return ctx, nil, options.E2E{}, github.New(), err
 	}
 
@@ -143,7 +148,6 @@ func setupEnvVars(onGHE, viaDirectWebhook bool) (*envConfig, error) {
 		}
 		config.url = os.Getenv("TEST_GITHUB_SECOND_API_URL")
 		config.controllerURL = os.Getenv("TEST_GITHUB_SECOND_EL_URL")
-		config.token = os.Getenv("TEST_GITHUB_SECOND_TOKEN")
 		config.repoOwner = os.Getenv("TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP")
 
 	case !onGHE && viaDirectWebhook:
@@ -182,11 +186,16 @@ func setupEnvVars(onGHE, viaDirectWebhook bool) (*envConfig, error) {
 	return config, nil
 }
 
-func setupGithubAppToken(ctx context.Context, config *envConfig, viaDirectWebhook bool, run *params.Run, gprovider *github.Provider) error {
+func setupGithubAppToken(ctx context.Context, config *envConfig, onGHE, viaDirectWebhook bool, run *params.Run, gprovider *github.Provider) error {
 	if config.token == "" && !viaDirectWebhook {
 		var err error
 
-		envGithubRepoInstallationID, err := setup.GetRequiredEnv("TEST_GITHUB_REPO_INSTALLATION_ID")
+		installationIDEnv := "TEST_GITHUB_REPO_INSTALLATION_ID"
+		if onGHE {
+			installationIDEnv = "TEST_GITHUB_SECOND_REPO_INSTALLATION_ID"
+		}
+
+		envGithubRepoInstallationID, err := setup.GetRequiredEnv(installationIDEnv)
 		if err != nil {
 			return err
 		}
