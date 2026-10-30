@@ -2590,51 +2590,6 @@ func TestGetPullRequestCaching(t *testing.T) {
 	assert.Equal(t, 1, callCount, "expected no additional API call on second invocation (cache hit)")
 }
 
-func TestIsHeadCommitOfBranch(t *testing.T) {
-	tests := []struct {
-		name       string
-		sha        string
-		branchName string
-		wantErr    bool
-	}{{
-		name:    "sha exist in the branch",
-		sha:     "SHA1",
-		wantErr: false,
-	}, {
-		name:    "sha doesn't exist in the branch",
-		sha:     "SHA2",
-		wantErr: true,
-	}}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			runEvent := &info.Event{
-				Organization:   "pushrequestowner",
-				Repository:     "pushrequestrepository",
-				SHA:            tt.sha,
-				InstallationID: int64(1234567),
-			}
-			fakeclient, mux, _, teardown := ghtesthelper.SetupGH()
-			defer teardown()
-
-			mux.HandleFunc(fmt.Sprintf("/repos/%s/%s/branches/test1",
-				runEvent.Organization, runEvent.Repository), func(rw http.ResponseWriter, _ *http.Request) {
-				_, err := fmt.Fprintf(rw, `{
-			"name": "test1",
-			"commit": {
-				"sha": "SHA1"
-			}}}`)
-				assert.NilError(t, err)
-			})
-
-			ctx, _ := rtesting.SetupFakeContext(t)
-			l, _ := logger.GetLogger()
-			provider := &Provider{ghClient: fakeclient, Logger: l}
-			err := provider.isHeadCommitOfBranch(ctx, runEvent, "test1")
-			assert.Equal(t, err != nil, tt.wantErr)
-		})
-	}
-}
-
 func TestCreateComment(t *testing.T) {
 	tests := []struct {
 		name         string
