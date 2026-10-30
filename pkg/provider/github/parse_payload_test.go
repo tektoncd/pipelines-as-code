@@ -1640,7 +1640,12 @@ func TestParsePayLoad(t *testing.T) {
 					Body:     new("/retest dummy branch:test1"),
 				},
 			},
-			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/7771": samplePR},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/7771": samplePR,
+				"/repos/owner/reponame/compare/test1...samplePRsha": &github.CommitsComparison{
+					Status: new("behind"),
+				},
+			},
 			shaRet:                     "samplePRsha",
 			targetPipelinerun:          "dummy",
 			wantedBranchName:           "test1",
@@ -1659,7 +1664,12 @@ func TestParsePayLoad(t *testing.T) {
 					Body:     new("/cancel branch:test1"),
 				},
 			},
-			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/9991": samplePR},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/9991": samplePR,
+				"/repos/owner/reponame/compare/test1...samplePRsha": &github.CommitsComparison{
+					Status: new("behind"),
+				},
+			},
 			shaRet:                     "samplePRsha",
 			wantedBranchName:           "test1",
 			isCancelPipelineRunEnabled: true,
@@ -1677,7 +1687,12 @@ func TestParsePayLoad(t *testing.T) {
 					Body:     new("/cancel dummy branch:test1"),
 				},
 			},
-			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/8881": samplePR},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/8881": samplePR,
+				"/repos/owner/reponame/compare/test1...samplePRsha": &github.CommitsComparison{
+					Status: new("behind"),
+				},
+			},
 			shaRet:                     "samplePRsha",
 			targetCancelPipelinerun:    "dummy",
 			wantedBranchName:           "test1",
@@ -1706,45 +1721,6 @@ func TestParsePayLoad(t *testing.T) {
 			wantedPullRequestNumber: 54321,
 		},
 		{
-			name:          "bad/commit comment for cancel a pr with invalid branch name",
-			eventType:     "commit_comment",
-			triggerTarget: "push",
-			githubClient:  true,
-			payloadEventStruct: github.CommitCommentEvent{
-				Repo: sampleRepo,
-				Comment: &github.RepositoryComment{
-					CommitID: new("samplePRsha"),
-					HTMLURL:  new("/888"),
-					Body:     new("/cancel dummy branch:test2"),
-				},
-			},
-			muxReplies:                 map[string]any{"/repos/owner/reponame/pulls/8881": samplePR},
-			shaRet:                     "samplePRsha",
-			targetCancelPipelinerun:    "dummy",
-			wantedBranchName:           "test2",
-			isCancelPipelineRunEnabled: false,
-			wantErrString:              "404 Not Found",
-		},
-		{
-			name:          "commit comment to retest a pr with a SHA is not HEAD commit of the main branch",
-			eventType:     "commit_comment",
-			triggerTarget: "push",
-			githubClient:  true,
-			payloadEventStruct: github.CommitCommentEvent{
-				Repo: sampleRepo,
-				Comment: &github.RepositoryComment{
-					CommitID: new("samplePRshanew"),
-					HTMLURL:  new("/777"),
-					Body:     new("/retest dummy"),
-				},
-			},
-			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePRAnother},
-			shaRet:            "samplePRshanew",
-			targetPipelinerun: "dummy",
-			wantedBranchName:  "main",
-			wantErrString:     "provided SHA samplePRshanew is not the HEAD commit of the branch main",
-		},
-		{
 			name:          "commit comment to retest a pr with a merge commit",
 			eventType:     "commit_comment",
 			triggerTarget: "push",
@@ -1762,6 +1738,93 @@ func TestParsePayLoad(t *testing.T) {
 			targetPipelinerun: "dummy",
 			wantedBranchName:  "main",
 			isMergeCommit:     true,
+		},
+		{
+			name:          "good/commit comment with branch name where commit is part of branch",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: new("oldCommitSHA"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy branch:develop"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/777": samplePR,
+				"/repos/owner/reponame/compare/develop...oldCommitSHA": &github.CommitsComparison{
+					Status: new("behind"),
+				},
+			},
+			shaRet:            "oldCommitSHA",
+			targetPipelinerun: "dummy",
+			wantedBranchName:  "develop",
+		},
+		{
+			name:          "good/commit comment with branch name where commit is identical to branch head",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy branch:develop"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/pulls/777": samplePR,
+				"/repos/owner/reponame/compare/develop...samplePRsha": &github.CommitsComparison{
+					Status: new("identical"),
+				},
+			},
+			shaRet:            "samplePRsha",
+			targetPipelinerun: "dummy",
+			wantedBranchName:  "develop",
+		},
+		{
+			name:          "bad/commit comment with branch name where commit is ahead of branch",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: new("newCommitSHA"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy branch:develop"),
+				},
+			},
+			muxReplies: map[string]any{
+				"/repos/owner/reponame/compare/develop...newCommitSHA": &github.CommitsComparison{
+					Status: new("ahead"),
+				},
+			},
+			shaRet:            "newCommitSHA",
+			targetPipelinerun: "dummy",
+			wantedBranchName:  "develop",
+			wantErrString:     "provided SHA newCommitSHA is not part of the branch develop",
+		},
+		{
+			name:          "bad/commit comment with invalid branch name",
+			eventType:     "commit_comment",
+			triggerTarget: "push",
+			githubClient:  true,
+			payloadEventStruct: github.CommitCommentEvent{
+				Repo: sampleRepo,
+				Comment: &github.RepositoryComment{
+					CommitID: new("samplePRsha"),
+					HTMLURL:  new("/777"),
+					Body:     new("/retest dummy branch:nonexistent-branch"),
+				},
+			},
+			shaRet:            "samplePRsha",
+			targetPipelinerun: "dummy",
+			wantedBranchName:  "nonexistent-branch",
+			wantErrString:     "error comparing refs nonexistent-branch and samplePRsha",
 		},
 		{
 			name:          "good/skip push event for skip-pr-commits setting",

@@ -12,8 +12,6 @@ You can trigger GitOps commands on a pushed commit by including them in your com
 1. **Restart all PipelineRuns:** Use `/retest` or `/test` within your commit message.
 2. **Restart a specific PipelineRun:** Use `/retest <pipelinerun-name>` or `/test <pipelinerun-name>` within your commit message. Replace `<pipelinerun-name>` with the name of the PipelineRun you want to restart.
 
-Pipelines-as-Code triggers a PipelineRun only on the latest commit (HEAD) of the branch and ignores older commits.
-
 {{< callout type="info" >}}
 When you execute GitOps commands on a commit that exists in multiple branches within a push request, Pipelines-as-Code uses the branch with the latest commit.
 {{< /callout >}}

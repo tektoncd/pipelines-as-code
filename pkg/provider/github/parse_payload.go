@@ -1073,15 +1073,24 @@ func (v *Provider) handleCommitCommentEvent(ctx context.Context, event *github.C
 	// If no branch is specified in GitOps comments, use runevent.HeadBranch
 	if branchName == "" {
 		branchName = runevent.HeadBranch
+	} else {
+		comparison, _, err := wrapAPI(v, "compare_refs", func() (*github.CommitsComparison, *github.Response, error) {
+			return v.Client().Repositories.CompareCommits(ctx, runevent.Organization, runevent.Repository, branchName, runevent.SHA, &github.ListOptions{})
+		})
+		if err != nil {
+			return runevent, fmt.Errorf("error comparing refs %s and %s: branch name may not be valid: %w", branchName, runevent.SHA, err)
+		}
+
+		// the commit SHA is compared with the branch name provided in the comment where branch is the base and commit is head in comparison
+		// so if the commit is old the status will be behind and it its HEAD of the branch then the status will be identical
+		// so we will allow this only in this two status type of comparison otherwise if status is ahead, divergent then this commit is not part of the branch.
+		// Question: why this approach is take? because if we get the branch and check history it will need more API calls for paged response to compare
+		// whether this commit is part of the branch or not.
+		if comparison.GetStatus() != "behind" && comparison.GetStatus() != "identical" {
+			return runevent, fmt.Errorf("provided SHA %s is not part of the branch %s", runevent.SHA, branchName)
+		}
 	}
 
-	// Check if the specified branch contains the commit
-	if err = v.isHeadCommitOfBranch(ctx, runevent, branchName); err != nil {
-		if opscomments.IsCancelComment(event.GetComment().GetBody(), gitOpsCommentPrefix) {
-			runevent.CancelPipelineRuns = false
-		}
-		return runevent, err
-	}
 	// Finally update branch information to runevent.HeadBranch and runevent.BaseBranch
 	runevent.HeadBranch = branchName
 	runevent.BaseBranch = branchName

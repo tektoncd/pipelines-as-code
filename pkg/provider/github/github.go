@@ -1002,25 +1002,6 @@ func uniqueRepositoryID(repoIDs []int64, id int64) []int64 {
 	return r
 }
 
-// isHeadCommitOfBranch checks whether provided branch is valid or not and SHA is HEAD commit of the branch.
-func (v *Provider) isHeadCommitOfBranch(ctx context.Context, runevent *info.Event, branchName string) error {
-	if v.ghClient == nil {
-		return fmt.Errorf("no github client has been initialized, " +
-			"exiting... (hint: did you forget setting a secret on your repo?)")
-	}
-
-	branchInfo, _, err := wrapAPI(v, "get_branch", func() (*github.Branch, *github.Response, error) {
-		return v.Client().Repositories.GetBranch(ctx, runevent.Organization, runevent.Repository, branchName, 1)
-	})
-	if err != nil {
-		return err
-	}
-	if branchInfo.Commit.GetSHA() == runevent.SHA {
-		return nil
-	}
-	return fmt.Errorf("provided SHA %s is not the HEAD commit of the branch %s", runevent.SHA, branchName)
-}
-
 func (v *Provider) GetTemplate(commentType provider.CommentType) string {
 	return provider.GetHTMLTemplate(commentType)
 }
