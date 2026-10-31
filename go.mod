@@ -3,14 +3,14 @@ module github.com/openshift-pipelines/pipelines-as-code
 go 1.27.3
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.1
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/chzyer/readline v1.5.1
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/fvbommel/sortorder v1.2.1
-	github.com/gobwas/glob v1.0.0
+	github.com/gobwas/glob v1.1.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/scrape v0.0.0-20260904185537-3a439fa10f3d
@@ -28,9 +28,9 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/prometheus/common v0.72.1
+	github.com/prometheus/common v0.73.0
 	github.com/spf13/cobra v1.10.2
-	github.com/tektoncd/pipeline v1.17.0
+	github.com/tektoncd/pipeline v1.18.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
 	// otel is pinned via the replace block below, see the comment there.
 	go.opentelemetry.io/otel v1.45.0
@@ -42,7 +42,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
@@ -51,9 +51,9 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.5.2
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	knative.dev/eventing v0.50.1
@@ -111,6 +111,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -122,6 +123,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
+	github.com/pandatix/go-abnf v0.5.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
