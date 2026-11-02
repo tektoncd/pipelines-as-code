@@ -5,9 +5,11 @@ package test
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/google/go-github/v91/github"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/scm"
@@ -20,7 +22,6 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 	ctx := context.Background()
 	ctx, runcnx, opts, ghcnx, err := tgithub.Setup(ctx, true, false)
 	assert.NilError(t, err)
-	var g *tgithub.PRTest
 	targetNS := names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pac-e2e-tag")
 	repoinfo, resp, err := ghcnx.Client().Repositories.Get(ctx, opts.Organization, opts.Repo)
 	assert.NilError(t, err)
@@ -31,91 +32,93 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 	assert.NilError(t, err)
 	runcnx.Clients.Log.Infof("Repository %s has been created successfully", targetNS)
 
-	tags := []string{"v1.0.0", "v1.0.0-lightweight"}
-	for _, tag := range tags {
-		comment := "/test tag:" + tag
-		sha := ""
-		targetRefName := "release-" + tag
-		label := ""
-		if tag == "v1.0.0" {
-			label = "Testing GitHub commit comment on tag with GitHub apps integration"
-		} else {
-			label = "Testing GitHub commit comment on lightweight tag with GitHub apps integration"
+	g := &tgithub.PRTest{
+		Label:           "Testing GitHub commit comment on tag with GitHub apps integration",
+		Cnx:             runcnx,
+		Logger:          runcnx.Clients.Log,
+		Options:         opts,
+		Provider:        ghcnx,
+		TargetNamespace: targetNS,
+		PRNumber:        -1,
+	}
+	defer g.TearDown(ctx, t)
+
+	tags := []struct {
+		name        string
+		lightweight bool
+	}{
+		{
+			name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("v1.0.0"),
+		},
+		{
+			name:        names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("v1.0.0-lightweight"),
+			lightweight: true,
+		},
+	}
+
+	entries, err := payload.GetEntries(map[string]string{".tekton/pipelinerun-on-tag.yaml": "testdata/pipelinerun-on-tag.yaml"},
+		targetNS, "refs/tags/*", triggertype.Push.String(), map[string]string{})
+	assert.NilError(t, err)
+
+	cloneURL, err := scm.MakeGitCloneURL(repoinfo.GetCloneURL(), "git", *ghcnx.Token)
+	assert.NilError(t, err)
+
+	for _, tt := range tags {
+		comment := "/test tag:" + tt.name
+		targetRefName := "release-" + tt.name
+		commitTitle := g.Label
+		if tt.lightweight {
+			commitTitle += " (lightweight)"
 		}
 
-		numberOfPRs := 1
-
-		ref, resp, err := ghcnx.Client().Git.GetRef(ctx, opts.Organization, opts.Repo, "refs/tags/"+tag)
-		if err != nil && resp.StatusCode == http.StatusNotFound {
-			runcnx.Clients.Log.Infof("Tag %s is not found on the repository", tag)
-			runcnx.Clients.Log.Infof("Creating tag %s on the repository", tag)
-			entries, err := payload.GetEntries(map[string]string{".tekton/pipelinerun-on-tag.yaml": "testdata/pipelinerun-on-tag.yaml"},
-				targetNS, "refs/tags/*", "push", map[string]string{})
-			assert.NilError(t, err)
-
-			cloneURL, err := scm.MakeGitCloneURL(repoinfo.GetCloneURL(), "git", *ghcnx.Token)
-			assert.NilError(t, err)
-			scmOpts := scm.Opts{
-				GitURL:        cloneURL,
-				TargetRefName: targetRefName,
-				BaseRefName:   repoinfo.GetDefaultBranch(),
-				WebURL:        repoinfo.GetHTMLURL(),
-				Log:           runcnx.Clients.Log,
-				CommitTitle:   label,
+		scmOpts := scm.Opts{
+			GitURL:        cloneURL,
+			TargetRefName: targetRefName,
+			BaseRefName:   repoinfo.GetDefaultBranch(),
+			WebURL:        repoinfo.GetHTMLURL(),
+			Log:           runcnx.Clients.Log,
+			CommitTitle:   commitTitle,
+		}
+		sha := scm.PushFilesToRefGit(t, &scmOpts, entries)
+		g.SHA = sha
+		t.Cleanup(func() {
+			if os.Getenv("TEST_NOCLEANUP") == "true" {
+				return
 			}
-			scm.PushFilesToRefGit(t, &scmOpts, entries)
-			branch, _, err := ghcnx.Client().Repositories.GetBranch(ctx, opts.Organization, opts.Repo, targetRefName, 1)
-			assert.NilError(t, err)
-
-			sha = branch.GetCommit().GetSHA()
-
-			// when we're testing a lightweight tag, we need to set the opts.LightweightTag to true
-			// so that we don't create an annotated tag. on creating lightweight tag, ref contains the commit SHA directly.
-			opts.LightweightTag = tag == "v1.0.0-lightweight"
-			runcnx.Clients.Log.Infof("is Lightweight tag: %t", opts.LightweightTag)
-			_, err = tgithub.CreateTag(ctx, t, runcnx, ghcnx, opts, sha, tag)
-			assert.NilError(t, err)
-			numberOfPRs++
-		} else {
-			// else if tag is already created, we need to get the tag object to get the commit SHA
-			if tag == "v1.0.0" {
-				// if tag is annotated tag, we need to get the tag object to get the commit SHA
-				runcnx.Clients.Log.Infof("Tag %s is already created on the repository", tag)
-				runcnx.Clients.Log.Infof("Getting tag %s", tag)
-				tagRef, _, err := ghcnx.Client().Git.GetTag(ctx, opts.Organization, opts.Repo, ref.GetObject().GetSHA())
-				assert.NilError(t, err)
-				sha = tagRef.GetObject().GetSHA()
-			} else {
-				// else if tag is lightweight tag, we need to get the commit SHA from the ref
-				runcnx.Clients.Log.Infof("Lightweight tag %s is already created on the repository", tag)
-				sha = ref.GetObject().GetSHA()
+			if _, err := ghcnx.Client().Git.DeleteRef(ctx, opts.Organization, opts.Repo, "heads/"+targetRefName); err != nil {
+				t.Logf("failed to delete branch %s: %v", targetRefName, err)
 			}
-		}
+		})
 
-		g = &tgithub.PRTest{
-			Label:           label,
-			Cnx:             runcnx,
-			Logger:          runcnx.Clients.Log,
-			Options:         opts,
-			Provider:        ghcnx,
-			TargetNamespace: targetNS,
-			PRNumber:        -1,
-			SHA:             sha,
-		}
-		defer g.TearDown(ctx, t)
+		// When testing a lightweight tag, set opts.LightweightTag so that we
+		// don't create an annotated tag; the ref then contains the commit SHA
+		// directly.
+		opts.LightweightTag = tt.lightweight
+		_, err = tgithub.CreateTag(ctx, t, runcnx, ghcnx, opts, sha, tt.name)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			if os.Getenv("TEST_NOCLEANUP") == "true" {
+				return
+			}
+			if err := tgithub.DeleteTag(ctx, ghcnx, opts, tt.name); err != nil {
+				t.Logf("failed to delete tag %s: %v", tt.name, err)
+			}
+		})
 
 		runcnx.Clients.Log.Infof("%s on tag commit", comment)
 		_, _, err = ghcnx.Client().Repositories.CreateComment(ctx,
 			opts.Organization,
-			opts.Repo, sha, // this is the commit sha of the tag v1.0.0
+			opts.Repo, sha, // this is the commit sha of the tag
 			&github.RepositoryComment{Body: new(comment)})
 		assert.NilError(t, err)
 
+		// Two PipelineRuns are expected on this SHA: one from the tag push
+		// event and one from the /test comment.
 		waitOpts := twait.Opts{
 			Namespace:       targetNS,
-			MinNumberStatus: numberOfPRs,
+			MinNumberStatus: 2,
 			PollTimeout:     twait.DefaultTimeout,
-			TargetSHA:       []string{sha}, // this is the commit sha of the tag v1.0.0
+			TargetSHA:       []string{sha}, // this is the commit sha of the tag
 		}
 		runcnx.Clients.Log.Info("Waiting for PipelineRun to be created")
 		_, err = twait.UntilPipelineRunCreated(ctx, runcnx.Clients, waitOpts)
