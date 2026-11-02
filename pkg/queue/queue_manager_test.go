@@ -635,3 +635,77 @@ func TestInitQueuesSkipsRepositoriesWithoutLimit(t *testing.T) {
 	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
 	assert.Equal(t, 0, len(qm.queueMap))
 }
+
+func TestInitQueuesSkipsFinishedPipelineRuns(t *testing.T) {
+	succeeded := func(status corev1.ConditionStatus) tektonv1.PipelineRunStatus {
+		return tektonv1.PipelineRunStatus{
+			Status: duckv1.Status{
+				Conditions: duckv1.Conditions{{Type: apis.ConditionSucceeded, Status: status}},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		spec        tektonv1.PipelineRunSpec
+		status      tektonv1.PipelineRunStatus
+		wantRunning bool
+	}{
+		{
+			name:   "succeeded run with a stale started annotation",
+			status: succeeded(corev1.ConditionTrue),
+		},
+		{
+			name:   "failed run with a stale started annotation",
+			status: succeeded(corev1.ConditionFalse),
+		},
+		{
+			name:   "cancelled run with a stale started annotation",
+			spec:   tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusCancelled},
+			status: succeeded(corev1.ConditionUnknown),
+		},
+		{
+			name:        "running run",
+			status:      succeeded(corev1.ConditionUnknown),
+			wantRunning: true,
+		},
+		{
+			// still executing its finally tasks, so it does occupy a slot.
+			name:        "gracefully cancelled run",
+			spec:        tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusCancelledRunFinally},
+			status:      succeeded(corev1.ConditionUnknown),
+			wantRunning: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			observer, _ := zapobserver.New(zap.InfoLevel)
+			qm := NewManager(zap.New(observer).Sugar())
+
+			repo := newTestRepo(1)
+			pr := newTestPR("first", time.Now(),
+				map[string]string{keys.State: kubeinteraction.StateStarted},
+				map[string]string{
+					keys.ExecutionOrder: "test-ns/first",
+					keys.State:          kubeinteraction.StateStarted,
+				}, tt.spec)
+			pr.Status = tt.status
+
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				Repositories: []*v1alpha1.Repository{repo},
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+			})
+
+			assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
+
+			running := qm.RunningPipelineRuns(repo)
+			if !tt.wantRunning {
+				assert.Equal(t, 0, len(running), "finished pipelineRun still holds a concurrency slot")
+				return
+			}
+			assert.DeepEqual(t, []string{PrKey(pr)}, running)
+		})
+	}
+}
