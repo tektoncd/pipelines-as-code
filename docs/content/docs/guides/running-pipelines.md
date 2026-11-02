@@ -51,6 +51,11 @@ Pipelines-as-Code allows a submitter to run a PipelineRun if any of the followin
 - The pull request author is listed in the `OWNERS` file on the default branch
   (see the [OWNERS file format](#owners-file) below).
 
+For GitHub pull requests, Pipelines-as-Code checks the pull request author,
+except on a `synchronize` event, where it checks the user who pushed the
+commits. This means a maintainer using **Update branch** on a fork pull request
+authorizes the run without `/ok-to-test`.
+
 If an unauthorized user attempts to trigger a PipelineRun by creating
 a pull request or by any other means, Pipelines-as-Code blocks the
 execution and posts a `'Pending'` status check. This check informs the user
