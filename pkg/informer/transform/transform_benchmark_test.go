@@ -18,7 +18,7 @@ import (
 // createRealisticRepository creates a Repository with realistic field sizes
 // that would be seen in production environments.
 func createRealisticRepository(name string) *pacv1alpha1.Repository {
-	fieldsV1Data1 := []byte(`{"f:metadata":{"f:annotations":{"f:kubectl.kubernetes.io/last-applied-configuration":{}},"f:labels":{}},"f:spec":{"f:url":{},"f:git_provider":{"f:url":{},"f:type":{},"f:secret":{"f:name":{},"f:key":{}},"f:webhook_secret":{"f:name":{},"f:key":{}}},"f:settings":{"f:pipelinerun_provenance":{},"f:policy":{"f:ok_to_test":{},"f:pull_request":{}}},"f:params":{}}}`)
+	fieldsV1Data1 := `{"f:metadata":{"f:annotations":{"f:kubectl.kubernetes.io/last-applied-configuration":{}},"f:labels":{}},"f:spec":{"f:url":{},"f:git_provider":{"f:url":{},"f:type":{},"f:secret":{"f:name":{},"f:key":{}},"f:webhook_secret":{"f:name":{},"f:key":{}}},"f:settings":{"f:pipelinerun_provenance":{},"f:policy":{"f:ok_to_test":{},"f:pull_request":{}}},"f:params":{}}}`
 
 	now := metav1.NewTime(time.Now())
 
@@ -35,7 +35,7 @@ func createRealisticRepository(name string) *pacv1alpha1.Repository {
 					APIVersion: "pipelinesascode.tekton.dev/v1alpha1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data1},
+					FieldsV1:   metav1.NewFieldsV1(fieldsV1Data1),
 				},
 			},
 			Annotations: map[string]string{
@@ -207,8 +207,8 @@ func TestMeasureRepoTransformSavings(t *testing.T) {
 func createRealisticPipelineRun(name string) *tektonv1.PipelineRun {
 	now := metav1.NewTime(time.Now())
 
-	fieldsV1Data1 := []byte(`{"f:metadata":{"f:annotations":{"f:pipelinesascode.tekton.dev/state":{},"f:pipelinesascode.tekton.dev/repository":{}},"f:labels":{}},"f:spec":{"f:pipelineRef":{"f:name":{}},"f:params":{},"f:workspaces":{}}}`)
-	fieldsV1Data2 := []byte(`{"f:status":{"f:conditions":{},"f:pipelineSpec":{},"f:childReferences":{},"f:startTime":{},"f:completionTime":{},"f:provenance":{},"f:spanContext":{}}}`)
+	fieldsV1Data1 := `{"f:metadata":{"f:annotations":{"f:pipelinesascode.tekton.dev/state":{},"f:pipelinesascode.tekton.dev/repository":{}},"f:labels":{}},"f:spec":{"f:pipelineRef":{"f:name":{}},"f:params":{},"f:workspaces":{}}}`
+	fieldsV1Data2 := `{"f:status":{"f:conditions":{},"f:pipelineSpec":{},"f:childReferences":{},"f:startTime":{},"f:completionTime":{},"f:provenance":{},"f:spanContext":{}}}`
 
 	// Build a realistic PipelineSpec (~20KB) — each PR stores the full pipeline
 	// definition in status.pipelineSpec as it was at execution time.
@@ -271,7 +271,7 @@ func createRealisticPipelineRun(name string) *tektonv1.PipelineRun {
 					APIVersion: "tekton.dev/v1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data1},
+					FieldsV1:   metav1.NewFieldsV1(fieldsV1Data1),
 				},
 				{
 					Manager:    "tekton-pipelines-controller",
@@ -279,7 +279,7 @@ func createRealisticPipelineRun(name string) *tektonv1.PipelineRun {
 					APIVersion: "tekton.dev/v1",
 					Time:       &now,
 					FieldsType: "FieldsV1",
-					FieldsV1:   &metav1.FieldsV1{Raw: fieldsV1Data2},
+					FieldsV1:   metav1.NewFieldsV1(fieldsV1Data2),
 				},
 			},
 		},
