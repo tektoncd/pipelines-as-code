@@ -11,7 +11,7 @@ TARGETDIR=${2:-}
 [[ -z ${TARGET_VERSION} || -z ${TARGETDIR} ]] && { echo "Usage: $0 <version> [targetdir]" && exit 1; }
 [[ -d ${TARGETDIR} ]] || mkdir -p ${TARGETDIR}
 [[ -x ${TARGETDIR}/hugo ]] && {
-  ${TARGETDIR}/hugo version | grep -q "${TARGET_VERSION}.*extended " && {
+  grep -q "${TARGET_VERSION}.*extended " < <(${TARGETDIR}/hugo version) && {
     exit 0
   }
   rm -f ${TARGETDIR}/hugo

@@ -10,7 +10,7 @@ TARGETDIR=${2:-}
 [[ -z ${TARGET_VERSION} || -z ${TARGETDIR} ]] && { echo "Usage: $0 <version> [targetdir]" && exit 1; }
 [[ -d ${TARGETDIR} ]] || mkdir -p ${TARGETDIR}
 [[ -x ${TARGETDIR}/htmltest ]] && {
-	${TARGETDIR}/htmltest --version 2>&1 | grep -q "${TARGET_VERSION}" && {
+	grep -q "${TARGET_VERSION}" < <(${TARGETDIR}/htmltest --version 2>&1) && {
 		exit 0
 	}
 	rm -f ${TARGETDIR}/htmltest
