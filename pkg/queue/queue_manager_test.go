@@ -12,6 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -22,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
+	"strings"
 )
 
 func TestSomeoneElseSetPendingWithNoConcurrencyLimit(t *testing.T) {
@@ -208,11 +210,15 @@ func TestQueueManagerInitQueues(t *testing.T) {
 	logger := zap.New(observer).Sugar()
 	cw := clockwork.NewFakeClock()
 
+	// keys.Repository is set on every PipelineRun PaC creates, and InitQueues
+	// selects on it, so the fixtures carry it too.
 	startedLabel := map[string]string{
-		keys.State: kubeinteraction.StateStarted,
+		keys.State:      kubeinteraction.StateStarted,
+		keys.Repository: "test",
 	}
 	queuedLabel := map[string]string{
-		keys.State: kubeinteraction.StateQueued,
+		keys.State:      kubeinteraction.StateQueued,
+		keys.Repository: "test",
 	}
 
 	repo := newTestRepo(1)
@@ -395,8 +401,8 @@ func TestQueueManagerInitQueuesSkipsPipelineRunsWithoutOrder(t *testing.T) {
 	logger := zap.New(observer).Sugar()
 	cw := clockwork.NewFakeClock()
 
-	startedLabel := map[string]string{keys.State: kubeinteraction.StateStarted}
-	queuedLabel := map[string]string{keys.State: kubeinteraction.StateQueued}
+	startedLabel := map[string]string{keys.State: kubeinteraction.StateStarted, keys.Repository: "test"}
+	queuedLabel := map[string]string{keys.State: kubeinteraction.StateQueued, keys.Repository: "test"}
 
 	repo := newTestRepo(1)
 
@@ -634,4 +640,107 @@ func TestInitQueuesSkipsRepositoriesWithoutLimit(t *testing.T) {
 	})
 	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
 	assert.Equal(t, 0, len(qm.queueMap))
+}
+
+// Repositories are commonly all declared in a single namespace, so rebuilding
+// a queue has to tell them apart by label and not by namespace alone.
+// Otherwise every Repository is seeded with every other Repository's runs,
+// and since a run is only ever removed from its OWN queue, each foreign entry
+// is added once and removed never - a Repository at concurrency_limit 1 ends
+// up permanently blocked behind a phantom it never owned.
+func TestInitQueuesDoesNotMixRepositoriesInSameNamespace(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+	cw := clockwork.NewFakeClock()
+
+	repoA := newTestRepo(1)
+	repoA.Name = "repo-a"
+	repoB := newTestRepo(1)
+	repoB.Name = "repo-b"
+
+	// Each repository has one started and one queued run, and each run's
+	// execution order names only its own repository's runs.
+	newRun := func(repo, name, state string, spec tektonv1.PipelineRunSpec) *tektonv1.PipelineRun {
+		return newTestPR(name, cw.Now(),
+			map[string]string{keys.State: state, keys.Repository: repo},
+			map[string]string{
+				keys.ExecutionOrder: fmt.Sprintf("test-ns/%s-started,test-ns/%s-queued", repo, repo),
+				keys.State:          state,
+			}, spec)
+	}
+	pending := tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusPending}
+
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repoA, repoB},
+		PipelineRuns: []*tektonv1.PipelineRun{
+			newRun("repo-a", "repo-a-started", kubeinteraction.StateStarted, tektonv1.PipelineRunSpec{}),
+			newRun("repo-a", "repo-a-queued", kubeinteraction.StateQueued, pending),
+			newRun("repo-b", "repo-b-started", kubeinteraction.StateStarted, tektonv1.PipelineRunSpec{}),
+			newRun("repo-b", "repo-b-queued", kubeinteraction.StateQueued, pending),
+		},
+	})
+
+	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
+
+	for _, repo := range []*v1alpha1.Repository{repoA, repoB} {
+		sema, ok := qm.queueMap[RepoKey(repo)]
+		assert.Assert(t, ok, "no queue built for %s", RepoKey(repo))
+		assert.DeepEqual(t, sema.getCurrentRunning(), []string{"test-ns/" + repo.Name + "-started"})
+		assert.DeepEqual(t, sema.getCurrentPending(), []string{"test-ns/" + repo.Name + "-queued"})
+	}
+}
+
+func TestInitQueuesSkipsForeignRunsWhenRepositoryLabelsCollide(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	observer, _ := zapobserver.New(zap.InfoLevel)
+	qm := NewManager(zap.New(observer).Sugar())
+	cw := clockwork.NewFakeClock()
+
+	// CleanValueKubernetes keeps only the LAST 63 characters, so two
+	// Repository names that end alike reduce to one label value and answer
+	// each other's selector. Both names below are valid DNS subdomains.
+	suffix := strings.Repeat("a", 56) + "-shared"
+	assert.Equal(t, len(suffix), 63)
+
+	repoA := newTestRepo(1)
+	repoA.Name = "repo-a." + suffix
+	repoB := newTestRepo(1)
+	repoB.Name = "repo-b." + suffix
+
+	label := formatting.CleanValueKubernetes(repoA.Name)
+	assert.Equal(t, label, formatting.CleanValueKubernetes(repoB.Name),
+		"the names must collide for this test to mean anything")
+
+	// Every run carries the colliding label, as Pipelines-as-Code writes it,
+	// and its own Repository name in the annotation, which does not collide.
+	newRun := func(repo *v1alpha1.Repository, short, state string, spec tektonv1.PipelineRunSpec) *tektonv1.PipelineRun {
+		return newTestPR(short, cw.Now(),
+			map[string]string{keys.State: state, keys.Repository: label},
+			map[string]string{
+				keys.ExecutionOrder: fmt.Sprintf("test-ns/%s-started,test-ns/%s-queued", short[:6], short[:6]),
+				keys.State:          state,
+				keys.Repository:     repo.Name,
+			}, spec)
+	}
+	pending := tektonv1.PipelineRunSpec{Status: tektonv1.PipelineRunSpecStatusPending}
+
+	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+		Repositories: []*v1alpha1.Repository{repoA, repoB},
+		PipelineRuns: []*tektonv1.PipelineRun{
+			newRun(repoA, "repo-a-started", kubeinteraction.StateStarted, tektonv1.PipelineRunSpec{}),
+			newRun(repoA, "repo-a-queued", kubeinteraction.StateQueued, pending),
+			newRun(repoB, "repo-b-started", kubeinteraction.StateStarted, tektonv1.PipelineRunSpec{}),
+			newRun(repoB, "repo-b-queued", kubeinteraction.StateQueued, pending),
+		},
+	})
+
+	assert.NilError(t, qm.InitQueues(ctx, stdata.Pipeline, stdata.PipelineAsCode))
+
+	for short, repo := range map[string]*v1alpha1.Repository{"repo-a": repoA, "repo-b": repoB} {
+		sema, ok := qm.queueMap[RepoKey(repo)]
+		assert.Assert(t, ok, "no queue built for %s", RepoKey(repo))
+		assert.DeepEqual(t, sema.getCurrentRunning(), []string{"test-ns/" + short + "-started"})
+		assert.DeepEqual(t, sema.getCurrentPending(), []string{"test-ns/" + short + "-queued"})
+	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/generated/clientset/versioned"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/sort"
@@ -225,6 +226,20 @@ func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, 
 
 // InitQueues rebuild all the queues for all repository if concurrency is defined before
 // reconciler started reconciling them.
+// ownedBy reports whether a PipelineRun belongs to this Repository.
+//
+// The repository label is formatting.CleanValueKubernetes(name), which keeps
+// only the last 63 characters of a longer name, so two Repositories whose
+// names share a 63-character suffix answer each other's label selector. The
+// annotation carries the name unaltered, so it resolves what the label cannot.
+//
+// A run without the annotation is kept: the label selector has already
+// narrowed the list, and dropping it would leave a genuine run unqueued.
+func ownedBy(pr *tektonv1.PipelineRun, repo *v1alpha1.Repository) bool {
+	name, ok := pr.GetAnnotations()[keys.Repository]
+	return !ok || name == repo.GetName()
+}
+
 func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, pac versioned.Interface) error {
 	// Reconstruction runs before workers start; no old ownership survives it.
 	qm.lock.Lock()
@@ -245,10 +260,16 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 			continue
 		}
 
+		// Several Repositories commonly share one namespace, so the runs have
+		// to be selected by repository as well: a run belonging to another
+		// Repository is only ever removed from ITS OWN queue, so seeding it
+		// here would leave an entry that is added once and removed never.
+		repoSelector := fmt.Sprintf("%s=%s", keys.Repository, formatting.CleanValueKubernetes(repo.GetName()))
+
 		// add all pipelineRuns in started state to pending queue
 		prs, err := tekton.TektonV1().PipelineRuns(repo.Namespace).
 			List(ctx, v1.ListOptions{
-				LabelSelector: fmt.Sprintf("%s=%s", keys.State, kubeinteraction.StateStarted),
+				LabelSelector: fmt.Sprintf("%s,%s=%s", repoSelector, keys.State, kubeinteraction.StateStarted),
 			})
 		if err != nil {
 			return err
@@ -258,6 +279,9 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		sortedPRs := sortPipelineRunsByCreationTimestamp(prs.Items)
 
 		for _, pr := range sortedPRs {
+			if !ownedBy(pr, &repo) {
+				continue
+			}
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
 				// if the pipelineRun doesn't have an execution order annotation
@@ -279,7 +303,7 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		// now fetch all queued pipelineRun
 		prs, err = tekton.TektonV1().PipelineRuns(repo.Namespace).
 			List(ctx, v1.ListOptions{
-				LabelSelector: fmt.Sprintf("%s=%s", keys.State, kubeinteraction.StateQueued),
+				LabelSelector: fmt.Sprintf("%s,%s=%s", repoSelector, keys.State, kubeinteraction.StateQueued),
 			})
 		if err != nil {
 			return err
@@ -289,6 +313,9 @@ func (qm *Manager) InitQueues(ctx context.Context, tekton versioned2.Interface, 
 		sortedPRs = sortPipelineRunsByCreationTimestamp(prs.Items)
 
 		for _, pr := range sortedPRs {
+			if !ownedBy(pr, &repo) {
+				continue
+			}
 			order, exist := pr.GetAnnotations()[keys.ExecutionOrder]
 			if !exist {
 				// if the pipelineRun doesn't have an execution order annotation
