@@ -12,7 +12,7 @@ import (
 )
 
 type Interface interface {
-	CleanupPipelines(context.Context, *zap.SugaredLogger, *v1alpha1.Repository, *pipelinev1.PipelineRun, int) error
+	CleanupPipelines(context.Context, *zap.SugaredLogger, *v1alpha1.Repository, *pipelinev1.PipelineRun, int, KeepFunc) error
 	CreateSecret(ctx context.Context, ns string, secret *corev1.Secret) error
 	DeleteSecret(context.Context, *zap.SugaredLogger, string, string) error
 	UpdateSecretWithOwnerRef(context.Context, *zap.SugaredLogger, string, string, *pipelinev1.PipelineRun) error

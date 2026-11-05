@@ -8,6 +8,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
@@ -97,11 +98,23 @@ func TestDetectProvider(t *testing.T) {
 	observer, _ := zapobserver.New(zap.InfoLevel)
 	fakelogger := zap.New(observer).Sugar()
 	tests := []struct {
-		name         string
-		missTheLabel bool
-		annotation   string
-		errStr       string
+		name          string
+		missTheLabel  bool
+		annotation    string
+		repository    string
+		errStr        string
+		wantRepoNames []string
 	}{
+		{
+			name:          "github token scoped to the triggering repository",
+			annotation:    "github",
+			repository:    "repo",
+			wantRepoNames: []string{"repo"},
+		},
+		{
+			name:       "github without repository annotation is not scoped by name",
+			annotation: "github",
+		},
 		{
 			name:       "known provider",
 			annotation: "gitlab",
@@ -134,15 +147,19 @@ func TestDetectProvider(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							keys.GitProvider: tt.annotation,
+							keys.GitProvider:   tt.annotation,
+							keys.URLRepository: tt.repository,
 						},
 					},
 				}
 			}
 			r := Reconciler{}
-			_, _, err := r.detectProvider(context.Background(), fakelogger, pr)
+			vcx, _, err := r.detectProvider(context.Background(), fakelogger, pr)
 			if tt.errStr == "" {
 				assert.NilError(t, err)
+				if gh, ok := vcx.(*github.Provider); ok {
+					assert.DeepEqual(t, tt.wantRepoNames, gh.RepositoryNames)
+				}
 				return
 			}
 			assert.Error(t, err, tt.errStr)
