@@ -2665,7 +2665,7 @@ func TestResolveCustomParamsForCELNilRepo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolveCustomParamsForCEL(
+			got := ResolveCustomParamsForCEL(
 				context.Background(),
 				tt.repo,
 				&info.Event{},
@@ -2673,6 +2673,7 @@ func TestResolveCustomParamsForCELNilRepo(t *testing.T) {
 				&testprovider.TestProviderImp{},
 				nil,
 				zap.NewNop().Sugar(),
+				nil,
 			)
 			assert.Equal(t, 0, len(got))
 		})
@@ -3406,6 +3407,11 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 			},
 		}
 	}
+	createFollowUpMatch := func(name string) Match {
+		match := createMatchedPR(name)
+		match.Config = map[string]string{ConfigFollowUp: "true"}
+		return match
+	}
 
 	tests := []struct {
 		name          string
@@ -3476,6 +3482,16 @@ func TestFilterSuccessfulTemplates(t *testing.T) {
 			sha:           "test-sha",
 			matchedPRs:    []Match{createMatchedPR("template-a")}, // only template with successful run
 			expectedNames: []string{},
+		},
+		{
+			name:      "A follow-up whose previous run succeeded is kept for the follow-up planning",
+			eventType: opscomments.RetestAllCommentEventType.String(),
+			sha:       "test-sha",
+			matchedPRs: []Match{
+				createFollowUpMatch("template-a"),
+				createMatchedPR("template-b"),
+			},
+			expectedNames: []string{"template-a", "template-b"},
 		},
 		{
 			name:      "Templates without original PR name identification are ignored",
