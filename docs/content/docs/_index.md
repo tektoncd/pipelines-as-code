@@ -15,5 +15,6 @@ Pipelines-as-Code brings CI/CD pipelines into your Git repository, letting you d
   {{< card link="cli" title="CLI Reference" subtitle="tkn pac commands" >}}
   {{< card link="operations" title="Operations" subtitle="Logging, metrics, certificates, and more" >}}
   {{< card link="advanced" title="Advanced Topics" subtitle="Concurrency, webhooks, policies, and private repos" >}}
+  {{< card link="ecosystem" title="Tekton Ecosystem" subtitle="See how Pipelines-as-Code compares to other Tekton components" >}}
   {{< card link="dev" title="Development" subtitle="Contributing and architecture" >}}
 {{< /cards >}}
