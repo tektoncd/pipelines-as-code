@@ -19,6 +19,7 @@ automatically triggered for Pull Requests and Push events.
   {{< card link="docs/providers" title="Git Providers" subtitle="GitHub, GitLab, Bitbucket, Forgejo" >}}
   {{< card link="docs/cli" title="CLI Reference" subtitle="tkn-pac commands" >}}
   {{< card link="docs/api" title="API Reference" subtitle="Repository CR, ConfigMap, and settings" >}}
+  {{< card link="docs/ecosystem" title="Tekton Ecosystem" subtitle="See how Pipelines-as-Code fits with Tekton components" >}}
 {{< /cards >}}
 
 ## Features
