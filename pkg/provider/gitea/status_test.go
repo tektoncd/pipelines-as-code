@@ -328,6 +328,29 @@ func TestProviderCreateStatusCommit(t *testing.T) {
 			wantCommentJSON:              `{"body":"\nhas \u003cb\u003eskipped\u003c/b\u003e."}`,
 		},
 		{
+			name: "cancelled",
+			args: args{
+				status: status.StatusOpts{
+					Conclusion: status.ConclusionCancelled,
+					Title:      "Cancelled",
+					Text:       "was <b>cancelled</b>.",
+				},
+				pacopts: &info.PacOpts{Settings: settings.Settings{
+					ApplicationName: "myapp",
+				}},
+				event: &info.Event{
+					Organization:      "myorg",
+					Repository:        "myrepo",
+					PullRequestNumber: 1,
+					TriggerTarget:     "pull_request",
+					SHA:               "123456",
+				},
+			},
+			wantCommentCreationAPICalled: true,
+			wantStatusJSON:               `{"state":"warning","target_url":"","description":"Cancelled","context":"myapp"}`,
+			wantCommentJSON:              `{"body":"\nwas \u003cb\u003ecancelled\u003c/b\u003e."}`,
+		},
+		{
 			name: "unmatched report",
 			args: args{
 				pacopts: &info.PacOpts{Settings: settings.Settings{

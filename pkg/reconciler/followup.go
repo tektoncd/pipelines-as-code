@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 )
 
 // evaluateFollowUpsOf re-evaluates every pending follow-up of the group of a
@@ -66,7 +65,7 @@ func (r *Reconciler) evaluateGroup(ctx context.Context, logger *zap.SugaredLogge
 		if depName != "" && !slices.Contains(fu.FollowUp.Deps, depName) {
 			continue
 		}
-		if err := r.evaluateFollowUp(ctx, logger, fu, group, collected, eventSource); err != nil {
+		if err := r.evaluateFollowUp(ctx, logger, fu, group, eventSource); err != nil {
 			// one broken follow-up must not block its siblings: the rest of
 			// the group is evaluated, and the error is returned so the run
 			// requeues and the broken entry is retried
@@ -83,13 +82,13 @@ func (r *Reconciler) evaluateGroup(ctx context.Context, logger *zap.SugaredLogge
 // fetched; once every dependency is done the definition is re-resolved at the
 // event's pinned revision and its condition decides.
 func (r *Reconciler) evaluateFollowUp(ctx context.Context, logger *zap.SugaredLogger,
-	fu prgroup.FollowUpOnRun, group []*tektonv1.PipelineRun, collected []prgroup.FollowUpOnRun,
+	fu prgroup.FollowUpOnRun, group []*tektonv1.PipelineRun,
 	eventSource *tektonv1.PipelineRun,
 ) error {
 	followUp := fu.FollowUp
 	namespace := eventSource.GetNamespace()
 
-	decision, resolveErr := prgroup.ResolveFollowUp(followUp, group, collected)
+	decision, resolveErr := prgroup.ResolveFollowUp(followUp, group)
 	if resolveErr == nil && decision.Waiting {
 		// its run cannot exist before every dependency is done
 		logger.Debugf("follow-up %s is still waiting on its dependencies", followUp.Name)
@@ -168,7 +167,7 @@ func (r *Reconciler) evaluateFollowUp(ctx context.Context, logger *zap.SugaredLo
 			fmt.Sprintf("CEL condition evaluated to false (dependencies: %s)",
 				prgroup.SummarizeStatuses(followUp.Deps, decision.Runs)))
 	}
-	return r.createFollowUp(ctx, logger, fu, collected, eventSource, repo, vcx, event, run, decision)
+	return r.createFollowUp(ctx, logger, fu, eventSource, repo, vcx, event, run, decision)
 }
 
 // createFollowUp creates the run of a follow-up whose dependencies are done and
@@ -177,7 +176,7 @@ func (r *Reconciler) evaluateFollowUp(ctx context.Context, logger *zap.SugaredLo
 // cleanly on the AlreadyExists error. From there the run behaves like any run
 // of the repository.
 func (r *Reconciler) createFollowUp(ctx context.Context, logger *zap.SugaredLogger,
-	fu prgroup.FollowUpOnRun, collected []prgroup.FollowUpOnRun,
+	fu prgroup.FollowUpOnRun,
 	eventSource *tektonv1.PipelineRun, repo *v1alpha1.Repository,
 	vcx provider.Interface, event *info.Event, run *tektonv1.PipelineRun, decision prgroup.Decision,
 ) error {
@@ -301,7 +300,7 @@ func (r *Reconciler) createFollowUp(ctx context.Context, logger *zap.SugaredLogg
 	// report the started (or queued) status; on GitHub App runs this also
 	// patches the check-run id the reconcile of the run waits for
 	// The run exists from here on: a failed report must not stop the
-	// follow-up from being consumed and its dependents from migrating.
+	// follow-up from being consumed.
 	// Like startPR, the created run decides, not the repository settings: it
 	// is pending under the concurrency limit or because an external mutating
 	// webhook (a Kueue-like queue) pended it, and is then reported queued and
@@ -317,10 +316,6 @@ func (r *Reconciler) createFollowUp(ctx context.Context, logger *zap.SugaredLogg
 	if err := r.consumeFollowUp(ctx, fu, prgroup.StateCreated); err != nil {
 		logger.Errorf("cannot consume the created followUp %s: %v", followUp.ID, err)
 	}
-	// follow-ups waiting on this follow-up migrate to their new direct
-	// dependency, so the runs they were first stamped on can be pruned
-	r.migrateDependentFollowUps(ctx, logger, created, collected)
-
 	logger.Infof("created follow-up pipelinerun %s", created.GetName())
 	return nil
 }
@@ -366,67 +361,6 @@ func (r *Reconciler) reportQueuedFollowUp(ctx context.Context, logger *zap.Sugar
 			"labels":      map[string]string{keys.State: kubeinteraction.StateQueued},
 		}})
 	return err
-}
-
-// migrateDependentFollowUps moves the pending follow-ups that directly depend on
-// the created run over to it. Added before removed, and removed only once the
-// addition is stored: a failure in between leaves two copies, which the
-// collection dedupes, never zero.
-func (r *Reconciler) migrateDependentFollowUps(ctx context.Context, logger *zap.SugaredLogger,
-	created *tektonv1.PipelineRun, collected []prgroup.FollowUpOnRun,
-) {
-	createdName := prgroup.DefinitionName(created)
-	var moving []prgroup.FollowUp
-	idsBySource := map[string][]string{}
-	for _, fu := range collected {
-		if !fu.FollowUp.Pending() || !slices.Contains(fu.FollowUp.Deps, createdName) {
-			continue
-		}
-		if fu.Run.GetName() == created.GetName() {
-			continue
-		}
-		moving = append(moving, fu.FollowUp)
-		idsBySource[fu.Run.GetName()] = append(idsBySource[fu.Run.GetName()], fu.FollowUp.ID)
-	}
-	if len(moving) == 0 {
-		return
-	}
-
-	namespace := created.GetNamespace()
-	if err := r.updateFollowUpsFenced(ctx, namespace, created.GetName(), func(pr *tektonv1.PipelineRun) error {
-		return prgroup.AddFollowUps(pr, moving...)
-	}); err != nil {
-		// the follow-ups stay on the runs they were stamped on
-		logger.Errorf("cannot migrate the follow-ups onto pipelinerun %s: %v", created.GetName(), err)
-		return
-	}
-	for source, ids := range idsBySource {
-		if err := r.updateFollowUpsFenced(ctx, namespace, source, func(pr *tektonv1.PipelineRun) error {
-			return prgroup.RemoveFollowUps(pr, ids...)
-		}); err != nil {
-			// two copies remain, the collection dedupes them
-			logger.Debugf("cannot drop the migrated follow-ups %v from pipelinerun %s: %v", ids, source, err)
-		}
-	}
-}
-
-// updateFollowUpsFenced applies mutate to the follow-ups stored on a run and
-// patches them, fenced on the UID and resourceVersion, re-reading the run on a
-// conflict. Unlike patchFenced, a lost fence is retried and an exhausted
-// retry or a gone run is an error: the caller relies on the update landing.
-func (r *Reconciler) updateFollowUpsFenced(ctx context.Context, namespace, name string,
-	mutate func(*tektonv1.PipelineRun) error,
-) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		fresh, err := r.run.Clients.Tekton.TektonV1().PipelineRuns(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		if err := mutate(fresh); err != nil {
-			return err
-		}
-		return r.patchFencedStrict(ctx, fresh, prgroup.FollowUpsPatch(fresh))
-	})
 }
 
 // skipFollowUp consumes a pending follow-up as skipped and reports the skipped check.
@@ -544,6 +478,9 @@ func (r *Reconciler) evaluateDependentsOf(ctx context.Context, logger *zap.Sugar
 // waiting on its definition are re-evaluated with the run excluded from the
 // group, so they see the dependency as gone.
 func (r *Reconciler) finalizeFollowUps(ctx context.Context, logger *zap.SugaredLogger, pr *tektonv1.PipelineRun) {
+	if r.run.Info.Pac == nil || !r.run.Info.Pac.EnableFollowUpRuns {
+		return
+	}
 	groupID := prgroup.GroupIDOf(pr)
 	if groupID == "" {
 		return
@@ -567,7 +504,7 @@ func (r *Reconciler) finalizeFollowUps(ctx context.Context, logger *zap.SugaredL
 		return
 	}
 	// the follow-ups stored on the dying run join the evaluation with their
-	// run, so a skip can still report and a creation can migrate them
+	// run, so a skip can still report
 	followUpsOnPR, err := prgroup.FollowUpsOf(pr)
 	if err != nil {
 		logger.Errorf("cannot read the follow-ups of pipelinerun %s: %v", pr.GetName(), err)
@@ -588,7 +525,7 @@ func (r *Reconciler) finalizeFollowUps(ctx context.Context, logger *zap.SugaredL
 			}
 			continue
 		}
-		if err := r.evaluateFollowUp(ctx, logger, fu, group, collected, pr); err != nil {
+		if err := r.evaluateFollowUp(ctx, logger, fu, group, pr); err != nil {
 			logger.Errorf("cannot evaluate the follow-up %s: %v", followUp.Name, err)
 		}
 	}
@@ -600,7 +537,7 @@ func (r *Reconciler) finalizeFollowUps(ctx context.Context, logger *zap.SugaredL
 		if fu.Run.GetName() == pr.GetName() {
 			continue
 		}
-		if err := r.evaluateFollowUp(ctx, logger, fu, group, collected, pr); err != nil {
+		if err := r.evaluateFollowUp(ctx, logger, fu, group, pr); err != nil {
 			logger.Errorf("cannot evaluate the follow-up %s: %v", fu.FollowUp.Name, err)
 		}
 	}
@@ -723,7 +660,7 @@ func (r *Reconciler) followUpSourceRepo(followUp prgroup.FollowUp) (*v1alpha1.Re
 		return nil, fmt.Errorf("cannot get the source repository %s/%s of the follow-up: %w",
 			followUp.Event.SourceRepoNamespace, followUp.Event.SourceRepoName, err)
 	}
-	return repo, nil
+	return r.mergedRepo(repo), nil
 }
 
 // authorizeFollowUpSourceRepo rejects a source Repository that is neither the

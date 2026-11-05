@@ -48,13 +48,11 @@ func finishedGroupRun(t *testing.T, name, definition string, followUps ...prgrou
 	return pr
 }
 
-// storedFollowUpState reads the state of a follow-up stored on a run of the
-// fake cluster, empty when the run or the follow-up is not there.
-func storedFollowUpState(ctx context.Context, t *testing.T, tekton *fakepipelineclientset.Clientset,
-	runName, id string,
-) string {
+// storedFollowUpState reads the state of a follow-up stored on the build run
+// of the fake cluster, empty when the run or the follow-up is not there.
+func storedFollowUpState(ctx context.Context, t *testing.T, tekton *fakepipelineclientset.Clientset, id string) string {
 	t.Helper()
-	pr, err := tekton.TektonV1().PipelineRuns("namespace").Get(ctx, runName, metav1.GetOptions{})
+	pr, err := tekton.TektonV1().PipelineRuns("namespace").Get(ctx, "build", metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
@@ -98,7 +96,7 @@ func TestConsumeFollowUp(t *testing.T) {
 
 			fu := prgroup.FollowUpOnRun{FollowUp: deploy, Run: run}
 			assert.NilError(t, r.consumeFollowUp(ctx, fu, prgroup.StateSkipped))
-			assert.Equal(t, tt.wantState, storedFollowUpState(ctx, t, stdata.Pipeline, "build", deploy.ID))
+			assert.Equal(t, tt.wantState, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
 		})
 	}
 }
@@ -178,7 +176,7 @@ func TestEvaluateFollowUpsOf(t *testing.T) {
 			}
 
 			assert.NilError(t, r.evaluateFollowUpsOf(ctx, logger, dep))
-			state := storedFollowUpState(ctx, t, stdata.Pipeline, "build", "deploy-group1")
+			state := storedFollowUpState(ctx, t, stdata.Pipeline, "deploy-group1")
 			if tt.wantNotPending {
 				assert.Assert(t, state != prgroup.StatePending, "the follow-up was not evaluated")
 				return
@@ -210,91 +208,7 @@ func TestSkipFollowUpQuietly(t *testing.T) {
 	// terminal state and the re-evaluation of the dependents
 	fu := prgroup.FollowUpOnRun{FollowUp: deploy, Run: build}
 	assert.NilError(t, r.skipFollowUpQuietly(ctx, logger, fu, build, "CEL condition evaluated to false"))
-	assert.Equal(t, prgroup.StateSkipped, storedFollowUpState(ctx, t, stdata.Pipeline, "build", deploy.ID))
-}
-
-func TestMigrateDependentFollowUps(t *testing.T) {
-	tests := []struct {
-		name        string
-		publishDeps []string
-		seedCreated bool
-		// conflicts is the number of patches of the created run answered
-		// with a 409, like a Tekton status update racing the migration
-		conflicts int
-		wantOn    string
-	}{
-		{
-			name:        "a pending dependent moves to the created run",
-			publishDeps: []string{"deploy"},
-			seedCreated: true,
-			wantOn:      "deploy",
-		},
-		{
-			name:        "a follow-up waiting on another definition stays put",
-			publishDeps: []string{"build"},
-			seedCreated: true,
-			wantOn:      "tests",
-		},
-		{
-			name:        "a conflict on the created run is retried",
-			publishDeps: []string{"deploy"},
-			seedCreated: true,
-			conflicts:   1,
-			wantOn:      "deploy",
-		},
-		{
-			name:        "a created run that keeps conflicting leaves the follow-up where it is",
-			publishDeps: []string{"deploy"},
-			seedCreated: true,
-			conflicts:   100,
-			wantOn:      "tests",
-		},
-		{
-			name:        "a created run that is gone leaves the follow-up where it is",
-			publishDeps: []string{"deploy"},
-			seedCreated: false,
-			wantOn:      "tests",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, _ := rtesting.SetupFakeContext(t)
-			publish := prgroup.FollowUp{
-				ID: "publish-group1", Name: "publish",
-				Deps: tt.publishDeps, State: prgroup.StatePending,
-			}
-			testsRun := groupRun(t, "tests", "tests", "group1", publish)
-			created := groupRun(t, "deploy", "deploy", "group1")
-			seed := []*tektonv1.PipelineRun{testsRun}
-			if tt.seedCreated {
-				seed = append(seed, created)
-			}
-			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{PipelineRuns: seed})
-			conflicts := tt.conflicts
-			stdata.Pipeline.PrependReactor("patch", "pipelineruns", func(action k8stesting.Action) (bool, runtime.Object, error) {
-				patch, ok := action.(k8stesting.PatchAction)
-				if !ok || patch.GetName() != "deploy" || conflicts == 0 {
-					return false, nil, nil
-				}
-				conflicts--
-				return true, nil, k8serrors.NewConflict(tektonv1.Resource("pipelineruns"), "deploy", fmt.Errorf("modified"))
-			})
-			r := &Reconciler{run: &params.Run{Clients: clients.Clients{Tekton: stdata.Pipeline}}}
-
-			collected := []prgroup.FollowUpOnRun{{FollowUp: publish, Run: testsRun}}
-			r.migrateDependentFollowUps(ctx, zap.NewNop().Sugar(), created, collected)
-
-			// the follow-up sits on exactly one run: the wanted one, still pending
-			for _, runName := range []string{"tests", "deploy"} {
-				state := storedFollowUpState(ctx, t, stdata.Pipeline, runName, publish.ID)
-				if runName == tt.wantOn {
-					assert.Equal(t, prgroup.StatePending, state)
-				} else {
-					assert.Equal(t, "", state)
-				}
-			}
-		})
-	}
+	assert.Equal(t, prgroup.StateSkipped, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
 }
 
 func TestCreateFollowUp(t *testing.T) {
@@ -370,8 +284,7 @@ func TestCreateFollowUp(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
 			logger := zap.NewNop().Sugar()
 			deploy := prgroup.FollowUp{ID: "deploy-group1", Name: "deploy", Deps: []string{"build"}, State: prgroup.StatePending}
-			publish := prgroup.FollowUp{ID: "publish-group1", Name: "publish", Deps: []string{"deploy"}, State: prgroup.StatePending}
-			build := finishedGroupRun(t, "build", "build", deploy, publish)
+			build := finishedGroupRun(t, "build", "build", deploy)
 			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{PipelineRuns: []*tektonv1.PipelineRun{build}})
 			if tt.rejectCreate {
 				stdata.Pipeline.PrependReactor("create", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
@@ -455,11 +368,10 @@ func TestCreateFollowUp(t *testing.T) {
 				},
 			}}
 			fu := prgroup.FollowUpOnRun{FollowUp: deploy, Run: build}
-			collected := []prgroup.FollowUpOnRun{fu, {FollowUp: publish, Run: build}}
 
-			assert.NilError(t, r.createFollowUp(ctx, logger, fu, collected, build, repo,
+			assert.NilError(t, r.createFollowUp(ctx, logger, fu, build, repo,
 				vcx, event, run, prgroup.Decision{}))
-			assert.Equal(t, tt.wantFollowUp, storedFollowUpState(ctx, t, stdata.Pipeline, "build", deploy.ID))
+			assert.Equal(t, tt.wantFollowUp, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
 
 			// nothing retries a failed creation: it is reported once
 			failures := 0
@@ -489,10 +401,6 @@ func TestCreateFollowUp(t *testing.T) {
 			assert.Equal(t, tt.wantState, created.GetAnnotations()[keys.State])
 			assert.Equal(t, tt.wantPending, created.Spec.Status == tektonv1.PipelineRunSpecStatusPending)
 			assert.Equal(t, tt.wantCancelled, created.IsGracefullyCancelled())
-			if !tt.conflictStart && !tt.cancelledMeanwhile {
-				// the chained follow-up moved onto its new direct dependency
-				assert.Equal(t, prgroup.StatePending, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID, publish.ID))
-			}
 		})
 	}
 }
@@ -616,6 +524,12 @@ func TestVerifiedEventSource(t *testing.T) {
 
 func TestFollowUpSourceRepo(t *testing.T) {
 	source := &v1alpha1.Repository{ObjectMeta: metav1.ObjectMeta{Name: "source", Namespace: "namespace"}}
+	global := &v1alpha1.Repository{
+		ObjectMeta: metav1.ObjectMeta{Name: "global", Namespace: "pac"},
+		Spec:       v1alpha1.RepositorySpec{Settings: &v1alpha1.Settings{PipelineRunProvenance: "default_branch"}},
+	}
+	merged := source.DeepCopy()
+	merged.Spec.Settings = &v1alpha1.Settings{PipelineRunProvenance: "default_branch"}
 	tests := []struct {
 		name     string
 		followUp prgroup.FollowUp
@@ -627,7 +541,8 @@ func TestFollowUpSourceRepo(t *testing.T) {
 			followUp: prgroup.FollowUp{Name: "deploy", Event: &prgroup.FollowUpEvent{
 				SourceRepoNamespace: "namespace", SourceRepoName: "source",
 			}},
-			want: source,
+			// the global settings apply, like at event time
+			want: merged,
 		},
 		{
 			// the execution repository is used then, like it always was
@@ -645,9 +560,15 @@ func TestFollowUpSourceRepo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := rtesting.SetupFakeContext(t)
-			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{Repositories: []*v1alpha1.Repository{source}})
+			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{Repositories: []*v1alpha1.Repository{source, global}})
 			r := &Reconciler{
-				run:        &params.Run{Clients: clients.Clients{Kube: stdata.Kube}},
+				run: &params.Run{
+					Clients: clients.Clients{Kube: stdata.Kube},
+					Info: info.Info{
+						Kube:       &info.KubeOpts{Namespace: "pac"},
+						Controller: &info.ControllerInfo{GlobalRepository: "global"},
+					},
+				},
 				repoLister: informers.Repository.Lister(),
 			}
 
@@ -703,7 +624,28 @@ func TestEvaluateFollowUpsOfDisabled(t *testing.T) {
 	}
 
 	assert.NilError(t, r.evaluateFollowUpsOf(ctx, logger, build))
-	assert.Equal(t, prgroup.StatePending, storedFollowUpState(ctx, t, stdata.Pipeline, "build", deploy.ID))
+	assert.Equal(t, prgroup.StatePending, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
+}
+
+func TestFinalizeFollowUpsDisabled(t *testing.T) {
+	ctx, _ := rtesting.SetupFakeContext(t)
+	deploy := prgroup.FollowUp{ID: "deploy-group1", Name: "deploy", Deps: []string{"build"}, State: prgroup.StatePending}
+	build := finishedGroupRun(t, "build", "build", deploy)
+	stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{PipelineRuns: []*tektonv1.PipelineRun{build}})
+	listed := false
+	stdata.Pipeline.PrependReactor("list", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+		listed = true
+		return false, nil, nil
+	})
+	// no Info.Pac, like a cluster whose ConfigMap has not opted in
+	r := &Reconciler{
+		run:        &params.Run{Clients: clients.Clients{Tekton: stdata.Pipeline, Kube: stdata.Kube}},
+		repoLister: informers.Repository.Lister(),
+	}
+
+	r.finalizeFollowUps(ctx, zap.NewNop().Sugar(), build)
+	assert.Assert(t, !listed, "the group must not be evaluated while the feature is disabled")
+	assert.Equal(t, prgroup.StatePending, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
 }
 
 // statusRecorder records the checks posted through the provider.

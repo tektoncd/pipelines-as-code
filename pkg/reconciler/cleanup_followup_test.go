@@ -52,14 +52,6 @@ func TestHasWaitingDependent(t *testing.T) {
 	}
 	createdFollowUp := deploy
 	createdFollowUp.State = prgroup.StateCreated
-	publish := prgroup.FollowUp{
-		ID:    "publish-group1",
-		Name:  "publish",
-		Deps:  []string{"tests"},
-		State: prgroup.StatePending,
-	}
-	createdPublish := publish
-	createdPublish.State = prgroup.StateCreated
 
 	tests := []struct {
 		name     string
@@ -78,16 +70,6 @@ func TestHasWaitingDependent(t *testing.T) {
 				groupRun(t, "build", "build", "group1", deploy),
 			},
 			expected: true,
-		},
-		{
-			// a failed migration cleanup left the pending copy on lint after
-			// the copy that counts, migrated onto tests, went terminal
-			name: "a run with a stale pending copy of a terminal follow-up is prunable",
-			pr:   groupRun(t, "lint", "lint", "group1", publish),
-			group: []*tektonv1.PipelineRun{
-				groupRun(t, "lint", "lint", "group1", publish),
-				groupRun(t, "tests", "tests", "group1", createdPublish),
-			},
 		},
 		{
 			name: "a run named as a dependency of a pending follow-up stored on another run is not prunable",
