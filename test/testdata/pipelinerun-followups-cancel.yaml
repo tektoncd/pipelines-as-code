@@ -1,0 +1,52 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+spec:
+  pipelineSpec:
+    results:
+      - name: digest
+        value: $(tasks.task.results.digest)
+    tasks:
+      - name: task
+        taskSpec:
+          results:
+            - name: digest
+              type: string
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/bash", "-c"]
+              args:
+                - sleep 90; printf sha256:followupse2e > $(results.digest.path)
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: deploy
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      runs.build.status == "Succeeded"
+spec:
+  params:
+    - name: image
+      value: "registry.example.com/app@{{ runs.build.results.digest }}"
+  pipelineSpec:
+    params:
+      - name: image
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/bash", "-c"]
+              args:
+                - echo deploying $(params.image)

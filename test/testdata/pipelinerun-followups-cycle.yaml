@@ -1,0 +1,56 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/echo", "BUILD"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: loop-a
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build", "loop-b"]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      runs.loop-b.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/echo", "LOOP A"]
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: loop-b
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-pipelinerun: '["loop-a"]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      runs.loop-a.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/echo", "LOOP B"]
