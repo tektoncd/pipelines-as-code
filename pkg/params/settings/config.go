@@ -111,6 +111,11 @@ type Settings struct {
 	// SupportEditedComments enables or disables the feature to support edited comments events.
 	SupportEditedComments bool `default:"false" json:"support-edited-comments"`
 
+	// EnableFollowUpRuns enables the PipelineRun follow-ups, the
+	// on-pipelinerun annotation chaining PipelineRuns after their
+	// dependencies. Tech preview: disabled by default.
+	EnableFollowUpRuns bool `default:"false" json:"enable-follow-up-runs"`
+
 	// Retry Git provider API requests on rate limits and transient errors.
 	// Disabled by default.
 	EnableAPIRetry         bool `default:"false" json:"enable-api-retry"`

@@ -19,6 +19,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prgroup "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerungroup"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/secrets"
@@ -45,6 +46,22 @@ type PacRun struct {
 	manager      *ConcurrencyManager
 	pacInfo      *info.PacOpts
 	globalRepo   *v1alpha1.Repository
+	// groupID identifies the follow-up group of the event. Empty when the
+	// event has no follow-ups.
+	groupID string
+	// followUps of the event, built at planning time and stamped on the
+	// dependency runs.
+	followUps []prgroup.FollowUp
+	// followUpsOn maps each follow-up ID to the definition name of the run
+	// it is stamped on.
+	followUpsOn map[string]string
+	// templatedEvent is the event as the .tekton directory was templated
+	// with, captured for the follow-ups that are templated later by the
+	// watcher.
+	templatedEvent *info.Event
+	// followUpEvent is what the follow-ups of the event store to be
+	// templated and evaluated like the event time did.
+	followUpEvent *prgroup.FollowUpEvent
 	// console is scoped to this event once the custom params are resolved, so
 	// concurrent events never render their URLs with each other's parameters.
 	console consoleui.Interface
@@ -64,6 +81,7 @@ func NewPacs(event *info.Event, vcx provider.Interface, run *params.Run, pacInfo
 		event: event, run: run, vcx: vcx, k8int: k8int, pacInfo: pacInfo, logger: logger, globalRepo: globalRepo,
 		eventEmitter: events.NewEventEmitter(run.Clients.Kube, logger),
 		manager:      NewConcurrencyManager(),
+		followUpsOn:  map[string]string{},
 	}
 }
 
@@ -154,8 +172,17 @@ func (p *PacRun) Run(ctx context.Context) error {
 	p.console = p.run.Clients.ConsoleUI().WithParams(maptemplate)
 	p.run = p.run.WithConsoleParams(maptemplate)
 
+	// The follow-ups of this event are stored on the dependency runs, and
+	// the watcher creates each run once its dependencies are done.
+	if err := p.stampFollowUps(matchedPRs); err != nil {
+		return fmt.Errorf("cannot stamp the follow-ups: %w", err)
+	}
+
+	createdRuns := map[string]*tektonv1.PipelineRun{}
+	var createdRunsMutex sync.Mutex
+
 	var wg sync.WaitGroup
-	for i, match := range matchedPRs {
+	start := func(i int, match matcher.Match) {
 		if match.Repo == nil {
 			match.Repo = repo
 		}
@@ -197,6 +224,9 @@ func (p *PacRun) Run(ctx context.Context) error {
 			}
 			if pr != nil {
 				p.debugf("pipelinerun started: name=%s namespace=%s", pr.GetName(), pr.GetNamespace())
+				createdRunsMutex.Lock()
+				createdRuns[prgroup.DefinitionName(pr)] = pr
+				createdRunsMutex.Unlock()
 			}
 			p.manager.AddPipelineRun(pr)
 			if err := p.cancelInProgressMatchingPipelineRun(ctx, pr, repo); err != nil {
@@ -205,7 +235,16 @@ func (p *PacRun) Run(ctx context.Context) error {
 			p.debugf("finished processing pipelinerun start: name=%s", match.PipelineRun.GetGenerateName())
 		}(match, i)
 	}
-	wg.Wait()
+	for _, phase := range creationPhases(matchedPRs) {
+		for _, i := range phase {
+			start(i, matchedPRs[i])
+		}
+		wg.Wait()
+	}
+
+	// Close the event for the follow-ups: the ones whose dependency or
+	// stamping run did not run are skipped with a check; the rest wait silently.
+	p.reportFollowUps(ctx, repo, createdRuns)
 
 	order, prs := p.manager.GetExecutionOrder()
 	if order != "" {
@@ -324,11 +363,20 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 		p.debugf("startPR: added labels/annotations to pipelinerun=%s", prName)
 	}
 
+	// Stamp the group identity on every run of the event before creation, so
+	// the watcher can list the group. The follow-ups themselves are not
+	// created here; they are follow-ups stamped on these runs.
+	if p.groupID != "" {
+		if err := prgroup.Decorate(match.PipelineRun, p.groupID); err != nil {
+			return nil, fmt.Errorf("cannot decorate pipelinerun %s with its group: %w", prName, err)
+		}
+	}
+
 	// if concurrency is defined then start the pipelineRun in pending state
 	if match.Repo.Spec.ConcurrencyLimit != nil && *match.Repo.Spec.ConcurrencyLimit != 0 {
 		// pending status
 		match.PipelineRun.Spec.Status = tektonv1.PipelineRunSpecStatusPending
-		p.debugf("startPR: marking pipelinerun=%s as pending due to concurrency limit", prName)
+		p.debugf("startPR: marking pipelinerun=%s as pending (concurrency limit)", prName)
 	}
 
 	// Create the actual pipelineRun
@@ -393,9 +441,10 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	patchAnnotations := map[string]string{}
 	patchLabels := map[string]string{}
 	whatPatching := ""
-	// if pipelineRun is in pending state then report status as queued
-	// The pipelineRun can be pending because of PAC's concurrency limit or because of an external mutatingwebhook
-	if pr.Spec.Status == tektonv1.PipelineRunSpecStatusPending {
+	switch pr.Spec.Status {
+	case tektonv1.PipelineRunSpecStatusPending:
+		// if pipelineRun is in pending state then report status as queued
+		// The pipelineRun can be pending because of PAC's concurrency limit or because of an external mutatingwebhook
 		status.Status = queuedStatus
 		if status.Text, err = mt.MakeTemplate(p.vcx.GetTemplate(provider.QueueingPipelineType)); err != nil {
 			return nil, fmt.Errorf("cannot create message template: %w", err)
@@ -403,7 +452,7 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 		whatPatching = "annotations.state and labels.state"
 		patchAnnotations[keys.State] = kubeinteraction.StateQueued
 		patchLabels[keys.State] = kubeinteraction.StateQueued
-	} else {
+	default:
 		// Mark that the start will be reported to the Git provider
 		patchAnnotations[keys.SCMReportingPLRStarted] = "true"
 		patchAnnotations[keys.State] = kubeinteraction.StateStarted

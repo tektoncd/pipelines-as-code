@@ -174,6 +174,12 @@ type Opts struct {
 	RepositoryRevision string // revision for repository-local Task and Pipeline references
 }
 
+// SplitDocuments splits raw YAML data into its documents, the same way
+// ReadTektonTypes does.
+func SplitDocuments(data string) []string {
+	return yamlDocSeparatorRe.Split(data, -1)
+}
+
 // hasYAMLContent checks if a document contains actual YAML content
 // beyond comments and whitespace. Returns false for comment-only or empty documents.
 func hasYAMLContent(doc string) bool {
@@ -192,7 +198,7 @@ func hasYAMLContent(doc string) bool {
 func ReadTektonTypes(ctx context.Context, log *zap.SugaredLogger, data string) (TektonTypes, error) {
 	types := NewTektonTypes()
 	decoder := k8scheme.Codecs.UniversalDeserializer()
-	docs := yamlDocSeparatorRe.Split(data, -1)
+	docs := SplitDocuments(data)
 	debugf(log, "ReadTektonTypes: data length=%d docs=%d", len(data), len(docs))
 
 	for _, doc := range docs {

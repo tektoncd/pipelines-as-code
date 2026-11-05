@@ -23,6 +23,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prgroup "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerungroup"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	ghprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
@@ -375,6 +376,8 @@ func TestGetPipelineRunsFromRepoTektonDirBranches(t *testing.T) {
 		provider      provider.Interface
 		wantErr       string
 		wantLogSubstr string
+		wantMatched   []string
+		wantFollowUps []string
 	}{
 		{
 			name: "pull request yaml error without parseable filename returns error",
@@ -433,6 +436,121 @@ spec:
 `},
 			wantLogSubstr: "cannot find pipelinerun missing for matching an incoming event in this repository",
 		},
+		{
+			name: "incoming event targeting a follow-up is rejected",
+			event: &info.Event{
+				EventType:         "incoming",
+				TriggerTarget:     triggertype.Push,
+				TargetPipelineRun: "deploy",
+				HeadBranch:        "main",
+				BaseBranch:        "main",
+			},
+			provider: &testprovider.TestProviderImp{TektonDirTemplate: `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[incoming]"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: task
+          image: quay.io/prometheus/busybox
+          script: |
+            exit 0
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: deploy
+  annotations:
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: runs.build.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: task
+          image: quay.io/prometheus/busybox
+          script: |
+            exit 0
+`},
+			wantLogSubstr: "cannot run the pipelinerun deploy from an incoming webhook: it is a follow-up",
+		},
+		{
+			name: "incoming event targeting a dependency plans its follow-ups",
+			event: &info.Event{
+				EventType:         "incoming",
+				TriggerTarget:     triggertype.Push,
+				TargetPipelineRun: "build",
+				HeadBranch:        "main",
+				BaseBranch:        "main",
+				Request:           &info.Request{},
+			},
+			provider: &testprovider.TestProviderImp{TektonDirTemplate: `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[incoming]"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: task
+          image: quay.io/prometheus/busybox
+          script: |
+            exit 0
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: lint
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[incoming]"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: task
+          image: quay.io/prometheus/busybox
+          script: |
+            exit 0
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: deploy
+  annotations:
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: runs.build.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: task
+      taskSpec:
+        steps:
+        - name: task
+          image: quay.io/prometheus/busybox
+          script: |
+            exit 0
+`},
+			// only the target starts, its follow-up waits on it
+			wantMatched:   []string{"build"},
+			wantFollowUps: []string{"deploy"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -453,7 +571,9 @@ spec:
 				ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "namespace"},
 				Spec:       v1alpha1.RepositorySpec{URL: "https://example.com/owner/repo"},
 			}
-			p := NewPacs(tt.event, tt.provider, run, &info.PacOpts{}, nil, logger, nil)
+			pacOpts := info.NewPacOpts()
+			pacOpts.EnableFollowUpRuns = true
+			p := NewPacs(tt.event, tt.provider, run, pacOpts, nil, logger, nil)
 			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
 
 			matchedPRs, _, err := p.getPipelineRunsFromRepo(ctx, repo)
@@ -462,7 +582,16 @@ spec:
 				return
 			}
 			assert.NilError(t, err)
-			assert.Equal(t, 0, len(matchedPRs))
+			matchedNames := []string{}
+			for _, m := range matchedPRs {
+				matchedNames = append(matchedNames, prgroup.DefinitionName(m.PipelineRun))
+			}
+			assert.DeepEqual(t, append([]string{}, tt.wantMatched...), matchedNames)
+			followUpNames := []string{}
+			for _, fu := range p.followUps {
+				followUpNames = append(followUpNames, fu.Name)
+			}
+			assert.DeepEqual(t, append([]string{}, tt.wantFollowUps...), followUpNames)
 			if tt.wantLogSubstr != "" {
 				assert.Assert(t, logCatcher.FilterMessageSnippet(tt.wantLogSubstr).Len() > 0, logCatcher.All())
 			}
@@ -765,6 +894,101 @@ spec:
 			assert.NilError(t, err)
 			assert.Equal(t, 1, len(matchedPRs))
 			assert.Equal(t, tt.wantRevision, vcx.fileInsideRepoRevision)
+		})
+	}
+}
+
+func TestGetPipelineRunsFromRepoFollowUpRemoteTasks(t *testing.T) {
+	definitions := func(followUpTask string) string {
+		return `apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/on-target-branch: "[main]"
+    pipelinesascode.tekton.dev/on-event: "[push]"
+    pipelinesascode.tekton.dev/task: ".tekton/build-task.yaml"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: build
+      taskRef:
+        name: build-task
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: deploy
+  annotations:
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: runs.build.status == "Succeeded"
+    pipelinesascode.tekton.dev/task: "` + followUpTask + `"
+spec:
+  pipelineSpec:
+    tasks:
+    - name: deploy
+      taskRef:
+        name: deploy-task
+`
+	}
+	task := func(name string) string {
+		return `apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: ` + name + `
+spec:
+  steps:
+  - name: task
+    image: quay.io/prometheus/busybox
+    script: |
+      exit 0
+`
+	}
+
+	tests := []struct {
+		name         string
+		followUpTask string
+	}{
+		{
+			name:         "a remote task of a follow-up is not fetched at event time",
+			followUpTask: ".tekton/deploy-task.yaml",
+		},
+		{
+			name:         "an unavailable remote task of a follow-up does not fail the event",
+			followUpTask: ".tekton/missing-task.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observerCore, _ := zapobserver.New(zap.InfoLevel)
+			logger := zap.New(observerCore).Sugar()
+			ctx, _ := rtesting.SetupFakeContext(t)
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{})
+			cs := &params.Run{Clients: clients.Clients{Kube: stdata.Kube, Tekton: stdata.Pipeline, Log: logger}}
+			cs.Clients.SetConsoleUI(consoleui.FallBackConsole{})
+			repo := &v1alpha1.Repository{
+				ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "namespace"},
+				Spec:       v1alpha1.RepositorySpec{URL: "https://example.com/owner/repo"},
+			}
+			event := &info.Event{
+				URL: repo.Spec.URL, Organization: "owner", Repository: "repo",
+				SHA: "sha", HeadBranch: "main", BaseBranch: "main",
+				EventType: "push", TriggerTarget: triggertype.Push, Request: &info.Request{},
+			}
+			vcx := &testprovider.TestProviderImp{
+				TektonDirTemplate: definitions(tt.followUpTask),
+				// deploy-task is deliberately absent: fetching it would fail
+				FilesInsideRepo: map[string]string{".tekton/build-task.yaml": task("build-task")},
+			}
+			p := NewPacs(event, vcx, cs, &info.PacOpts{Settings: settings.Settings{RemoteTasks: true, EnableFollowUpRuns: true}}, nil, logger, nil)
+			p.eventEmitter = events.NewEventEmitter(stdata.Kube, logger)
+
+			matchedPRs, _, err := p.getPipelineRunsFromRepo(ctx, repo)
+			assert.NilError(t, err)
+			assert.Equal(t, 1, len(matchedPRs))
+			assert.Equal(t, "build", prgroup.DefinitionName(matchedPRs[0].PipelineRun))
+			assert.Equal(t, 1, len(p.followUps))
+			assert.Equal(t, "deploy", p.followUps[0].Name)
 		})
 	}
 }
