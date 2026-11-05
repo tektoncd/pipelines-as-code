@@ -1,0 +1,62 @@
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: build
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-target-branch: "[\\ .TargetBranch //]"
+    pipelinesascode.tekton.dev/on-event: "[\\ .TargetEvent //]"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/bash", "-c"]
+              args:
+                - sleep 10; echo building
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: deploy
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      runs.build.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/bash", "-c"]
+              args:
+                - echo deploying
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: notify
+  annotations:
+    pipelinesascode.tekton.dev/target-namespace: "\\ .TargetNamespace //"
+    pipelinesascode.tekton.dev/on-pipelinerun: '["build"]'
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      runs.build.status == "Succeeded"
+spec:
+  pipelineSpec:
+    tasks:
+      - name: task
+        taskSpec:
+          steps:
+            - name: task
+              image: registry.access.redhat.com/ubi10/ubi-micro
+              command: ["/bin/bash", "-c"]
+              args:
+                - echo notifying
