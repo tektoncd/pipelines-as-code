@@ -74,9 +74,6 @@ func (r *Reconciler) hasWaitingDependent(ctx context.Context, logger *zap.Sugare
 		// not part of any follow-up group: nothing can be waiting on it
 		return false, nil
 	}
-	// the decision is taken on the deduplicated state of the group: a failed
-	// migration can leave a stale pending copy on this run after the copy
-	// that counts went terminal, and it must not keep the run forever
 	group, err := r.listGroup(ctx, pr.GetNamespace(), groupID)
 	if err != nil {
 		return false, err
