@@ -1,6 +1,7 @@
 package kubeinteraction
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jonboulle/clockwork"
@@ -45,6 +46,7 @@ func TestCleanupPipelines(t *testing.T) {
 		prunLatestInList string
 		secrets          []*corev1.Secret
 		sList            int
+		keep             KeepFunc
 	}
 
 	tests := []struct {
@@ -66,6 +68,26 @@ func TestCleanupPipelines(t *testing.T) {
 					tektontest.MakePRCompletion(clock, "pipeline-oldest", ns, tektonv1.PipelineRunReasonSuccessful.String(), nil, cleanupLabels, 30),
 				},
 				prunLatestInList: "pipeline-newest",
+			},
+		},
+		{
+			name: "cleanup-keeps-the-runs-the-keep-func-protects",
+			args: args{
+				namespace:      ns,
+				repositoryName: cleanupRepoName,
+				maxKeep:        1,
+				kept:           2,
+				prunCurrent:    &tektonv1.PipelineRun{ObjectMeta: metav1.ObjectMeta{Labels: cleanupLabels, Annotations: cleanupAnnotations}},
+				pruns: []*tektonv1.PipelineRun{
+					tektontest.MakePRCompletion(clock, "pipeline-newest", ns, tektonv1.PipelineRunReasonSuccessful.String(), nil, cleanupLabels, 10),
+					tektontest.MakePRCompletion(clock, "pipeline-middest", ns, tektonv1.PipelineRunReasonSuccessful.String(), nil, cleanupLabels, 20),
+					tektontest.MakePRCompletion(clock, "pipeline-oldest", ns, tektonv1.PipelineRunReasonSuccessful.String(), nil, cleanupLabels, 30),
+				},
+				keep: func(_ context.Context, pr *tektonv1.PipelineRun) (bool, string) {
+					return pr.GetName() == "pipeline-oldest", "a follow-up needs it"
+				},
+				prunLatestInList: "pipeline-newest",
+				logSnippet:       "skipping cleaning PipelineRun pipeline-oldest: a follow-up needs it",
 			},
 		},
 		{
@@ -228,7 +250,7 @@ func TestCleanupPipelines(t *testing.T) {
 				},
 			}
 
-			err := kint.CleanupPipelines(ctx, fakelogger, repo, tt.args.prunCurrent, tt.args.maxKeep)
+			err := kint.CleanupPipelines(ctx, fakelogger, repo, tt.args.prunCurrent, tt.args.maxKeep, tt.args.keep)
 			if tt.wantErr {
 				assert.Assert(t, err != nil)
 			}

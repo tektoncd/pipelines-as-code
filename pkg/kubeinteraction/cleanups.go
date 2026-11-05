@@ -14,7 +14,11 @@ import (
 	"knative.dev/pkg/apis"
 )
 
-func (k Interaction) CleanupPipelines(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun, maxKeep int) error {
+// KeepFunc reports whether a PipelineRun past the max-keep-runs limit must
+// still be kept, and why.
+type KeepFunc func(ctx context.Context, pr *tektonv1.PipelineRun) (bool, string)
+
+func (k Interaction) CleanupPipelines(ctx context.Context, logger *zap.SugaredLogger, repo *v1alpha1.Repository, pr *tektonv1.PipelineRun, maxKeep int, keep KeepFunc) error {
 	if _, ok := pr.GetAnnotations()[keys.OriginalPRName]; !ok {
 		return fmt.Errorf("generated pipelinerun should have had the %s label for selection set but we could not find it", keys.OriginalPRName)
 	}
@@ -40,6 +44,12 @@ func (k Interaction) CleanupPipelines(ctx context.Context, logger *zap.SugaredLo
 		}
 
 		if c >= maxKeep {
+			if keep != nil {
+				if kept, why := keep(ctx, &prun); kept {
+					logger.Infof("skipping cleaning PipelineRun %s: %s", prun.GetName(), why)
+					continue
+				}
+			}
 			logger.Infof("cleaning old PipelineRun: %s", prun.GetName())
 			err := k.Run.Clients.Tekton.TektonV1().PipelineRuns(repo.GetNamespace()).Delete(
 				ctx, prun.GetName(), metav1.DeleteOptions{},
