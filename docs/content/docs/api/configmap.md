@@ -415,6 +415,18 @@ support-edited-comments: "false"
 
 {{< /param >}}
 
+{{< tech_preview "PipelineRun follow-ups" >}}
+
+{{< param name="enable-follow-up-runs" type="boolean" default="false" id="param-enable-follow-up-runs" >}}
+
+Enables the [PipelineRun follow-ups]({{< relref "/docs/guides/pipelinerun-followups" >}}), the `on-pipelinerun` annotation that chains PipelineRuns after their dependencies. When disabled (the default), the definitions carrying the annotation are left unmatched: they do not run, like definitions that do not match the event.
+
+```yaml
+enable-follow-up-runs: "false"
+```
+
+{{< /param >}}
+
 {{< param name="skip-push-event-for-pr-commits" type="boolean" default="true" id="param-skip-push-event-for-pr-commits" >}}
 Prevents duplicate PipelineRuns when a commit appears in both a push event and a pull request. When a push event arrives from a commit that belongs to an open pull request, Pipelines-as-Code skips the push event.
 
