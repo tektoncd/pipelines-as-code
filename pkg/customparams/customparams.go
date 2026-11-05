@@ -26,6 +26,90 @@ type CustomParams struct {
 	eventEmitter *events.EventEmitter
 	repo         *v1alpha1.Repository
 	vcx          provider.Interface
+	// filterOutcomes, when set, selects the filtered params from the
+	// outcomes recorded when the event was processed instead of evaluating
+	// the filters: a follow-up is templated once the webhook payload the
+	// filters may read is gone.
+	filterOutcomes map[string]string
+}
+
+// WithFilterOutcomes returns a copy selecting the filtered params from
+// recorded outcomes, as returned by MatchedFilters, instead of evaluating the
+// filters. A nil map selects none.
+func (p CustomParams) WithFilterOutcomes(outcomes map[string]string) CustomParams {
+	if outcomes == nil {
+		outcomes = map[string]string{}
+	}
+	p.filterOutcomes = outcomes
+	return p
+}
+
+// filterSelects reports whether a param's filter selects it: evaluated, or
+// looked up in the recorded outcomes.
+func (p *CustomParams) filterSelects(value v1alpha1.Params, stdParams map[string]string, changedFiles map[string]any) (bool, error) {
+	if p.filterOutcomes != nil {
+		if p.filterOutcomes[value.Name] != value.Filter {
+			p.eventEmitter.EmitMessage(p.repo, zap.InfoLevel,
+				"ParamsFilterSkipped", fmt.Sprintf("skipping params name %s, filter did not match when the event was processed", value.Name))
+			return false, nil
+		}
+		return true, nil
+	}
+	// if the cel filter condition is false we skip it
+	// TODO: add headers to customparams?
+	cond, err := pacCel.Value(value.Filter, p.event.Event, nil, stdParams, changedFiles)
+	if err != nil {
+		p.eventEmitter.EmitMessage(p.repo, zap.ErrorLevel,
+			"ParamsFilterError", fmt.Sprintf("there is an error on the cel filter: %s: %s", value.Name, err.Error()))
+		return false, err
+	}
+	switch cond.(type) {
+	case celTypes.Bool:
+		if cond == celTypes.False {
+			p.eventEmitter.EmitMessage(p.repo, zap.InfoLevel,
+				"ParamsFilterSkipped", fmt.Sprintf("skipping params name %s, filter condition is false", value.Name))
+			return false, nil
+		}
+	default:
+		p.eventEmitter.EmitMessage(p.repo, zap.InfoLevel,
+			"ParamsFilterSkipped", fmt.Sprintf("skipping params name %s, filter condition is not a boolean reply: %s", value.Name, cond.Type().TypeName()))
+		return false, nil
+	}
+	return true, nil
+}
+
+// MatchedFilters evaluates the param filters like GetParams does and returns,
+// per param name, the filter expression that selected it. It holds no param
+// value, so it can be stored and replayed with WithFilterOutcomes.
+func (p *CustomParams) MatchedFilters(ctx context.Context) (map[string]string, error) {
+	matched := map[string]string{}
+	if p.repo.Spec.Params == nil {
+		return matched, nil
+	}
+	stdParams, changedFiles := p.makeStandardParamsFromEvent(ctx)
+	if p.event.TriggerComment != "" {
+		for k, v := range opscomments.ParseKeyValueArgs(p.event.TriggerComment) {
+			if _, ok := stdParams[k]; ok {
+				stdParams[k] = v
+			}
+		}
+	}
+	for _, value := range *p.repo.Spec.Params {
+		if value.Name == "" || value.Filter == "" {
+			continue
+		}
+		if _, ok := matched[value.Name]; ok {
+			continue
+		}
+		selected, err := p.filterSelects(value, stdParams, changedFiles)
+		if err != nil {
+			return nil, err
+		}
+		if selected {
+			matched[value.Name] = value.Filter
+		}
+	}
+	return matched, nil
 }
 
 func NewCustomParams(event *info.Event, repo *v1alpha1.Repository, run *params.Run, k8int kubeinteraction.Interface, eventEmitter *events.EventEmitter, prov provider.Interface) CustomParams {
@@ -93,24 +177,11 @@ func (p *CustomParams) GetParams(ctx context.Context) (map[string]string, map[st
 				continue
 			}
 
-			// if the cel filter condition is false we skip it
-			// TODO: add headers to customparams?
-			cond, err := pacCel.Value(value.Filter, p.event.Event, nil, stdParams, changedFiles)
+			selected, err := p.filterSelects(value, stdParams, changedFiles)
 			if err != nil {
-				p.eventEmitter.EmitMessage(p.repo, zap.ErrorLevel,
-					"ParamsFilterError", fmt.Sprintf("there is an error on the cel filter: %s: %s", value.Name, err.Error()))
 				return map[string]string{}, changedFiles, err
 			}
-			switch cond.(type) {
-			case celTypes.Bool:
-				if cond == celTypes.False {
-					p.eventEmitter.EmitMessage(p.repo, zap.InfoLevel,
-						"ParamsFilterSkipped", fmt.Sprintf("skipping params name %s, filter condition is false", value.Name))
-					continue
-				}
-			default:
-				p.eventEmitter.EmitMessage(p.repo, zap.InfoLevel,
-					"ParamsFilterSkipped", fmt.Sprintf("skipping params name %s, filter condition is not a boolean reply: %s", value.Name, cond.Type().TypeName()))
+			if !selected {
 				continue
 			}
 			mapFilters[value.Name] = value.Value
