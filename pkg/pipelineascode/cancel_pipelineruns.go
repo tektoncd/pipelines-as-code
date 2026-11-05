@@ -3,6 +3,7 @@ package pipelineascode
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,9 +21,12 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
+	prgroup "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerungroup"
 )
 
 type matchingCond func(pr tektonv1.PipelineRun) bool
+
+func allRuns(_ tektonv1.PipelineRun) bool { return true }
 
 var cancelMergePatch = map[string]any{
 	"spec": map[string]any{
@@ -87,9 +91,8 @@ func (p *PacRun) cancelAllInProgressBelongingToClosedPullRequest(ctx context.Con
 		prs,
 		repo,
 		"The pull request was closed, and this PipelineRun matched the cancel-in-progress criteria.",
-		func(_ tektonv1.PipelineRun) bool {
-			return true
-		},
+		allRuns,
+		allRuns,
 	)
 
 	return nil
@@ -162,6 +165,57 @@ func (p *PacRun) cancelInProgressMatchingPipelineRun(ctx context.Context, matchP
 		return fmt.Errorf("failed to list pipelineRuns : %w", err)
 	}
 
+	supersededRun := func(pr tektonv1.PipelineRun) bool {
+		// skip our own for cancellation
+		if sourceBranch, ok := pr.GetAnnotations()[keys.SourceBranch]; ok {
+			// NOTE(chmouel): Every PR has their own branch and so is every push to different branch
+			// it means we only cancel pipelinerun of the same name that runs to
+			// the unique branch. Note: HeadBranch is the branch from where the PR
+			// comes from in git jargon.
+			if strings.TrimPrefix(sourceBranch, "refs/heads/") != strings.TrimPrefix(p.event.HeadBranch, "refs/heads/") {
+				p.logger.Infof("cancel-in-progress: skipping pipelinerun %v/%v as it is not from the same branch, annotation source-branch: %s event headbranch: %s", pr.GetNamespace(), pr.GetName(), sourceBranch, p.event.HeadBranch)
+				return false
+			}
+		}
+
+		return pr.GetName() != matchPR.GetName()
+	}
+	superseded := []tektonv1.PipelineRun{}
+	for _, pr := range prs.Items {
+		if supersededRun(pr) {
+			superseded = append(superseded, pr)
+		}
+	}
+	// the follow-up runs created after a superseded run are superseded too,
+	// even when that run already finished: they would otherwise go on and
+	// create the rest of the chain
+	downstream := map[string]bool{}
+	followUpRuns, stale := p.downstreamFollowUpRuns(ctx, matchPR.GetNamespace(), superseded)
+	for _, run := range followUpRuns {
+		downstream[run.GetName()] = true
+		if !slices.ContainsFunc(prs.Items, func(pr tektonv1.PipelineRun) bool { return pr.GetName() == run.GetName() }) {
+			prs.Items = append(prs.Items, run)
+		}
+	}
+	inScope := func(pr tektonv1.PipelineRun) bool {
+		return downstream[pr.GetName()] || supersededRun(pr)
+	}
+	// pending entries may sit on a run that is not superseded
+	staleRuns := make([]tektonv1.PipelineRun, 0, len(stale))
+	for _, entry := range stale {
+		if !downstream[entry.run.GetName()] && !slices.ContainsFunc(superseded, func(pr tektonv1.PipelineRun) bool {
+			return pr.GetName() == entry.run.GetName()
+		}) {
+			staleRuns = append(staleRuns, entry.run)
+		}
+	}
+	p.cancelFollowUps(ctx, repo, staleRuns,
+		fmt.Sprintf("A newer %s event matched the same PipelineRun definition, and cancel-in-progress is enabled.", p.event.TriggerTarget),
+		func(run *tektonv1.PipelineRun, followUp prgroup.FollowUp) bool {
+			return stale[run.GetName()].followUps[followUp.ID]
+		})
+	// only the superseded runs carry follow-ups to cancel: the listing also
+	// holds the runs of other branches and pull requests
 	p.cancelPipelineRuns(
 		ctx,
 		prs,
@@ -170,23 +224,77 @@ func (p *PacRun) cancelInProgressMatchingPipelineRun(ctx context.Context, matchP
 			"A newer %s event matched the same PipelineRun definition, and cancel-in-progress is enabled.",
 			p.event.TriggerTarget,
 		),
-		func(pr tektonv1.PipelineRun) bool {
-			// skip our own for cancellation
-			if sourceBranch, ok := pr.GetAnnotations()[keys.SourceBranch]; ok {
-				// NOTE(chmouel): Every PR has their own branch and so is every push to different branch
-				// it means we only cancel pipelinerun of the same name that runs to
-				// the unique branch. Note: HeadBranch is the branch from where the PR
-				// comes from in git jargon.
-				if strings.TrimPrefix(sourceBranch, "refs/heads/") != strings.TrimPrefix(p.event.HeadBranch, "refs/heads/") {
-					p.logger.Infof("cancel-in-progress: skipping pipelinerun %v/%v as it is not from the same branch, annotation source-branch: %s event headbranch: %s", pr.GetNamespace(), pr.GetName(), sourceBranch, p.event.HeadBranch)
-					return false
-				}
-			}
-
-			return pr.GetName() != matchPR.GetName()
-		},
+		inScope,
+		inScope,
 	)
 	return nil
+}
+
+// staleFollowUps are the pending follow-up IDs to cancel on a run.
+type staleFollowUps struct {
+	run       tektonv1.PipelineRun
+	followUps map[string]bool
+}
+
+// downstreamFollowUpRuns returns the follow-up runs of the superseded runs'
+// groups that depend on a superseded run's definition, and the pending
+// follow-ups that depend on one.
+func (p *PacRun) downstreamFollowUpRuns(ctx context.Context, namespace string,
+	superseded []tektonv1.PipelineRun,
+) ([]tektonv1.PipelineRun, map[string]*staleFollowUps) {
+	rootsByGroup := map[string]map[string]bool{}
+	for i := range superseded {
+		groupID := prgroup.GroupIDOf(&superseded[i])
+		if groupID == "" || groupID == p.groupID {
+			continue
+		}
+		if rootsByGroup[groupID] == nil {
+			rootsByGroup[groupID] = map[string]bool{}
+		}
+		rootsByGroup[groupID][prgroup.DefinitionName(&superseded[i])] = true
+	}
+
+	downstream := []tektonv1.PipelineRun{}
+	stale := map[string]*staleFollowUps{}
+	for groupID, roots := range rootsByGroup {
+		runs, err := p.run.Clients.Tekton.TektonV1().PipelineRuns(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: prgroup.GroupSelector(groupID),
+		})
+		if err != nil {
+			p.logger.Warnf("cancel-in-progress: cannot list the runs of group %s: %v", groupID, err)
+			continue
+		}
+		defsByName := map[string]prgroup.Definition{}
+		for i := range runs.Items {
+			deps, err := prgroup.DepsOf(&runs.Items[i])
+			if err != nil || len(deps) == 0 {
+				continue
+			}
+			name := prgroup.DefinitionName(&runs.Items[i])
+			defsByName[name] = prgroup.Definition{Name: name, DependsOn: deps}
+		}
+		for i := range runs.Items {
+			name := prgroup.DefinitionName(&runs.Items[i])
+			if _, followUp := defsByName[name]; followUp && dependsOnAny(defsByName, name, roots) {
+				downstream = append(downstream, runs.Items[i])
+			}
+			followUps, err := prgroup.FollowUpsOf(&runs.Items[i])
+			if err != nil {
+				continue
+			}
+			for _, followUp := range followUps {
+				if followUp.Pending() && slices.ContainsFunc(followUp.Deps, func(dep string) bool { return roots[dep] }) {
+					entry := stale[runs.Items[i].GetName()]
+					if entry == nil {
+						entry = &staleFollowUps{run: runs.Items[i], followUps: map[string]bool{}}
+						stale[runs.Items[i].GetName()] = entry
+					}
+					entry.followUps[followUp.ID] = true
+				}
+			}
+		}
+	}
+	return downstream, stale
 }
 
 // cancelPipelineRunsOpsComment cancels all PipelineRuns associated with a given repository and pull request.
@@ -234,6 +342,10 @@ func (p *PacRun) cancelPipelineRunsOpsComment(ctx context.Context, repo *v1alpha
 			}
 			return true
 		},
+		// a "/cancel <follow-up>" matches the waiting follow-up itself, which
+		// is stored on a run of another definition: every listed run is
+		// searched, cancelFollowUps filters on the follow-up name
+		allRuns,
 	)
 
 	return nil
@@ -298,7 +410,20 @@ func (p *PacRun) cancelPipelineRuns(
 	repo *v1alpha1.Repository,
 	reason string,
 	condition matchingCond,
+	followUpScope matchingCond,
 ) {
+	// The pending follow-ups stored on the runs in scope are cancelled
+	// first: they have no run of their own yet, so the cancel patch below
+	// cannot reach them, and a dependency cancelled before them would let
+	// the watcher create them.
+	scoped := make([]tektonv1.PipelineRun, 0, len(prs.Items))
+	for _, pr := range prs.Items {
+		if followUpScope(pr) {
+			scoped = append(scoped, pr)
+		}
+	}
+	p.cancelFollowUps(ctx, repo, scoped, reason, nil)
+
 	var wg sync.WaitGroup
 	p.debugf("cancelPipelineRuns: evaluating %d pipelineruns", len(prs.Items))
 	for _, pr := range prs.Items {

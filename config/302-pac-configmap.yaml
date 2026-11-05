@@ -182,6 +182,11 @@ data:
   # Default: false
   require-ok-to-test-sha: "false"
 
+  # Enable the PipelineRun follow-ups, the on-pipelinerun annotation chaining
+  # PipelineRuns after their dependencies. Tech preview.
+  # Default: false
+  enable-follow-up-runs: "false"
+
   # Enable retrying Git provider API requests when hitting rate limits (429,
   # or 403 with rate limit headers on GitHub) or transient server errors.
   # Retries use exponential backoff with jitter and honor the Retry-After and

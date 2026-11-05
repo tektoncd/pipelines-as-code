@@ -83,6 +83,7 @@ func TestSyncConfig(t *testing.T) {
 				"skip-push-event-for-pr-commits":          "true",
 				"support-edited-comments":                 "false",
 				"require-ok-to-test-sha":                  "true",
+				"enable-follow-up-runs":                   "true",
 			},
 			expectedStruct: Settings{
 				ApplicationName:                      "pac-pac",
@@ -116,6 +117,7 @@ func TestSyncConfig(t *testing.T) {
 				CustomConsoleNamespaceURL:            "https://custom-console-namespace",
 				RememberOKToTest:                     false,
 				RequireOkToTestSHA:                   true,
+				EnableFollowUpRuns:                   true,
 				APIRetryMaxAttempts:                  4,
 				APIRetryMaxWaitSeconds:               120,
 			},
