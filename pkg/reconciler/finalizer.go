@@ -32,16 +32,19 @@ func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 	// ConfigMap. Without the namespace that read targets "" and every deletion
 	// of a running PipelineRun would silently stop reporting.
 	ctx = info.StoreNS(ctx, system.Namespace())
-	state, exist := pr.GetAnnotations()[keys.State]
-	if !exist || state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed {
-		r.qm.ForgetAdmission(pr.Namespace+"/"+pr.Annotations[keys.Repository], pr)
-		return nil
-	}
 	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
 	if err != nil {
 		return err
 	}
 	r.run.Info.Controller = controllerInfo
+
+	r.finalizeFollowUps(ctx, logger, pr)
+
+	state, exist := pr.GetAnnotations()[keys.State]
+	if !exist || state == kubeinteraction.StateCompleted || state == kubeinteraction.StateFailed {
+		r.qm.ForgetAdmission(pr.Namespace+"/"+pr.Annotations[keys.Repository], pr)
+		return nil
+	}
 
 	if state == kubeinteraction.StateQueued || state == kubeinteraction.StateStarted {
 		repoName, ok := pr.GetAnnotations()[keys.Repository]
