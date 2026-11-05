@@ -357,7 +357,10 @@ func (v *Provider) CreateStatus(ctx context.Context, event *info.Event, statusOp
 	case providerstatus.ConclusionSkipped:
 		statusOpts.Title = "Skipped"
 		statusOpts.Summary = "has <b>skipped</b>."
-	case providerstatus.ConclusionCancelled, providerstatus.ConclusionCompleted:
+	case providerstatus.ConclusionCancelled:
+		statusOpts.Title = "Cancelled"
+		statusOpts.Summary = "was <b>cancelled</b>."
+	case providerstatus.ConclusionCompleted:
 	}
 
 	if statusOpts.Status == "in_progress" {
@@ -382,6 +385,8 @@ func (v *Provider) createStatusCommit(ctx context.Context, event *info.Event, pa
 		state = forgejo.StatusSuccess // We don't have a choice than setting as success, no pending here.
 	case providerstatus.ConclusionSkipped:
 		state = forgejo.StatusSuccess // We don't have a choice than setting as success, skipped is neither pending nor failure.
+	case providerstatus.ConclusionCancelled:
+		state = forgejo.StatusWarning // gitea has no cancelled state.
 	case providerstatus.ConclusionPending:
 		if status.Title != "" {
 			state = forgejo.StatusPending
