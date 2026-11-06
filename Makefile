@@ -211,6 +211,11 @@ update-schemas: ## update openapi schemas
 	@echo "Running update schemas..."
 	@./hack/update-schemas.sh
 
+.PHONY: generate-diagrams
+generate-diagrams: ## generate SVG and PNG ecosystem diagrams
+	@echo "Generating ecosystem diagrams..."
+	@python3 ./hack/generate-ecosystem-diagram.py
+
 .PHONY: generated
 generated: update-golden fumpt ## generate all files that needs to be generated
 
