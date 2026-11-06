@@ -52,7 +52,7 @@ func (k *KinterfaceTest) GetSecret(_ context.Context, secret ktypes.GetSecretOpt
 }
 
 func (k *KinterfaceTest) CleanupPipelines(_ context.Context, _ *zap.SugaredLogger, _ *v1alpha1.Repository,
-	_ *tektonv1.PipelineRun, limitnumber int,
+	_ *tektonv1.PipelineRun, limitnumber int, _ kubeinteraction.KeepFunc,
 ) error {
 	if k.ExpectedNumberofCleanups != limitnumber {
 		return fmt.Errorf("we wanted %d and we got %d", k.ExpectedNumberofCleanups, limitnumber)

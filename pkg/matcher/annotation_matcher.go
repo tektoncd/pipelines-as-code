@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
@@ -156,6 +157,12 @@ func getTargetBranch(prun *tektonv1.PipelineRun, event *info.Event) (bool, strin
 	return true, targetEvent, targetBranch, nil
 }
 
+// ConfigFollowUp is the Match.Config key the matcher sets on a definition
+// carrying the on-pipelinerun annotation: the definition is then planned as a
+// follow-up entry instead of being started right away, and the watcher
+// creates its run once its dependencies are done.
+const ConfigFollowUp = "follow-up"
+
 type Match struct {
 	PipelineRun *tektonv1.PipelineRun
 	Repo        *apipac.Repository
@@ -234,7 +241,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 	// Resolve custom params once for all PipelineRuns (for use in CEL expressions)
 	// Track original event type to detect changes (when on-comment matches)
 	originalEventType := event.EventType
-	customParams := resolveCustomParamsForCEL(ctx, repo, event, cs, vcx, eventEmitter, logger)
+	customParams := ResolveCustomParamsForCEL(ctx, repo, event, cs, vcx, eventEmitter, logger, nil)
 	if len(customParams) > 0 {
 		logger.Debugf("resolved %d custom params from repo for CEL", len(customParams))
 	}
@@ -259,6 +266,8 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 			continue
 		}
 
+		_, followUp := prun.GetObjectMeta().GetAnnotations()[keys.OnPipelineRun]
+
 		if maxPrNumber, ok := prun.GetObjectMeta().GetAnnotations()[keys.MaxKeepRuns]; ok {
 			prMatch.Config["max-keep-runs"] = maxPrNumber
 			logger.Debugf("PipelineRun %s: max-keep-runs=%s", prName, maxPrNumber)
@@ -272,6 +281,16 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 				continue
 			}
 			logger.Debugf("PipelineRun %s: matched target namespace repo=%s/%s", prName, prMatch.Repo.GetNamespace(), prMatch.Repo.GetName())
+		}
+
+		// A follow-up declares on-pipelinerun and matches on its
+		// on-cel-expression only, which the watcher evaluates once its
+		// dependencies are done and the runs map exists.
+		if followUp {
+			prMatch.Config[ConfigFollowUp] = "true"
+			logger.Debugf("PipelineRun %s is a follow-up, matched on its dependencies and its deferred CEL condition", prName)
+			matchedPRs = append(matchedPRs, prMatch)
+			continue
 		}
 
 		if targetComment, ok := prun.GetObjectMeta().GetAnnotations()[keys.OnComment]; ok {
@@ -289,7 +308,7 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 
 				// Re-resolve custom params if event type changed, so filters based on event_type stay accurate
 				if event.EventType != originalEventType {
-					customParams = resolveCustomParamsForCEL(ctx, repo, event, cs, vcx, eventEmitter, logger)
+					customParams = ResolveCustomParamsForCEL(ctx, repo, event, cs, vcx, eventEmitter, logger, nil)
 					originalEventType = event.EventType
 					logger.Debugf("PipelineRun %s: event_type switched to %s due to comment match", prName, event.EventType)
 				}
@@ -450,13 +469,25 @@ func MatchPipelinerunByAnnotation(ctx context.Context, logger *zap.SugaredLogger
 		reportCELValidationErrors(ctx, repo, celValidationErrors, eventEmitter, vcx, event, "")
 	}
 
+	// follow-ups only run after a plain definition of the event: with none
+	// matched, the event matched nothing, and the follow-ups are unmatched
+	// like any other definition
+	if !slices.ContainsFunc(matchedPRs, func(m Match) bool { return m.Config[ConfigFollowUp] != "true" }) {
+		for _, m := range matchedPRs {
+			unmatchedPRs[getName(m.PipelineRun)] = m.PipelineRun
+		}
+		matchedPRs = nil
+	}
+
 	if len(matchedPRs) > 0 {
 		// Filter out templates that already have successful PipelineRuns for /retest and /ok-to-test
 		if event.EventType == opscomments.RetestAllCommentEventType.String() ||
 			event.EventType == opscomments.OkToTestCommentEventType.String() {
 			logger.Debugf("MatchPipelinerunByAnnotation: filtering successful templates for event_type=%s", event.EventType)
 			filtered := filterSuccessfulTemplates(ctx, logger, cs, event, repo, vcx, matchedPRs)
-			if len(filtered) == 0 {
+			// follow-ups are never filtered: only the dependencies decide
+			// whether there is something to retest
+			if !slices.ContainsFunc(filtered, func(m Match) bool { return m.Config[ConfigFollowUp] != "true" }) {
 				return nil, unmatchedPRs, NoFailedPipelineToRetestError(provider.GetGitOpsCommentPrefix(repo))
 			}
 			return filtered, unmatchedPRs, nil
@@ -547,6 +578,14 @@ func filterSuccessfulTemplates(ctx context.Context, logger *zap.SugaredLogger, c
 
 	for _, match := range matchedPRs {
 		templateName := getName(match.PipelineRun)
+
+		// A follow-up is re-planned whenever all its dependencies re-run,
+		// even if its own previous run succeeded: it then waits on the new
+		// dependency runs. The follow-up planning decides its fate.
+		if match.Config[ConfigFollowUp] == "true" {
+			filteredPRs = append(filteredPRs, match)
+			continue
+		}
 
 		if successfulPR, hasSuccessfulRun := successfulTemplates[templateName]; hasSuccessfulRun {
 			logger.Infof(
@@ -666,14 +705,17 @@ func MatchRunningPipelineRunForIncomingWebhook(eventType, incomingPipelineRun st
 	return nil
 }
 
-// resolveCustomParamsForCEL resolves custom parameters from the Repository CR for use in CEL expressions.
+// ResolveCustomParamsForCEL resolves custom parameters from the Repository CR for use in CEL expressions.
 // It returns a map of parameter names to values, excluding reserved keywords.
 // All parameters are returned as strings, including those from secret_ref.
-func resolveCustomParamsForCEL(ctx context.Context, repo *apipac.Repository, event *info.Event, cs *params.Run, vcx provider.Interface, eventEmitter *events.EventEmitter, logger *zap.SugaredLogger) map[string]string {
+//
+// paramFilters, when not nil, selects the filtered params from the outcomes
+// recorded when the event was processed instead of evaluating the filters.
+func ResolveCustomParamsForCEL(ctx context.Context, repo *apipac.Repository, event *info.Event, cs *params.Run, vcx provider.Interface, eventEmitter *events.EventEmitter, logger *zap.SugaredLogger, paramFilters map[string]string) map[string]string {
 	if repo == nil || repo.Spec.Params == nil {
 		return map[string]string{}
 	}
-	logger.Debugf("resolveCustomParamsForCEL: repo=%s/%s params=%d", repo.GetNamespace(), repo.GetName(), len(*repo.Spec.Params))
+	logger.Debugf("ResolveCustomParamsForCEL: repo=%s/%s params=%d", repo.GetNamespace(), repo.GetName(), len(*repo.Spec.Params))
 
 	// Create kubeinteraction interface
 	kinteract, err := kubeinteraction.NewKubernetesInteraction(cs)
@@ -684,13 +726,16 @@ func resolveCustomParamsForCEL(ctx context.Context, repo *apipac.Repository, eve
 
 	// Use existing customparams package to resolve all params
 	cp := customparams.NewCustomParams(event, repo, cs, kinteract, eventEmitter, vcx)
+	if paramFilters != nil {
+		cp = cp.WithFilterOutcomes(paramFilters)
+	}
 	allParams, _, err := cp.GetParams(ctx)
 	if err != nil {
 		eventEmitter.EmitMessage(repo, zap.WarnLevel, "CustomParamsCELError",
 			fmt.Sprintf("failed to resolve custom params for CEL: %s", err.Error()))
 		return map[string]string{}
 	}
-	logger.Debugf("resolveCustomParamsForCEL: resolved %d total params", len(allParams))
+	logger.Debugf("ResolveCustomParamsForCEL: resolved %d total params", len(allParams))
 
 	// Filter to only include params defined in repo.Spec.Params (not standard PAC params)
 	result := make(map[string]string)
@@ -699,7 +744,7 @@ func resolveCustomParamsForCEL(ctx context.Context, repo *apipac.Repository, eve
 			result[param.Name] = value
 		}
 	}
-	logger.Debugf("resolveCustomParamsForCEL: returned %d custom params", len(result))
+	logger.Debugf("ResolveCustomParamsForCEL: returned %d custom params", len(result))
 
 	return result
 }
