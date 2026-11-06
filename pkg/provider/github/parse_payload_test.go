@@ -74,6 +74,7 @@ var samplePRevent = github.PullRequestEvent{
 		},
 		User: &github.User{
 			Login: new("user"),
+			Type:  new("Bot"),
 		},
 		Title: new("my first PR"),
 	},
@@ -583,6 +584,17 @@ func TestParsePayLoad(t *testing.T) {
 		Login: new("maintainer"),
 		Type:  new("User"),
 	}
+
+	samplePRSyncEvent := samplePRevent
+	samplePRSyncEvent.Action = new("synchronize")
+	samplePRSyncEvent.Sender = rerunSender
+
+	samplePRSyncWithoutSender := samplePRevent
+	samplePRSyncWithoutSender.Action = new("synchronize")
+
+	samplePRLabeledEvent := samplePRevent
+	samplePRLabeledEvent.Action = new("labeled")
+	samplePRLabeledEvent.Sender = rerunSender
 
 	tests := []struct {
 		name                       string
@@ -1199,6 +1211,34 @@ func TestParsePayLoad(t *testing.T) {
 			triggerTarget:      triggertype.PullRequest.String(),
 			payloadEventStruct: samplePRevent,
 			shaRet:             "sampleHeadsha",
+			wantedSender:       "user",
+		},
+		{
+			name:               "good/pull request synchronize uses actor as sender",
+			eventType:          "pull_request",
+			triggerTarget:      triggertype.PullRequest.String(),
+			payloadEventStruct: samplePRSyncEvent,
+			shaRet:             "sampleHeadsha",
+			wantedSender:       "maintainer",
+			wantedUserType:     "User",
+		},
+		{
+			name:               "good/pull request synchronize falls back to author without sender",
+			eventType:          "pull_request",
+			triggerTarget:      triggertype.PullRequest.String(),
+			payloadEventStruct: samplePRSyncWithoutSender,
+			shaRet:             "sampleHeadsha",
+			wantedSender:       "user",
+			wantedUserType:     "Bot",
+		},
+		{
+			name:               "good/pull request labeled keeps author as sender",
+			eventType:          "pull_request",
+			triggerTarget:      triggertype.PullRequest.String(),
+			payloadEventStruct: samplePRLabeledEvent,
+			shaRet:             "sampleHeadsha",
+			wantedSender:       "user",
+			wantedUserType:     "Bot",
 		},
 		{
 			name:               "good/pull request closed",
