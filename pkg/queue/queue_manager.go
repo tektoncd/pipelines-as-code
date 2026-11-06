@@ -208,6 +208,10 @@ func FilterPipelineRunByState(ctx context.Context, tekton versioned2.Interface, 
 			return nil, fmt.Errorf("cannot read execution-order pipelineRun %s: %w", prName, err)
 		}
 
+		if pr.IsDone() || pr.IsCancelled() || pr.DeletionTimestamp != nil {
+			continue
+		}
+
 		state, exist := pr.GetAnnotations()[keys.State]
 		if !exist {
 			continue
