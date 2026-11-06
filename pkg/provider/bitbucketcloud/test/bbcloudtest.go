@@ -93,7 +93,7 @@ func MuxFiles(t *testing.T, mux *http.ServeMux, event *info.Event, filescontents
 	t.Helper()
 
 	sha := event.SHA
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		sha = event.DefaultBranch
 	}
 	for key := range filescontents {
@@ -109,7 +109,7 @@ func MuxFiles(t *testing.T, mux *http.ServeMux, event *info.Event, filescontents
 func MuxListDirFiles(t *testing.T, mux *http.ServeMux, event *info.Event, dirs map[string][]bitbucket.RepositoryFile, provenance string) {
 	t.Helper()
 	sha := event.SHA
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		sha = event.DefaultBranch
 	}
 
