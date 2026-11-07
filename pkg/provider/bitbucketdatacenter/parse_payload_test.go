@@ -565,6 +565,9 @@ func TestParsePayload(t *testing.T) {
 		CloneURL:     "http://clone/PROJ/repo",
 	}
 
+	prWithRepositorySlug := bbv1test.MakePREvent(ev1, "/test")
+	prWithRepositorySlug.PullRequest.ToRef.Repository.Name = "Repo Name"
+
 	tests := []struct {
 		name                    string
 		payloadEvent            any
@@ -703,6 +706,15 @@ func TestParsePayload(t *testing.T) {
 			expTriggerComment: "/review",
 		},
 		{
+			name:              "good/comment with repository slug",
+			eventType:         "pr:comment:added",
+			payloadEvent:      prWithRepositorySlug,
+			expEvent:          ev1,
+			expEventType:      "test-all-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/test",
+		},
+		{
 			name:      "branch/deleted with zero hash",
 			eventType: "repo:refs_changed",
 			payloadEvent: bbv1test.MakePushEvent(
@@ -763,6 +775,7 @@ func TestParsePayload(t *testing.T) {
 			if tt.canceltargetPipelinerun != "" {
 				assert.Equal(t, got.TargetCancelPipelineRun, tt.canceltargetPipelinerun)
 			}
+			assert.Equal(t, got.Repository, tt.expEvent.Repository)
 			assert.Equal(t, string(got.TriggerTarget), tt.expTriggerTarget)
 			assert.Equal(t, string(got.EventType), tt.expEventType)
 			assert.Equal(t, got.TriggerComment, tt.expTriggerComment)

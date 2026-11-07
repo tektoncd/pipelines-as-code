@@ -302,6 +302,7 @@ func MakePREvent(event *info.Event, comment string) *types.PullRequestEvent {
 				Repository: types.Repository{
 					Project: &types.Project{Key: event.Organization},
 					Name:    event.Repository,
+					Slug:    event.Repository,
 					Links: &struct {
 						Clone []types.CloneLink `json:"clone,omitempty"`
 						Self  []types.SelfLink  `json:"self,omitempty"`

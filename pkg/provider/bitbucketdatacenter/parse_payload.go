@@ -122,7 +122,7 @@ func (v *Provider) ParsePayload(_ context.Context, _ *params.Run, request *http.
 
 		// TODO: It's Really not an OWNER but a PROJECT
 		processedEvent.Organization = e.PullRequest.ToRef.Repository.Project.Key
-		processedEvent.Repository = e.PullRequest.ToRef.Repository.Name
+		processedEvent.Repository = e.PullRequest.ToRef.Repository.Slug
 		processedEvent.SHA = e.PullRequest.FromRef.LatestCommit
 		processedEvent.PullRequestNumber = e.PullRequest.ID
 		processedEvent.URL = e.PullRequest.ToRef.Repository.Links.Self[0].Href
