@@ -109,6 +109,7 @@ func TestGithubPullRequestCustomPrefixCancel(t *testing.T) {
 		github.IssueCommentRequest{Body: customCancelComment})
 	assert.NilError(t, err)
 
+	waitOpts.FailOnOtherTerminalReason = true
 	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 }

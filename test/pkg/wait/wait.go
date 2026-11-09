@@ -67,6 +67,10 @@ type Opts struct {
 	// events (e.g. a pull_request and a pull_request_labeled delivery both
 	// matching an on-label annotation).
 	TargetEventType string
+	// FailOnOtherTerminalReason makes UntilPipelineRunHasReason return an
+	// error as soon as a matching PipelineRun has finished with a reason other
+	// than the desired one, instead of polling until PollTimeout.
+	FailOnOtherTerminalReason bool
 }
 
 func minNumberStatus(opts Opts) int {
@@ -218,6 +222,11 @@ func UntilPipelineRunHasReason(ctx context.Context, clients clients.Clients, des
 		for _, pr := range prs.Items {
 			if len(pr.Status.Conditions) > 0 && pr.Status.Conditions[0].Reason == desiredReason.String() {
 				prsWithReason = append(prsWithReason, pr)
+				continue
+			}
+			if opts.FailOnOtherTerminalReason && len(pr.Status.Conditions) > 0 && pr.IsDone() {
+				return true, fmt.Errorf("pipelinerun %s/%s finished with reason %q while waiting for %q",
+					pr.GetNamespace(), pr.GetName(), pr.Status.Conditions[0].Reason, desiredReason.String())
 			}
 		}
 

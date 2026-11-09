@@ -339,7 +339,9 @@ func TestUntilPipelineRunHasReason(t *testing.T) {
 		targetSHA       []string
 		reason          string
 		minNumberStatus int
+		failOnOther     bool
 		wantErr         bool
+		errContains     string
 	}{
 		{
 			name: "match by target sha and reason",
@@ -397,6 +399,29 @@ func TestUntilPipelineRunHasReason(t *testing.T) {
 			minNumberStatus: 1,
 			wantErr:         true,
 		},
+		{
+			name: "fail fast when matching pipelinerun finished with another reason",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				makePipelineRunWithStatus("pr-1", "sha-2", "Succeeded", corev1.ConditionTrue, time.Now(), time.Now()),
+			},
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+			failOnOther:     true,
+			wantErr:         true,
+			errContains:     `finished with reason "Succeeded" while waiting for "Cancelled"`,
+		},
+		{
+			name: "fail fast keeps waiting while pipelinerun is still running",
+			pipelineRuns: []*pipelinev1.PipelineRun{
+				makePipelineRunWithStatus("pr-1", "sha-2", "Running", corev1.ConditionUnknown, time.Now(), time.Time{}),
+			},
+			targetSHA:       []string{"sha-2"},
+			reason:          "Cancelled",
+			minNumberStatus: 1,
+			failOnOther:     true,
+			wantErr:         true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -408,12 +433,17 @@ func TestUntilPipelineRunHasReason(t *testing.T) {
 				MinNumberStatus: tt.minNumberStatus,
 				TargetSHA:       tt.targetSHA,
 				PollTimeout:     10 * time.Millisecond,
+
+				FailOnOtherTerminalReason: tt.failOnOther,
 			}
 
 			prs, err := UntilPipelineRunHasReason(ctx, clients, pipelinev1.PipelineRunReason(tt.reason), opts)
 			if tt.wantErr {
-				assert.Assert(t, err != nil)
-				assert.ErrorContains(t, err, "timed out")
+				errContains := tt.errContains
+				if errContains == "" {
+					errContains = "timed out"
+				}
+				assert.ErrorContains(t, err, errContains)
 				return
 			}
 
