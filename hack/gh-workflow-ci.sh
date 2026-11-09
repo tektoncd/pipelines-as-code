@@ -255,7 +255,7 @@ run_e2e_tests() {
   test_pattern="$(echo "${tests[*]}" | sed 's/ /|/g')"
   ./hack/install-gotestsum.sh 1.13.0 "${HOME}/go/bin"
   gotestsum --format standard-verbose --jsonfile "${raw_output}" -- \
-    -race -failfast -timeout 45m -count=1 -tags=e2e -run "${test_pattern}" ./test || test_status=$?
+    -race -failfast -timeout 45m -count=1 -tags=e2e -run "^(${test_pattern})$" ./test || test_status=$?
   return "${test_status}"
 }
 
