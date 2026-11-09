@@ -126,7 +126,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ko-
 
-      - uses: ko-build/setup-ko@61b4d1d396f5b2e7d6bb6fefdce3dc38d1a13445 # v0.10
+      # Install from the Go module proxy, GitHub release downloads get
+      # throttled for anonymous clients during GitHub incidents.
+      - name: Install ko
+        run: | # zizmor: ignore[github-env]
+          go install github.com/google/ko@v0.19.1
+          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
 
       # Start binary build in background as soon as possible so we can optimize
       # the run of e2e when it's start later on
