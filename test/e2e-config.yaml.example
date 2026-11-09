@@ -32,6 +32,11 @@ github:
   # Private remote task for scoped token tests (optional)
   # private_task_name: "task-remote"
   # private_task_url: "https://github.com/org/private-repo/blob/main/task.yaml"
+  # GitHub App used by the controller that CI installs (tests do not read these)
+  application_id: ""
+  # PEM private key, written as a YAML block scalar (private_key: |)
+  private_key: ""
+  smee_url: ""  # Relay URL the GitHub App delivers webhooks to
 
 # GitHub Enterprise (second controller)
 github_enterprise:
@@ -46,6 +51,7 @@ github_enterprise:
   webhook_token: ""  # Token for webhook-based tests (may differ from main token)
   webhook_secret: ""  # Webhook secret for GHE controller
   application_id: ""  # GitHub App application ID
+  private_key: ""  # GitHub App private key, as a block scalar like github.private_key
 
 # GitLab
 gitlab:
