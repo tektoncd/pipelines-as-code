@@ -7,7 +7,7 @@ Pipelines-as-Code (PAC) is built on top of Tekton Pipelines and provides a GitOp
 
 ## Architecture Overview
 
-PAC consists of three main components that work together to process Git events and manage pipeline executions:
+PAC consists of three main components that work together to process Git events and manage pipeline executions. See [Tekton Ecosystem]({{< relref "/docs/ecosystem" >}}) for how PAC connects to Tekton Pipelines, Chains, Results, Dashboard, and Operator.
 
 ## Core Components
 

@@ -459,6 +459,7 @@ When you push a new commit to a pull request, Pipelines-as-Code automatically ca
 ## What’s next?
 
 {{< cards >}}
+  {{< card link="../ecosystem" title="Tekton Ecosystem" subtitle="Understand how Pipelines-as-Code fits with Pipelines, Chains, Results, and Dashboard" >}}
   {{< card link="../getting-started" title="Getting Started" subtitle="Get your first pipeline running in minutes" >}}
   {{< card link="../guides/repository-crd" title="Repository CR" subtitle="Configure repositories using the Repository custom resource" >}}
   {{< card link="../guides/creating-pipelines" title="Writing Pipelines" subtitle="Create PipelineRun definitions with annotations and template variables" >}}

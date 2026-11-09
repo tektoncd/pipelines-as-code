@@ -30,5 +30,8 @@ Place screenshot and diagram assets here. They are referenced in the docs as `/i
 | `github-app-matching-annotations.png`           | Getting started                   |
 | `github-app-install-CI-succeeded.png`           | Getting started                   |
 | `pac-snazy.png`                                 | Dev setup                         |
+| `pac-ecosystem.svg`                             | Tekton Ecosystem                  |
+| `pac-ecosystem.png`                             | Tekton Ecosystem                  |
 
 Add PNG (or SVG) files with these names so the documentation renders correctly.
+To regenerate `pac-ecosystem.svg` and `pac-ecosystem.png` from `docs/diagrams/assets/`, run `make generate-diagrams`.
