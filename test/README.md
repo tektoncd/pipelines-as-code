@@ -81,14 +81,20 @@ cp test/e2e-config.yaml.example test/e2e-config.yaml
 # edit test/e2e-config.yaml with your values
 ```
 
-The YAML file groups settings by provider section (`common`, `github`,
+The YAML file groups settings by section (`common`, `github`,
 `github_enterprise`, `gitlab`, `gitea`, `bitbucket_cloud`,
 `bitbucket_datacenter`). See `test/e2e-config.yaml.example` for the full list of
 fields.
 
 Environment variables always take precedence over YAML values, so you can use
 the config file for base settings and override specific values via env vars
-(useful for CI secrets).
+(useful for generated relay URLs and local overrides). An explicitly set empty
+environment variable also overrides YAML.
+
+The Go tests load `PAC_E2E_CONFIG` automatically. The helper scripts in
+`hack/gh-workflow-ci.sh` run outside the Go test process and read values from
+the shell environment, so set the variables you need directly when running them
+locally.
 
 ## Running
 
@@ -164,7 +170,7 @@ Our E2E tests are automatically run as part of our CI pipeline using GitHub Acti
 
 ### Overview
 
-The E2E test CI pipeline runs on GitHub Actions using a Kind (Kubernetes in Docker) cluster. The workflow is defined in `.github/workflows/kind-e2e-tests.yaml` and uses helper scripts in `hack/gh-workflow-ci.sh`. Tests are executed against multiple provider categories to validate functionality across different Git providers.
+The E2E test CI pipeline runs on GitHub Actions using a Kind (Kubernetes in Docker) cluster. The workflow is defined in `.github/workflows/e2e.yaml` and uses helper scripts in `hack/gh-workflow-ci.sh`. Tests are executed against multiple provider categories to validate functionality across different Git providers.
 
 The CI flow generally follows these steps:
 
@@ -187,7 +193,7 @@ Tests run on:
 The tests are separated into provider categories (matrix strategy):
 
 - `github_public` - Public GitHub tests (excluding GHE and concurrency)
-- `github_ghe` - GitHub Enterprise (GHE) tests
+- `github_ghe_1`, `github_ghe_2`, `github_ghe_3` - GitHub Enterprise (GHE) tests
 - `gitlab_bitbucket` - GitLab and Bitbucket tests
 - `gitea_1`, `gitea_2`, `gitea_3` - Gitea tests (split into 3 chunks)
 - `concurrency` - Concurrency-specific tests
@@ -196,14 +202,46 @@ This split helps reduce the load on external APIs during testing and provides mo
 
 ### Environment Variables
 
-Tests rely heavily on environment variables for configuration. These are set at the job level in the workflow file and supplemented with secrets where needed. Some key variables include:
+All provider endpoints and credentials live in a single GitHub Secret,
+`E2E_CONFIG_YAML`, whose contents are the YAML described in
+[YAML Configuration File](#yaml-configuration-file) (see
+`test/e2e-config.yaml.example` for the full schema). The workflow writes the
+secret to `/tmp/e2e-config.yaml` with owner-only permissions and sets
+`PAC_E2E_CONFIG`. The secret is passed through a step environment variable, not
+interpolated into shell source. The same step registers every token, secret,
+password, private key and smee URL from the file with `::add-mask::`, since
+GitHub only masks a multiline secret line by line. The Go tests load the file
+automatically via `TestMain`. Shell steps read the values they need with `yq`
+and export them only for that step.
 
-- Basic configuration: `KO_DOCKER_REPO`, `CONTROLLER_DOMAIN_URL`, etc.
-- Provider-specific endpoints and credentials
-- Test repository information
-- Webhook configurations
+Copy and populate the example, then upload it as the single E2E config secret:
 
-Secrets are stored in GitHub Secrets and made available to the workflow via `${{ secrets.SECRET_NAME }}`.
+```shell
+gh secret set E2E_CONFIG_YAML < test/e2e-config.yaml
+```
+
+Do not commit the populated file. The GitHub App private keys
+(`github.private_key`, `github_enterprise.private_key`) go in the file as YAML
+block scalars (`private_key: |`).
+
+Populate `common` and the providers you want to test. The job supplies its
+local controller URL through `TEST_EL_URL`. Gitea, GitLab, and GHE webhook relay
+URLs are generated during CI.
+
+Only a few things remain outside the config file:
+
+- Workflow infrastructure set at the job level (`KO_DOCKER_REPO`,
+  `CONTROLLER_DOMAIN_URL`, `KUBECONFIG`, etc.).
+- Runtime-generated values set per-step (the matrix `TEST_PROVIDER` and the
+  dynamic gosmee relay URLs produced during the run).
+- CI-operational secrets that are not test credentials: `GH_TOKEN` (the
+  `ok-to-test` permission gate) and `SLACK_WEBHOOK_URL` (failure notifications).
+
+To add a new setting, add a field to the `E2EConfig` struct in
+`test/pkg/configfile/config.go`, document it in `test/e2e-config.yaml.example`,
+and add it to the `E2E_CONFIG_YAML` secret. Configuration tests run with
+`make test` and in the GitHub Actions unit-test job. Run just these tests with
+`go test ./test/pkg/configfile/...`.
 
 ### Helper Script
 
@@ -220,17 +258,19 @@ The script filters tests by category using pattern matching on test function nam
 
 In CI, use [startpaac](https://github.com/pipelines-as-code/startpaac) to install the second GitHub controller (GHE). When running with the `--ci` flag, startpaac automatically installs the second controller when `PAC_SECOND_SECRET_FOLDER` is set.
 
-Example from e2e.yaml workflow:
+Example from e2e.yaml workflow (the second-controller credentials come from
+the `github_enterprise` section of the config file):
 
 ```yaml
 - name: Start installing cluster with startpaac
-  env:
-    PAC_SECOND_SECRET_FOLDER: ~/secrets-second
   run: |
+    cfg() { yq -r "$1 // \"\"" "$PAC_E2E_CONFIG"; }
     mkdir -p ~/secrets-second
-    echo "${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}" > ~/secrets-second/github-application-id
-    echo "${{ secrets.TEST_GITHUB_SECOND_PRIVATE_KEY }}" > ~/secrets-second/github-private-key
-    # ... other secrets ...
+    cfg .github_enterprise.application_id > ~/secrets-second/github-application-id
+    cfg .github_enterprise.private_key > ~/secrets-second/github-private-key
+    cfg .github_enterprise.webhook_secret > ~/secrets-second/webhook.secret
+    cfg .github_enterprise.smee_url > ~/secrets-second/smee
+    export PAC_SECOND_SECRET_FOLDER=~/secrets-second
 
     cd startpaac
     ./startpaac --ci -a  # Automatically installs second controller
