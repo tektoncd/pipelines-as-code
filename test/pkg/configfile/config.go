@@ -32,6 +32,10 @@ type GitHubConfig struct {
 	RepoInstallationID string `env:"TEST_GITHUB_REPO_INSTALLATION_ID" json:"repo_installation_id" yaml:"repo_installation_id"`
 	PrivateTaskName    string `env:"TEST_GITHUB_PRIVATE_TASK_NAME"    json:"private_task_name"    yaml:"private_task_name"`
 	PrivateTaskURL     string `env:"TEST_GITHUB_PRIVATE_TASK_URL"     json:"private_task_url"     yaml:"private_task_url"`
+	// The fields below configure the controller installed by CI; tests do not read them.
+	ApplicationID string `json:"application_id" yaml:"application_id"`
+	PrivateKey    string `json:"private_key"    yaml:"private_key"`
+	SmeeURL       string `json:"smee_url"       yaml:"smee_url"`
 }
 
 type GitHubEnterpriseConfig struct {
@@ -43,6 +47,10 @@ type GitHubEnterpriseConfig struct {
 	SmeeURL            string `env:"TEST_GITHUB_SECOND_SMEE_URL"             json:"smee_url"             yaml:"smee_url"`
 	WebhookSmeeURL     string `env:"TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL"     json:"webhook_smee_url"     yaml:"webhook_smee_url"`
 	WebhookOrg         string `env:"TEST_GITHUB_SECOND_WEBHOOK_ORG"          json:"webhook_org"          yaml:"webhook_org"`
+	WebhookToken       string `env:"TEST_GITHUB_SECOND_WEBHOOK_TOKEN"        json:"webhook_token"        yaml:"webhook_token"`
+	WebhookSecret      string `env:"TEST_GITHUB_SECOND_WEBHOOK_SECRET"       json:"webhook_secret"       yaml:"webhook_secret"`
+	ApplicationID      string `env:"TEST_GITHUB_SECOND_APPLICATION_ID"       json:"application_id"       yaml:"application_id"`
+	PrivateKey         string `env:"TEST_GITHUB_SECOND_PRIVATE_KEY"          json:"private_key"          yaml:"private_key"`
 }
 
 type GitLabConfig struct {
@@ -67,6 +75,7 @@ type BitbucketCloudConfig struct {
 	APIURL        string `env:"TEST_BITBUCKET_CLOUD_API_URL"        json:"api_url"        yaml:"api_url"`
 	User          string `env:"TEST_BITBUCKET_CLOUD_USER"           json:"user"           yaml:"user"`
 	Token         string `env:"TEST_BITBUCKET_CLOUD_TOKEN"          json:"token"          yaml:"token"`
+	WebhookSecret string `env:"TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET" json:"webhook_secret" yaml:"webhook_secret"`
 	E2ERepository string `env:"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY" json:"e2e_repository" yaml:"e2e_repository"`
 }
 

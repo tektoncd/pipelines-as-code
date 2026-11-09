@@ -20,7 +20,8 @@ common:
 
 # GitHub (public)
 github:
-  api_url: "https://api.github.com"
+  # Bare host (no scheme): the rate-limit check prepends https:// itself.
+  api_url: "api.github.com"
   token: ""
   # Repository configured with GitHub Apps (format: org/repo)
   repo_owner_githubapp: ""
@@ -31,6 +32,11 @@ github:
   # Private remote task for scoped token tests (optional)
   # private_task_name: "task-remote"
   # private_task_url: "https://github.com/org/private-repo/blob/main/task.yaml"
+  # GitHub App used by the controller that CI installs (tests do not read these)
+  application_id: ""
+  # PEM private key, written as a YAML block scalar (private_key: |)
+  private_key: ""
+  smee_url: ""  # Relay URL the GitHub App delivers webhooks to
 
 # GitHub Enterprise (second controller)
 github_enterprise:
@@ -40,8 +46,12 @@ github_enterprise:
   repo_owner_githubapp: ""
   repo_installation_id: ""
   smee_url: ""  # For GitHub App tests
-  webhook_smee_url: ""  # For webhook-based tests with dynamic repo creation
+  webhook_smee_url: ""  # Auto-generated in CI; set manually for local webhook tests
   webhook_org: ""  # Optional: Different org for webhook tests (uses repo_owner_githubapp org if not set)
+  webhook_token: ""  # Token for webhook-based tests (may differ from main token)
+  webhook_secret: ""  # Webhook secret for GHE controller
+  application_id: ""  # GitHub App application ID
+  private_key: ""  # GitHub App private key, as a block scalar like github.private_key
 
 # GitLab
 gitlab:
@@ -73,6 +83,7 @@ bitbucket_cloud:
   # Username from "Personal Bitbucket settings"
   user: ""
   token: ""
+  webhook_secret: ""
   # Format: workspace/repo
   e2e_repository: ""
 
