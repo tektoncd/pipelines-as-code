@@ -51,6 +51,7 @@ func TestGiteaCancelRun(t *testing.T) {
 
 	tgitea.PostCommentOnPullRequest(t, topts, "/cancel")
 
+	waitOpts.FailOnOtherTerminalReason = true
 	_, err = twait.UntilPipelineRunHasReason(context.Background(), topts.ParamsRun.Clients, tektonv1.PipelineRunReasonCancelled, waitOpts)
 	assert.NilError(t, err)
 
