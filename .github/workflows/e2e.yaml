@@ -126,11 +126,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ko-
 
+      # The gotestsum version must match the one hack/gh-workflow-ci.sh
+      # installs, otherwise the cached binary is ignored and downloaded again.
+      - name: Cache E2E tool binaries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            ~/go/bin/ko
+            ~/go/bin/minica
+            ~/go/bin/gotestsum
+          key: ${{ runner.os }}-${{ runner.arch }}-e2e-tools-ko-v0.19.1-minica-v1.1.0-gotestsum-1.13.0
+
       # Install from the Go module proxy, GitHub release downloads get
       # throttled for anonymous clients during GitHub incidents.
-      - name: Install ko
+      - name: Install ko and minica
         run: | # zizmor: ignore[github-env]
-          go install github.com/google/ko@v0.19.1
+          [[ -x "${HOME}/go/bin/ko" ]] || go install github.com/google/ko@v0.19.1
+          [[ -x "${HOME}/go/bin/minica" ]] || go install github.com/jsha/minica@v1.1.0
           echo "${HOME}/go/bin" >> "$GITHUB_PATH"
 
       # Start binary build in background as soon as possible so we can optimize
@@ -144,16 +156,15 @@ jobs:
         uses: jaxxstorm/action-install-gh-release@b82b2052fdf822192f2119b7e289a6f63e668bc8 # v4.0.0
         with:
           repo: chmouel/gosmee
+          tag: v0.32.1
+          cache: enable
 
       - name: Install Snazy
         uses: jaxxstorm/action-install-gh-release@b82b2052fdf822192f2119b7e289a6f63e668bc8 # v4.0.0
         with:
           repo: chmouel/snazy
-
-      - name: Install minica
-        run: | # zizmor: ignore[github-env]
-          go install github.com/jsha/minica@latest
-          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
+          tag: 0.59.1
+          cache: enable
 
       - name: Clone startpaac
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
