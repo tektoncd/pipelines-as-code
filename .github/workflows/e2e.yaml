@@ -291,6 +291,8 @@ jobs:
         # Remove the old label check which is no longer relevant for triggering.
         if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request_target' }}
         env:
+          # Authenticates tool downloads from GitHub releases (gotestsum).
+          GH_TOKEN: ${{ github.token }}
           TEST_PROVIDER: ${{ matrix.provider }}
           TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
