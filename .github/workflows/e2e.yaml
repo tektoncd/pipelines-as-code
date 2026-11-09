@@ -93,15 +93,21 @@ jobs:
         run: |
           umask 077
           printf '%s\n' "$E2E_CONFIG_YAML" > /tmp/e2e-config.yaml
+          # A multiline secret is only masked line by line, so register each
+          # sensitive value on its own. Short values like the local Gitea
+          # password are not secrets and would garble the logs.
+          yq -r '.. | select(tag == "!!str") | select(key | test("token|secret|password|private_key|smee_url")) | split("\n") | .[] | select(length >= 6)' /tmp/e2e-config.yaml |
+            while IFS= read -r value; do echo "::add-mask::${value}"; done
           echo "PAC_E2E_CONFIG=/tmp/e2e-config.yaml" >> "$GITHUB_ENV"
 
       - name: Check GitHub API rate limits
         env:
           TEST_PROVIDER: ${{ matrix.provider }}
-          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
-          TEST_GITHUB_API_URL: ${{ secrets.TEST_GITHUB_API_URL }}
         # The script comes from the PR head; older branches lack this command.
         run: |
+          TEST_GITHUB_TOKEN=$(yq -r '.github.token // ""' "$PAC_E2E_CONFIG")
+          TEST_GITHUB_API_URL=$(yq -r '.github.api_url // ""' "$PAC_E2E_CONFIG")
+          export TEST_GITHUB_TOKEN TEST_GITHUB_API_URL
           if grep -q '^check_e2e_rate_limits)' hack/gh-workflow-ci.sh; then
             ./hack/gh-workflow-ci.sh check_e2e_rate_limits
           else
@@ -152,9 +158,8 @@ jobs:
           persist-credentials: false
 
       - name: Run gosmee for main controller
-        env:
-          PYSMEE_URL: ${{ secrets.PYSMEE_URL }}
         run: |
+          PYSMEE_URL=$(yq -r '.github.smee_url // ""' "$PAC_E2E_CONFIG")
           nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay "${PYSMEE_URL}" "https://${CONTROLLER_DOMAIN_URL}" > /tmp/gosmee-main.log 2>&1 &
 
       - name: Generate unique gosmee URL for Gitea tests
@@ -189,9 +194,8 @@ jobs:
 
       - name: Run gosmee for second controller GHE App
         if: startsWith(matrix.provider, 'github_ghe') || matrix.provider == 'concurrency'
-        env:
-          TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
         run: |
+          TEST_GITHUB_SECOND_SMEE_URL=$(yq -r '.github_enterprise.smee_url // ""' "$PAC_E2E_CONFIG")
           nohup gosmee client --insecure-skip-tls-verify --output json --log-level debug --target-connection-timeout 5 --target-retries 5 --saveDir /tmp/gosmee-replay-ghe "${TEST_GITHUB_SECOND_SMEE_URL}" "https://ghe.paac-127-0-0-1.nip.io" > /tmp/gosmee-ghe.log 2>&1 &
 
       - name: Generate unique gosmee URL for GHE webhook tests
@@ -224,29 +228,24 @@ jobs:
       - name: Start installing cluster with startpaac
         env:
           PAC_DIR: ${{ github.workspace }}
-          APPLICATION_ID: ${{ vars.APPLICATION_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          TEST_EL_WEBHOOK_SECRET: ${{ secrets.TEST_EL_WEBHOOK_SECRET }}
-          PYSMEE_URL: ${{ secrets.PYSMEE_URL }}
-          TEST_GITHUB_SECOND_APPLICATION_ID: ${{ vars.TEST_GITHUB_SECOND_APPLICATION_ID }}
-          TEST_GITHUB_SECOND_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_SECOND_PRIVATE_KEY }}
-          TEST_GITHUB_SECOND_WEBHOOK_SECRET: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_SECRET }}
-          TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
         run: |
+          cfg() { yq -r "$1 // \"\"" "$PAC_E2E_CONFIG"; }
           mkdir -p ~/secrets
-          echo "${APPLICATION_ID}" > ~/secrets/github-application-id
-          echo "${APP_PRIVATE_KEY}" > ~/secrets/github-private-key
-          echo "${TEST_EL_WEBHOOK_SECRET}" > ~/secrets/webhook.secret
-          echo "${PYSMEE_URL}" > ~/secrets/smee
+          cfg .github.application_id > ~/secrets/github-application-id
+          cfg .github.private_key > ~/secrets/github-private-key
+          cfg .common.webhook_secret > ~/secrets/webhook.secret
+          cfg .github.smee_url > ~/secrets/smee
 
           mkdir -p ~/secrets-second
-          echo "${TEST_GITHUB_SECOND_APPLICATION_ID}" > ~/secrets-second/github-application-id
-          echo "${TEST_GITHUB_SECOND_PRIVATE_KEY}" > ~/secrets-second/github-private-key
-          echo "${TEST_GITHUB_SECOND_WEBHOOK_SECRET}" > ~/secrets-second/webhook.secret
-          echo "${TEST_GITHUB_SECOND_SMEE_URL}" > ~/secrets-second/smee
+          cfg .github_enterprise.application_id > ~/secrets-second/github-application-id
+          cfg .github_enterprise.private_key > ~/secrets-second/github-private-key
+          cfg .github_enterprise.webhook_secret > ~/secrets-second/webhook.secret
+          cfg .github_enterprise.smee_url > ~/secrets-second/smee
           export PAC_SECRET_FOLDER=~/secrets
           export PAC_SECOND_SECRET_FOLDER=~/secrets-second
-          export PAC_WEBHOOK_SECRET="${TEST_EL_WEBHOOK_SECRET}"
+          PAC_WEBHOOK_SECRET=$(cfg .common.webhook_secret)
+          PAC_GITHUB_SECOND_HOSTNAME=$(cfg .github_enterprise.api_url)
+          export PAC_WEBHOOK_SECRET PAC_GITHUB_SECOND_HOSTNAME
           export PAC_DOMAIN=paac-127-0-0-1.nip.io
           export TARGET_HOST=local
 
@@ -309,10 +308,11 @@ jobs:
       - name: Collect logs
         if: ${{ always() }}
         env:
-          TEST_GITHUB_SECOND_SMEE_URL: ${{ secrets.TEST_GITHUB_SECOND_SMEE_URL }}
           TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
         run: |
+          TEST_GITHUB_SECOND_SMEE_URL=$(yq -r '.github_enterprise.smee_url // ""' "$PAC_E2E_CONFIG")
+          export TEST_GITHUB_SECOND_SMEE_URL
           ./hack/gh-workflow-ci.sh collect_logs
 
       - name: Show controllers/watcher errors with Snazy
@@ -340,16 +340,26 @@ jobs:
           persist-credentials: false
       - name: Close old E2E PRs and delete old E2E branches and repositories
         env:
-          TEST_GITHUB_API_URL: api.github.com
-          TEST_GITHUB_TOKEN: ${{ secrets.GH_APPS_TOKEN }}
-          TEST_GITHUB_REPO_OWNER_GITHUBAPP: openshift-pipelines/pipelines-as-code-e2e-tests
-          TEST_GITHUB_REPO_OWNER_WEBHOOK: openshift-pipelines/pipelines-as-code-e2e-tests-webhook
-          TEST_GITHUB_SECOND_API_URL: ghe.pipelinesascode.com
-          TEST_GITHUB_SECOND_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_TOKEN }}
-          TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP: pipelines-as-code/e2e
-          TEST_GITHUB_SECOND_WEBHOOK_ORG: pac-e2e-webhook-tests
-          TEST_GITHUB_SECOND_WEBHOOK_TOKEN: ${{ secrets.TEST_GITHUB_SECOND_WEBHOOK_TOKEN }}
-        run: ./hack/cleanup-github-e2e.py --force
+          E2E_CONFIG_YAML: ${{ secrets.E2E_CONFIG_YAML }}
+        run: |
+          cfg() { printf '%s\n' "$E2E_CONFIG_YAML" | yq -r "$1 // \"\""; }
+          for key in .github.token .github_enterprise.token .github_enterprise.webhook_token; do
+            echo "::add-mask::$(cfg "$key")"
+          done
+          TEST_GITHUB_API_URL=$(cfg .github.api_url)
+          TEST_GITHUB_TOKEN=$(cfg .github.token)
+          TEST_GITHUB_REPO_OWNER_GITHUBAPP=$(cfg .github.repo_owner_githubapp)
+          TEST_GITHUB_REPO_OWNER_WEBHOOK=$(cfg .github.repo_owner_webhook)
+          TEST_GITHUB_SECOND_API_URL=$(cfg .github_enterprise.api_url)
+          TEST_GITHUB_SECOND_TOKEN=$(cfg .github_enterprise.token)
+          TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP=$(cfg .github_enterprise.repo_owner_githubapp)
+          TEST_GITHUB_SECOND_WEBHOOK_ORG=$(cfg .github_enterprise.webhook_org)
+          TEST_GITHUB_SECOND_WEBHOOK_TOKEN=$(cfg .github_enterprise.webhook_token)
+          export TEST_GITHUB_API_URL TEST_GITHUB_TOKEN TEST_GITHUB_REPO_OWNER_GITHUBAPP \
+            TEST_GITHUB_REPO_OWNER_WEBHOOK TEST_GITHUB_SECOND_API_URL TEST_GITHUB_SECOND_TOKEN \
+            TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP TEST_GITHUB_SECOND_WEBHOOK_ORG \
+            TEST_GITHUB_SECOND_WEBHOOK_TOKEN
+          ./hack/cleanup-github-e2e.py --force
 
   notify-slack:
     name: Notify Slack on Failures

@@ -133,6 +133,11 @@ github_enterprise:
   controller_url: "https://ghe-ctrl.example.com"
   repo_owner_githubapp: "ghe-org/repo"
   repo_installation_id: "1"
+  webhook_token: "ghe-webhook-token"
+  webhook_secret: "ghe-webhook-secret"
+  application_id: "2"
+  private_key: |
+    ghe-private-key
 gitlab:
   api_url: "https://gitlab.com"
   token: "glpat-xyz"
@@ -151,6 +156,7 @@ bitbucket_cloud:
   api_url: "https://api.bitbucket.org/2.0"
   user: "bbuser"
   token: "bb-token"
+  webhook_secret: "bb-webhook-secret"
   e2e_repository: "workspace/repo"
 bitbucket_datacenter:
   api_url: "https://bitbucket.example.com"
@@ -172,12 +178,15 @@ bitbucket_datacenter:
 		"TEST_GITHUB_SECOND_API_URL", "TEST_GITHUB_SECOND_TOKEN",
 		"TEST_GITHUB_SECOND_EL_URL", "TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP",
 		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID",
+		"TEST_GITHUB_SECOND_WEBHOOK_TOKEN", "TEST_GITHUB_SECOND_WEBHOOK_SECRET",
+		"TEST_GITHUB_SECOND_APPLICATION_ID", "TEST_GITHUB_SECOND_PRIVATE_KEY",
 		"TEST_GITLAB_API_URL", "TEST_GITLAB_TOKEN", "TEST_GITLAB_SECOND_TOKEN",
 		"TEST_GITLAB_GROUP", "TEST_GITLAB_SECOND_GROUP", "TEST_GITLAB_SMEEURL",
 		"TEST_GITEA_API_URL", "TEST_GITEA_INTERNAL_URL", "TEST_GITEA_PASSWORD",
 		"TEST_GITEA_USERNAME", "TEST_GITEA_REPO_OWNER", "TEST_GITEA_SMEEURL",
 		"TEST_BITBUCKET_CLOUD_API_URL", "TEST_BITBUCKET_CLOUD_USER",
-		"TEST_BITBUCKET_CLOUD_TOKEN", "TEST_BITBUCKET_CLOUD_E2E_REPOSITORY",
+		"TEST_BITBUCKET_CLOUD_TOKEN", "TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET",
+		"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY",
 		"TEST_BITBUCKET_DATA_CENTER_API_URL", "TEST_BITBUCKET_DATA_CENTER_USER",
 		"TEST_BITBUCKET_DATA_CENTER_TOKEN", "TEST_BITBUCKET_DATA_CENTER_E2E_REPOSITORY",
 		"TEST_BITBUCKET_DATA_CENTER_WEBHOOK_SECRET",
@@ -205,6 +214,10 @@ bitbucket_datacenter:
 		"TEST_GITHUB_SECOND_EL_URL":                 "https://ghe-ctrl.example.com",
 		"TEST_GITHUB_SECOND_REPO_OWNER_GITHUBAPP":   "ghe-org/repo",
 		"TEST_GITHUB_SECOND_REPO_INSTALLATION_ID":   "1",
+		"TEST_GITHUB_SECOND_WEBHOOK_TOKEN":          "ghe-webhook-token",
+		"TEST_GITHUB_SECOND_WEBHOOK_SECRET":         "ghe-webhook-secret",
+		"TEST_GITHUB_SECOND_APPLICATION_ID":         "2",
+		"TEST_GITHUB_SECOND_PRIVATE_KEY":            "ghe-private-key\n",
 		"TEST_GITLAB_API_URL":                       "https://gitlab.com",
 		"TEST_GITLAB_TOKEN":                         "glpat-xyz",
 		"TEST_GITLAB_SECOND_TOKEN":                  "glpat-second",
@@ -220,6 +233,7 @@ bitbucket_datacenter:
 		"TEST_BITBUCKET_CLOUD_API_URL":              "https://api.bitbucket.org/2.0",
 		"TEST_BITBUCKET_CLOUD_USER":                 "bbuser",
 		"TEST_BITBUCKET_CLOUD_TOKEN":                "bb-token",
+		"TEST_BITBUCKET_CLOUD_WEBHOOK_SECRET":       "bb-webhook-secret",
 		"TEST_BITBUCKET_CLOUD_E2E_REPOSITORY":       "workspace/repo",
 		"TEST_BITBUCKET_DATA_CENTER_API_URL":        "https://bitbucket.example.com",
 		"TEST_BITBUCKET_DATA_CENTER_USER":           "bbsuser",
