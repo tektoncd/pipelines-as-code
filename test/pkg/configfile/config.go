@@ -32,6 +32,10 @@ type GitHubConfig struct {
 	RepoInstallationID string `env:"TEST_GITHUB_REPO_INSTALLATION_ID" json:"repo_installation_id" yaml:"repo_installation_id"`
 	PrivateTaskName    string `env:"TEST_GITHUB_PRIVATE_TASK_NAME"    json:"private_task_name"    yaml:"private_task_name"`
 	PrivateTaskURL     string `env:"TEST_GITHUB_PRIVATE_TASK_URL"     json:"private_task_url"     yaml:"private_task_url"`
+	// The fields below configure the controller installed by CI; tests do not read them.
+	ApplicationID string `json:"application_id" yaml:"application_id"`
+	PrivateKey    string `json:"private_key"    yaml:"private_key"`
+	SmeeURL       string `json:"smee_url"       yaml:"smee_url"`
 }
 
 type GitHubEnterpriseConfig struct {
@@ -46,6 +50,7 @@ type GitHubEnterpriseConfig struct {
 	WebhookToken       string `env:"TEST_GITHUB_SECOND_WEBHOOK_TOKEN"        json:"webhook_token"        yaml:"webhook_token"`
 	WebhookSecret      string `env:"TEST_GITHUB_SECOND_WEBHOOK_SECRET"       json:"webhook_secret"       yaml:"webhook_secret"`
 	ApplicationID      string `env:"TEST_GITHUB_SECOND_APPLICATION_ID"       json:"application_id"       yaml:"application_id"`
+	PrivateKey         string `env:"TEST_GITHUB_SECOND_PRIVATE_KEY"          json:"private_key"          yaml:"private_key"`
 }
 
 type GitLabConfig struct {
