@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	ghprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/github"
@@ -35,7 +35,7 @@ func PushFilesToRef(ctx context.Context, client *github.Client, commitMessage, b
 		content := base64.StdEncoding.EncodeToString([]byte(fcontent))
 		encoding := "base64"
 		blob, _, err := client.Git.CreateBlob(ctx, owner, repo, github.Blob{
-			Content:  &content,
+			Content:  content,
 			Encoding: &encoding,
 		})
 		if err != nil {

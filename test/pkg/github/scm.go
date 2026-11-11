@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v93/github"
 	"go.uber.org/zap"
 )
 
@@ -16,8 +16,8 @@ func CreateGHERepo(ctx context.Context, client *github.Client, org, name, hookUR
 	logger.Infof("Creating GitHub repository %s/%s", org, name)
 
 	autoInit := true
-	repo, _, err := client.Repositories.Create(ctx, org, &github.Repository{
-		Name:     new(name),
+	repo, _, err := client.Repositories.Create(ctx, org, github.CreateRepositoryRequest{
+		Name:     name,
 		AutoInit: &autoInit,
 	})
 	if err != nil {

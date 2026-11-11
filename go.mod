@@ -13,9 +13,9 @@ require (
 	github.com/gobwas/glob v1.1.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-github/scrape v0.0.0-20260904185537-3a439fa10f3d
+	github.com/google/go-github/scrape v0.0.0-20261028003606-143d04724575
 	github.com/google/go-github/v88 v88.0.0
-	github.com/google/go-github/v91 v91.0.0
+	github.com/google/go-github/v93 v93.0.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/jenkins-x/go-scm v1.17.1

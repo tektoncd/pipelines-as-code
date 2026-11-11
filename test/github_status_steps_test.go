@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v93/github"
 	"gotest.tools/v3/assert"
 
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
