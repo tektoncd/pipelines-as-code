@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
 	"gotest.tools/v3/assert"
 )
@@ -130,7 +130,7 @@ func SetupGitTree(t *testing.T, mux *http.ServeMux, dir string, event *info.Even
 					// encode content as base64
 					blob := &github.Blob{
 						SHA:     new(chosenf.sha),
-						Content: new(base64.StdEncoding.EncodeToString(s)),
+						Content: base64.StdEncoding.EncodeToString(s),
 					}
 					b, err := json.Marshal(blob)
 					assert.NilError(t, err)

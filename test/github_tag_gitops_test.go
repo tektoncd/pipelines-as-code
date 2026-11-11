@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	tgithub "github.com/openshift-pipelines/pipelines-as-code/test/pkg/github"
 	"github.com/openshift-pipelines/pipelines-as-code/test/pkg/payload"
@@ -109,7 +109,7 @@ func TestGithubGHEGitOpsCommentOnTag(t *testing.T) {
 		_, _, err = ghcnx.Client().Repositories.CreateComment(ctx,
 			opts.Organization,
 			opts.Repo, sha, // this is the commit sha of the tag
-			&github.RepositoryComment{Body: new(comment)})
+			github.CreateCommitCommentRequest{Body: comment})
 		assert.NilError(t, err)
 
 		// Two PipelineRuns are expected on this SHA: one from the tag push
