@@ -59,6 +59,22 @@ func TestCheckValidPayload(t *testing.T) {
 			wantErrString: "bitbucket toRef repository name is empty",
 		},
 		{
+			name: "empty toRef.repositorySlug",
+			payloadEvent: types.PullRequestEvent{
+				PullRequest: types.PullRequest{
+					ToRef: types.PullRequestRef{
+						Repository: types.Repository{
+							Name: "repo",
+							Project: &types.Project{
+								Key: "PROJ",
+							},
+						},
+					},
+				},
+			},
+			wantErrString: "bitbucket toRef repository slug is empty",
+		},
+		{
 			name: "missing toRef.latestCommit",
 			payloadEvent: types.PullRequestEvent{
 				PullRequest: types.PullRequest{
@@ -66,6 +82,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -83,6 +100,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -104,6 +122,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -127,6 +146,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -152,6 +172,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -179,6 +200,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -207,6 +229,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -236,6 +259,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -272,6 +296,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -312,6 +337,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -359,6 +385,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self: []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -407,6 +434,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self:  []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -455,6 +483,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self:  []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -497,6 +526,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -584,6 +614,9 @@ func TestParsePayload(t *testing.T) {
 		CloneURL:       "http://clone/~joe/repo",
 		BBDCProjectKey: "~joe",
 	}
+
+	prWithRepositorySlug := bbv1test.MakePREvent(ev1, "/test")
+	prWithRepositorySlug.PullRequest.ToRef.Repository.Name = "Repo Name"
 
 	tests := []struct {
 		name                    string
@@ -731,6 +764,15 @@ func TestParsePayload(t *testing.T) {
 			expTriggerComment: "/review",
 		},
 		{
+			name:              "good/comment with repository slug",
+			eventType:         "pr:comment:added",
+			payloadEvent:      prWithRepositorySlug,
+			expEvent:          ev1,
+			expEventType:      "test-all-comment",
+			expTriggerTarget:  "pull_request",
+			expTriggerComment: "/test",
+		},
+		{
 			name:      "branch/deleted with zero hash",
 			eventType: "repo:refs_changed",
 			payloadEvent: bbv1test.MakePushEvent(
@@ -792,6 +834,7 @@ func TestParsePayload(t *testing.T) {
 			if tt.canceltargetPipelinerun != "" {
 				assert.Equal(t, got.TargetCancelPipelineRun, tt.canceltargetPipelinerun)
 			}
+			assert.Equal(t, got.Repository, tt.expEvent.Repository)
 			assert.Equal(t, string(got.TriggerTarget), tt.expTriggerTarget)
 			assert.Equal(t, string(got.EventType), tt.expEventType)
 			assert.Equal(t, got.TriggerComment, tt.expTriggerComment)
