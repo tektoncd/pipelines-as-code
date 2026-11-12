@@ -505,7 +505,7 @@ func (v *Provider) GetTektonDir(_ context.Context, event *info.Event, path, prov
 	v.provenance = provenance
 	// default set provenance from the SHA
 	revision := event.SHA
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		revision = event.DefaultBranch
 		v.Logger.Infof("Using PipelineRun definition from default_branch: %s", event.DefaultBranch)
 	} else {
@@ -596,7 +596,7 @@ func (v *Provider) GetFileInsideRepo(_ context.Context, runevent *info.Event, pa
 	ref := runevent.SHA
 	if target != "" {
 		ref = target
-	} else if v.provenance == "default_branch" {
+	} else if v.provenance == provider.ProvenanceDefaultBranch {
 		ref = runevent.DefaultBranch
 	}
 

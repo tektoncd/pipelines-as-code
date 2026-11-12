@@ -2037,6 +2037,7 @@ func TestGetTektonDir(t *testing.T) {
 		wantClient           bool
 		prcontent            string
 		wantRevision         string
+		wantProjectID        int
 		filterMessageSnippet string
 	}{
 		{
@@ -2225,6 +2226,50 @@ func TestGetTektonDir(t *testing.T) {
 			wantStr:    "kind: PipelineRun",
 		},
 		{
+			name:      "list tekton dir on default_branch from a fork merge request",
+			prcontent: string(samplePR),
+			args: args{
+				provenance: provider.ProvenanceDefaultBranch,
+				path:       ".tekton",
+				event: &info.Event{
+					SHA:           "feature-head",
+					HeadBranch:    "feature",
+					DefaultBranch: "main",
+					TriggerTarget: triggertype.PullRequest,
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+				targetProjectID: 200,
+			},
+			wantProjectID: 200,
+			wantClient:    true,
+			wantStr:       "kind: PipelineRun",
+			wantRevision:  "main",
+		},
+		{
+			name:      "list tekton dir on source from a fork merge request",
+			prcontent: string(samplePR),
+			args: args{
+				provenance: provider.ProvenanceSource,
+				path:       ".tekton",
+				event: &info.Event{
+					SHA:           "feature-head",
+					HeadBranch:    "feature",
+					DefaultBranch: "main",
+					TriggerTarget: triggertype.PullRequest,
+				},
+			},
+			fields: fields{
+				sourceProjectID: 100,
+				targetProjectID: 200,
+			},
+			wantProjectID: 100,
+			wantClient:    true,
+			wantStr:       "kind: PipelineRun",
+			wantRevision:  "feature-head",
+		},
+		{
 			name:      "list tekton dir no --- prefix",
 			prcontent: strings.TrimPrefix(string(samplePR), "---"),
 			args: args{
@@ -2291,13 +2336,20 @@ func TestGetTektonDir(t *testing.T) {
 				client, mux, tearDown := thelp.Setup(t)
 				v.SetGitLabClient(client)
 				muxbranch := tt.args.event.SHA
-				if tt.args.provenance == "default_branch" {
+				if tt.args.provenance == provider.ProvenanceDefaultBranch {
 					muxbranch = tt.args.event.DefaultBranch
 				} else if tt.wantRevision != "" {
 					muxbranch = tt.wantRevision
 				}
+				// The mux only serves the project that repository-local reads
+				// are expected to hit, so a read from the wrong project (e.g.
+				// the fork under default_branch provenance) yields no content.
+				muxPID := tt.wantProjectID
+				if muxPID == 0 {
+					muxPID = tt.fields.sourceProjectID
+				}
 				if tt.args.path != "" && tt.prcontent != "" {
-					thelp.MuxListTektonDir(t, mux, tt.fields.sourceProjectID, muxbranch, tt.prcontent, tt.wantTreeAPIErr, tt.wantFilesAPIErr)
+					thelp.MuxListTektonDir(t, mux, muxPID, muxbranch, tt.prcontent, tt.wantTreeAPIErr, tt.wantFilesAPIErr)
 				}
 				defer tearDown()
 			}
@@ -2311,6 +2363,7 @@ func TestGetTektonDir(t *testing.T) {
 			if tt.wantStr != "" {
 				assert.Assert(t, strings.Contains(got, tt.wantStr), "%s is not in %s", tt.wantStr, got)
 			}
+			assert.Equal(t, tt.args.provenance, v.provenance)
 			if tt.filterMessageSnippet != "" {
 				gotcha := exporter.FilterMessageSnippet(tt.filterMessageSnippet)
 				assert.Assert(t, gotcha.Len() > 0, "expected to find %s in logs, found %v", tt.filterMessageSnippet, exporter.All())
@@ -2361,6 +2414,9 @@ func TestGetFileInsideRepo(t *testing.T) {
 		event          *info.Event
 		path           string
 		targetRevision string
+		provenance     string
+		targetProject  int64
+		wantProjectID  int64
 		wantRevision   string
 		wantErr        bool
 	}{
@@ -2371,6 +2427,51 @@ func TestGetFileInsideRepo(t *testing.T) {
 				HeadBranch: "branch",
 			},
 			wantRevision: "1111111111111111111111111111111111111111",
+		},
+		{
+			name: "default branch provenance uses default branch",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:   provider.ProvenanceDefaultBranch,
+			wantRevision: "main",
+		},
+		{
+			name: "default branch provenance on a fork merge request reads from the target project",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:    provider.ProvenanceDefaultBranch,
+			targetProject: 200,
+			wantProjectID: 200,
+			wantRevision:  "main",
+		},
+		{
+			name: "source provenance on a fork merge request reads from the fork",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:    provider.ProvenanceSource,
+			targetProject: 200,
+			wantProjectID: 10,
+			wantRevision:  "1111111111111111111111111111111111111111",
+		},
+		{
+			name: "default branch provenance uses explicit target revision",
+			event: &info.Event{
+				SHA:           "1111111111111111111111111111111111111111",
+				HeadBranch:    "feature",
+				DefaultBranch: "main",
+			},
+			provenance:     provider.ProvenanceDefaultBranch,
+			targetRevision: "2222222222222222222222222222222222222222",
+			wantRevision:   "2222222222222222222222222222222222222222",
 		},
 		{
 			name: "empty SHA uses head branch",
@@ -2495,10 +2596,18 @@ func TestGetFileInsideRepo(t *testing.T) {
 
 			v := Provider{
 				sourceProjectID: 10,
+				targetProjectID: tt.targetProject,
 				gitlabClient:    client,
+				provenance:      tt.provenance,
 			}
-			// Only pr.yaml is registered, so any other path falls through to a 404.
-			mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/pr.yaml/raw", v.sourceProjectID),
+			// Only pr.yaml on the expected project is registered, so a read from
+			// the wrong project (e.g. the fork under default_branch provenance)
+			// falls through to a 404.
+			wantProjectID := tt.wantProjectID
+			if wantProjectID == 0 {
+				wantProjectID = v.sourceProjectID
+			}
+			mux.HandleFunc(fmt.Sprintf("/projects/%d/repository/files/pr.yaml/raw", wantProjectID),
 				func(rw http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, tt.wantRevision, r.URL.Query().Get("ref"))
 					fmt.Fprint(rw, content)
