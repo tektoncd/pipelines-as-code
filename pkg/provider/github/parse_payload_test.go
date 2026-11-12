@@ -2233,7 +2233,7 @@ func TestAppTokenGeneration(t *testing.T) {
 			seedData:       vaildSecret,
 			enterpriseHost: "127.0.0.1:1",
 			wantErrSubst:   `GitHub enterprise header host "127.0.0.1:1" does not match signed repository host "github.com"`,
-			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+			wantLogMessage: githubEndpointValidationFailedLog,
 		},
 		{
 			ctx: ctx,
@@ -2263,7 +2263,7 @@ func TestAppTokenGeneration(t *testing.T) {
 			seedData:       vaildSecret,
 			payload:        fmt.Sprintf(`{"installation":{"id":%d},"repository":{}}`, testInstallationID),
 			wantErrSubst:   "payload carries no repository",
-			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+			wantLogMessage: githubEndpointValidationFailedLog,
 		},
 		{
 			ctx:            ctxPinnedHost,
@@ -2272,7 +2272,7 @@ func TestAppTokenGeneration(t *testing.T) {
 			seedData:       pinnedHost,
 			payload:        string(ghePayload),
 			wantErrSubst:   "is not listed in",
-			wantLogMessage: githubAppTokenExfiltrationBlockedLog,
+			wantLogMessage: githubEndpointValidationFailedLog,
 		},
 		{
 			ctx:            ctx,
