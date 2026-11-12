@@ -410,7 +410,14 @@ func TestCanCreatePipelineRunsPassesUserInfo(t *testing.T) {
 			kubeClient := fake.NewSimpleClientset()
 			var captured *authorizationv1.SubjectAccessReview
 			kubeClient.PrependReactor("create", "subjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
-				sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SubjectAccessReview)
+				create, ok := action.(k8stesting.CreateAction)
+				if !ok {
+					return true, nil, fmt.Errorf("unexpected action type %T", action)
+				}
+				sar, ok := create.GetObject().(*authorizationv1.SubjectAccessReview)
+				if !ok {
+					return true, nil, fmt.Errorf("unexpected object type %T", create.GetObject())
+				}
 				captured = sar.DeepCopy()
 				sar.Status.Allowed = true
 				return true, sar, nil
