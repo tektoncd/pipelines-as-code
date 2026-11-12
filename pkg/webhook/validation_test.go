@@ -17,6 +17,8 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -380,6 +382,61 @@ func TestValidateRepositoryURLGitHubEnterpriseDetection(t *testing.T) {
 				return
 			}
 			assert.NilError(t, err)
+		})
+	}
+}
+
+func TestCanCreatePipelineRunsPassesUserInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		userInfo authenticationv1.UserInfo
+	}{
+		{
+			name: "uid and extra are forwarded",
+			userInfo: authenticationv1.UserInfo{
+				Username: "arn:aws:sts::123456789012:assumed-role/role/session",
+				UID:      "aws-iam-authenticator:123:AROAEXAMPLE",
+				Groups:   []string{"system:authenticated"},
+				Extra: map[string]authenticationv1.ExtraValue{
+					"accessKeyId": {"AKIAEXAMPLE"},
+					"sessionName": {"session"},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := rtesting.SetupFakeContext(t)
+			kubeClient := fake.NewSimpleClientset()
+			var captured *authorizationv1.SubjectAccessReview
+			kubeClient.PrependReactor("create", "subjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				create, ok := action.(k8stesting.CreateAction)
+				if !ok {
+					return true, nil, fmt.Errorf("unexpected action type %T", action)
+				}
+				sar, ok := create.GetObject().(*authorizationv1.SubjectAccessReview)
+				if !ok {
+					return true, nil, fmt.Errorf("unexpected object type %T", create.GetObject())
+				}
+				captured = sar.DeepCopy()
+				sar.Status.Allowed = true
+				return true, sar, nil
+			})
+			r := reconciler{client: kubeClient}
+			req := &v1.AdmissionRequest{Namespace: "namespace", UserInfo: tt.userInfo}
+
+			allowed, err := r.canCreatePipelineRuns(ctx, req)
+			assert.NilError(t, err)
+			assert.Assert(t, allowed, "expected the SubjectAccessReview to be allowed")
+			assert.Assert(t, captured != nil, "no SubjectAccessReview was created")
+			assert.Equal(t, tt.userInfo.Username, captured.Spec.User)
+			assert.Equal(t, tt.userInfo.UID, captured.Spec.UID, "UID not forwarded to SubjectAccessReview")
+			assert.DeepEqual(t, tt.userInfo.Groups, captured.Spec.Groups)
+			expectedExtra := map[string]authorizationv1.ExtraValue{}
+			for k, v := range tt.userInfo.Extra {
+				expectedExtra[k] = authorizationv1.ExtraValue(v)
+			}
+			assert.DeepEqual(t, expectedExtra, captured.Spec.Extra)
 		})
 	}
 }
