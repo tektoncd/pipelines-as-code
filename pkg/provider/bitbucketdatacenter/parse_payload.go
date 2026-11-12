@@ -27,6 +27,9 @@ func checkValidPayload(e *types.PullRequestEvent) error {
 	if e.PullRequest.ToRef.Repository.Name == "" {
 		return fmt.Errorf("bitbucket toRef repository name is empty")
 	}
+	if e.PullRequest.ToRef.Repository.Slug == "" {
+		return fmt.Errorf("bitbucket toRef repository slug is empty")
+	}
 	if e.PullRequest.ToRef.LatestCommit == "" {
 		return fmt.Errorf("bitbucket toRef latest commit is empty")
 	}

@@ -59,6 +59,22 @@ func TestCheckValidPayload(t *testing.T) {
 			wantErrString: "bitbucket toRef repository name is empty",
 		},
 		{
+			name: "empty toRef.repositorySlug",
+			payloadEvent: types.PullRequestEvent{
+				PullRequest: types.PullRequest{
+					ToRef: types.PullRequestRef{
+						Repository: types.Repository{
+							Name: "repo",
+							Project: &types.Project{
+								Key: "PROJ",
+							},
+						},
+					},
+				},
+			},
+			wantErrString: "bitbucket toRef repository slug is empty",
+		},
+		{
 			name: "missing toRef.latestCommit",
 			payloadEvent: types.PullRequestEvent{
 				PullRequest: types.PullRequest{
@@ -66,6 +82,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -83,6 +100,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -104,6 +122,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -127,6 +146,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -152,6 +172,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -179,6 +200,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -207,6 +229,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key:  "PROJ",
 								Name: "repo",
@@ -236,6 +259,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -272,6 +296,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -312,6 +337,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
@@ -359,6 +385,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self: []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -407,6 +434,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self:  []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -455,6 +483,7 @@ func TestCheckValidPayload(t *testing.T) {
 								Self:  []types.SelfLink{{Href: "http://example.com"}},
 							},
 							Name: "repo",
+							Slug: "repo",
 							Project: &types.Project{
 								Key: "PROJ",
 
@@ -497,6 +526,7 @@ func TestCheckValidPayload(t *testing.T) {
 					ToRef: types.PullRequestRef{
 						Repository: types.Repository{
 							Name: "repo",
+							Slug: "repo",
 							Links: &struct {
 								Clone []types.CloneLink `json:"clone,omitempty"`
 								Self  []types.SelfLink  `json:"self,omitempty"`
