@@ -76,10 +76,16 @@ func (ac *reconciler) Admit(ctx context.Context, request *v1.AdmissionRequest) *
 }
 
 func (ac *reconciler) canCreatePipelineRuns(ctx context.Context, request *v1.AdmissionRequest) (bool, error) {
+	extra := make(map[string]authorizationv1.ExtraValue, len(request.UserInfo.Extra))
+	for k, v := range request.UserInfo.Extra {
+		extra[k] = authorizationv1.ExtraValue(v)
+	}
 	sar, err := ac.client.AuthorizationV1().SubjectAccessReviews().Create(ctx, &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			User:   request.UserInfo.Username,
+			UID:    request.UserInfo.UID,
 			Groups: request.UserInfo.Groups,
+			Extra:  extra,
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: request.Namespace,
 				Verb:      "create",
