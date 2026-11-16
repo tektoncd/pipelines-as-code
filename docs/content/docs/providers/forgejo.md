@@ -128,6 +128,44 @@ Forgejo and Gitea webhook validation requires a non-empty shared secret.
 Do not set `webhook.secret` to an empty string.
 {{< /callout >}}
 
+```mermaid
+flowchart LR
+%% title: How the controller checks a Forgejo webhook and reports back
+%% autoplay
+  FJ@{ img: "/icons/repository.svg", label: "Forgejo", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/config.svg", label: "Repository CR", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Repository secret", w: 48, h: 48, constraint: "on" }
+  Sig@{ img: "/icons/shield.svg", label: "HMAC-SHA256", w: 48, h: 48, constraint: "on" }
+  API@{ img: "/icons/api.svg", label: "git_provider.url API", w: 48, h: 48, constraint: "on" }
+  No@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  FJ -->|webhook| Ctrl --> Repo --> Sec --> Sig
+  Sig ok@-->|valid| API
+  Sig bad@-->|invalid| No
+  Sec empty@-->|empty secret| No
+
+%% play: Signed webhook
+%% skip No
+%% FJ -> Ctrl : event | Forgejo signs the payload with the secret set on the webhook
+%% Ctrl -> Repo | The controller finds the Repository CR that matches the URL
+%% Repo -> Sec | and reads provider.token and webhook.secret from the secret it references
+%% Sec -> Sig | X-Forgejo-Signature is checked, or X-Gitea-Signature on older servers
+%% Sig -> API @ok : token | The token then talks to your Forgejo instance to fetch .tekton and set commit statuses
+%% play: Empty webhook secret
+%% skip Sig API
+%% FJ -> Ctrl : event
+%% Ctrl -> Repo
+%% Repo -> Sec
+%% Sec -> No @empty | Forgejo validation needs a shared secret, so an empty one refuses every event
+%% play: Wrong signature
+%% skip API
+%% FJ -> Ctrl : event
+%% Ctrl -> Repo
+%% Repo -> Sec
+%% Sec -> Sig
+%% Sig -> No @bad | A missing or wrong signature stops the event before any API call
+```
+
 ### Create the Repository CR
 
 Create a [`Repository` CR]({{< relref "/docs/guides/repository-crd" >}}) with the secret field referencing it:

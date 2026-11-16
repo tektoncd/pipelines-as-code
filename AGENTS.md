@@ -94,6 +94,7 @@ In provider code (`pkg/provider/`), always use the provider's own logger (`v.Log
 - Preview: `make dev-docs` (<http://localhost:1313>)
 - Hugo with hugo-book theme
 - Custom shortcodes: `tech_preview`, `support_matrix`
+- Diagrams are animated [aniflow](https://github.com/chmouel/aniflow) walkthroughs in ```` ```mermaid ```` fences: follow `aniflow --spec` and the `aniflow-diagrams` skill, add `%% title:` to each, and run `aniflow --check` on edited pages. `make update-aniflow` refreshes the vendored player
 
 ## Useful Commands
 

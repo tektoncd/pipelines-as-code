@@ -18,6 +18,49 @@ pipelinesascode.tekton.dev/on-cel-expression: |
   event == "pull_request" && target_branch == "main" && source_branch == "wip"
 ```
 
+```mermaid
+flowchart LR
+%% title: How an on-cel-expression annotation is evaluated
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Params[Custom params]
+  Vars@{ img: "/icons/config.svg", label: "CEL variables", w: 48, h: 48, constraint: "on" }
+  Cel@{ img: "/icons/code.svg", label: "Expression", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Not started", w: 48, h: 48, constraint: "on" }
+  Err@{ img: "/icons/fail.svg", label: "Error reported", w: 48, h: 48, constraint: "on" }
+  Ev --> Vars
+  Git -->|changed files| Vars
+  Params --> Vars
+  Vars --> Cel
+  Cel yes@-->|true| Run
+  Cel no@-->|false| Drop
+  Cel bad@-->|error| Err
+
+%% play: Expression is true
+%% skip Git Params Drop Err
+%% Ev -> Vars : PR | event, target_branch, source_branch, body and headers come from the webhook
+%% Vars -> Cel | The on-event, on-target-branch, on-label and path annotations are ignored
+%% Cel -> Run @yes : true
+%% play: Expression is false
+%% skip Git Params Run Err
+%% Ev -> Vars : PR from main
+%% Vars -> Cel
+%% Cel -> Drop @no : false | source_branch is not wip, so the PipelineRun does not start
+%% play: Path condition
+%% skip Params Drop Err
+%% Ev -> Vars : PR
+%% Git -> Vars : files | The changed files are fetched only when the expression uses them
+%% Vars -> Cel
+%% Cel -> Run @yes : true
+%% play: Undefined parameter
+%% skip Git Run Drop
+%% Ev -> Vars : push
+%% Params -> Vars | A custom parameter whose filter does not match this event is left out
+%% Vars -> Cel
+%% Cel -> Err @bad | The expression cannot use it, so evaluation fails and the PipelineRun is skipped
+```
+
 ## Available CEL variables
 
 The following fields are available inside CEL expressions:

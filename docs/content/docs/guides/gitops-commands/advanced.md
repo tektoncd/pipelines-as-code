@@ -113,6 +113,36 @@ The infrastructure appears to be experiencing issues, cancelling this specific p
 /cancel <pipelinerun-name>
 ```
 
+```mermaid
+sequenceDiagram
+%% title: What happens when someone comments /cancel on a pull request
+  participant Dev as Maintainer
+  participant GH as Git provider
+  participant PAC as Controller
+  participant Tek as PipelineRuns
+  Dev->>GH: /cancel
+  GH->>PAC: comment event
+  PAC->>PAC: sender allowed?
+  PAC->>Tek: list the runs of this pull request
+  PAC->>Tek: cancel the ones still running
+  Tek->>GH: status: cancelled
+
+%% play: Cancel all
+%% Dev -> GH : /cancel | A maintainer comments /cancel on the pull request
+%% GH -> PAC
+%% PAC -> PAC | Only users allowed to run CI can cancel it
+%% PAC -> Tek
+%% PAC -> Tek : all | Finished or already cancelled PipelineRuns are left alone
+%% Tek -> GH : cancelled | With the GitHub App, the check shows as cancelled
+%% play: Cancel one
+%% Dev -> GH : /cancel docs
+%% GH -> PAC
+%% PAC -> PAC
+%% PAC -> Tek
+%% PAC -> Tek : docs only | Only the runs created from the docs PipelineRun are cancelled
+%% Tek -> GH : cancelled
+```
+
 When you use the GitHub App, Pipelines-as-Code sets the pipeline status to `cancelled`.
 
 ![PipelineRun Canceled](/images/pr-cancel.png)

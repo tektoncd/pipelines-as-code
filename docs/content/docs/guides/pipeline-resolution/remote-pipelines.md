@@ -86,6 +86,41 @@ metadata:
 
 In this case, if the `my-git-clone-task.yaml` file in the root directory defines a task named `git-clone`, Pipelines-as-Code uses it instead of the `git-clone` task from the remote pipeline.
 
+```mermaid
+flowchart LR
+%% title: How a PipelineRun task overrides a task of a remote Pipeline
+  Run@{ img: "/icons/file-code.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  RP@{ img: "/icons/pipeline.svg", label: "Remote Pipeline", w: 48, h: 48, constraint: "on" }
+  Mine@{ img: "/icons/task.svg", label: "Own git-clone", w: 48, h: 48, constraint: "on" }
+  Hub@{ img: "/icons/cloud.svg", label: "Hub git-clone", w: 48, h: 48, constraint: "on" }
+  Local@{ img: "/icons/folder.svg", label: ".tekton/ tasks", w: 48, h: 48, constraint: "on" }
+  Pick@{ img: "/icons/decision.svg", label: "Task git-clone", w: 48, h: 48, constraint: "on" }
+  Out@{ img: "/icons/success.svg", label: "Inlined run", w: 48, h: 48, constraint: "on" }
+  Run -->|pipeline| RP
+  Run -->|task| Mine
+  RP -->|task| Hub
+  Mine first@-->|1| Pick
+  Hub second@-->|2| Pick
+  Local third@-->|3| Pick
+  Pick --> Out
+
+%% play: Override
+%% Run -> RP : pipeline.yaml | The remote Pipeline is fetched first
+%% Run -> Mine : git-clone | The PipelineRun annotation brings its own task named git-clone
+%% Mine -> Pick @first : git-clone | Tasks from the PipelineRun annotations win
+%% RP -> Hub : git-clone
+%% Hub -> Pick @second | The task of the remote Pipeline is still fetched, but the name is already taken, so it is dropped
+%% Local -> Pick @third | Tasks from .tekton/ only fill names nobody claimed
+%% Pick -> Out : taskSpec
+%% play: No override
+%% skip Mine
+%% Run -> RP : pipeline.yaml
+%% RP -> Hub : git-clone | Only the remote Pipeline asks for git-clone
+%% Hub -> Pick @second : git-clone
+%% Local -> Pick @third
+%% Pick -> Out : taskSpec
+```
+
 {{< callout type="info" >}}
 Task overriding only works for tasks referenced by a `taskRef` to a `Name`. Pipelines-as-Code does not override tasks embedded with a `taskSpec`. See the [Tekton documentation](https://tekton.dev/docs/pipelines/pipelines/#adding-tasks-to-the-pipeline) for the differences between `taskRef` and `taskSpec`.
 {{< /callout >}}

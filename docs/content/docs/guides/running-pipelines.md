@@ -68,6 +68,44 @@ silently ignores the check for bots unless they have been
 explicitly authorized (using the [OWNERS](#owners-file) file,
 [Policy]({{< relref "/docs/advanced/policy-authorization" >}}), or other means).
 
+```mermaid
+flowchart LR
+%% title: Who can run a PipelineRun on a pull request, and how /ok-to-test lets an outside contributor in
+%% autoplay
+  Author@{ img: "/icons/user.svg", label: "Pull request author", w: 48, h: 48, constraint: "on" }
+  Perm[Repository access?]
+  Own@{ img: "/icons/document.svg", label: "OWNERS file", w: 48, h: 48, constraint: "on" }
+  Pend@{ img: "/icons/wait.svg", label: "Pending status", w: 48, h: 48, constraint: "on" }
+  Ok@{ img: "/icons/comment.svg", label: "/ok-to-test", w: 48, h: 48, constraint: "on" }
+  Ign[Ignored]
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Author --> Perm
+  Perm -->|yes| Run
+  Perm -->|no| Own
+  Own -->|listed| Run
+  Own -->|not listed| Pend
+  Own -->|bot| Ign
+  Pend --> Ok --> Run
+
+%% play: Collaborator
+%% Author -> Perm : pull request | A collaborator opens a pull request
+%% Perm -> Run : yes | Repository owners, organization members and collaborators run CI straight away
+%% play: OWNERS file
+%% Author -> Perm : pull request | A contributor without repository permissions opens a pull request
+%% Perm -> Own : no | The OWNERS file on the default branch is read next
+%% Own -> Run : listed | Approvers and reviewers in OWNERS or OWNERS_ALIASES can run CI
+%% play: Outside contributor
+%% Author -> Perm : pull request | An outside contributor opens a pull request
+%% Perm -> Own : no
+%% Own -> Pend : not listed | Nothing runs and a Pending status waits for approval
+%% Pend -> Ok | An authorized user reviews the change and comments /ok-to-test
+%% Ok -> Run | The PipelineRuns start for the pull request
+%% play: Bot
+%% Author -> Perm : pull request | A GitHub bot opens a pull request
+%% Perm -> Own : no
+%% Own -> Ign : bot | Nothing runs and no Pending status blocks the pull request
+```
+
 ## OWNERS file
 
 The `OWNERS` file follows a format similar to the Prow `OWNERS` file

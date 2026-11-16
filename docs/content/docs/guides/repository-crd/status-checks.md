@@ -103,3 +103,34 @@ spec:
 Pipelines-as-Code reports a `skipped` status for `deploy.yaml`, making it
 visible in the pull request's status checks that the PipelineRun exists but did
 not apply to this event.
+
+```mermaid
+flowchart LR
+%% title: How unmatched PipelineRuns get a status check
+  Ev@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Match@{ img: "/icons/filter.svg", label: "Match", w: 48, h: 48, constraint: "on" }
+  Build@{ img: "/icons/pipeline.svg", label: "build.yaml", w: 48, h: 48, constraint: "on" }
+  Set@{ img: "/icons/config.svg", label: "status_checks", w: 48, h: 48, constraint: "on" }
+  Checks@{ img: "/icons/check.svg", label: "Status checks", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Ignored", w: 48, h: 48, constraint: "on" }
+  Ev --> Match
+  Match hit@-->|match| Build
+  Match miss@-->|deploy.yaml| Set
+  Build -->|running| Checks
+  Set on@-->|enabled| Checks
+  Set off@-->|disabled| Drop
+
+%% play: Enabled
+%% skip Drop
+%% Ev -> Match : PR #42
+%% Match -> Build @hit | build.yaml targets pull requests, so it starts
+%% Build -> Checks : running
+%% Match -> Set @miss : deploy.yaml | deploy.yaml targets push events and does not match
+%% Set -> Checks @on : skipped | Once the matched runs have started, every unmatched one gets a status with the unmatched conclusion
+%% play: Disabled
+%% skip Checks
+%% Ev -> Match : PR #42
+%% Match -> Build @hit
+%% Match -> Set @miss : deploy.yaml
+%% Set -> Drop @off | By default an unmatched PipelineRun is not reported at all
+```

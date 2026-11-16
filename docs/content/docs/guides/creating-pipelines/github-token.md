@@ -9,6 +9,34 @@ This page explains how to use the temporary GitHub App installation token that P
 
 Pipelines-as-Code generates a temporary installation token from the GitHub App for each PipelineRun. You can use this token to access the GitHub API. The token value is stored in the temporary git-auth secret that Pipelines-as-Code generates for [private repositories]({{< relref "/docs/advanced/private-repositories" >}}), under the key `git-provider-token`.
 
+```mermaid
+sequenceDiagram
+%% title: How the GitHub App token reaches a task step
+  participant GH as GitHub
+  participant Ctrl as Controller
+  participant Sec as Git auth secret
+  participant Step as Task step
+  GH->>Ctrl: webhook
+  Ctrl->>GH: ask for an installation token
+  GH->>Ctrl: token scoped to the repository
+  Ctrl->>Sec: create pac-gitauth secret with git-provider-token
+  Ctrl->>Step: PipelineRun with {{ git_auth_secret }}
+  Sec->>Step: GITHUB_TOKEN
+  Step->>GH: comment on the pull request
+  Sec->>Sec: deleted with the PipelineRun
+
+%% play: Token for a PipelineRun
+%% GH -> Ctrl : event
+%% Ctrl -> GH | The controller asks GitHub for a token of the App installation
+%% GH -> Ctrl : token | It is valid for one hour and limited to the repository by default
+%% Ctrl -> Sec | The token goes into the git auth secret under git-provider-token
+%% Ctrl -> Step | The secret name is passed to the PipelineRun as {{ git_auth_secret }}
+%% Sec -> Step : token | A step reads the key from the secret
+%% wait 800
+%% Step -> GH : API call | and calls the GitHub API with it
+%% Sec -> Sec | The secret is owned by the PipelineRun and goes away with it
+```
+
 ## Adding a comment to a pull request
 
 To add a comment to a pull request, use the [github-add-comment](https://artifacthub.io/packages/tekton-task/tekton-catalog-tasks/github-add-comment) task from [Artifact Hub](https://artifacthub.io) (a public registry for discovering Tekton tasks and other cloud-native artifacts) with a [Pipelines-as-Code annotation]({{< relref "/docs/guides/pipeline-resolution#hub-support-for-tasks" >}}):
@@ -53,7 +81,7 @@ env:
 
 {{< callout type="info" >}}
 
-- On GitHub Apps, the generated installation token [is available for 8 hours](https://docs.github.com/en/developers/apps/building-github-apps/refreshing-user-to-server-access-tokens).
+- On GitHub Apps, the generated installation token [expires after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation).
 - On GitHub Apps, Pipelines-as-Code scopes the token to the repository the event originates from, unless you [configure it differently]({{< relref "/docs/api/configmap#secret-management" >}}) on the cluster.
 - To restrict the token to specific extra repositories or understand scoping in detail, see [GitHub Token Scoping]({{< relref "/docs/guides/repository-crd/github-token-scoping" >}}).
 

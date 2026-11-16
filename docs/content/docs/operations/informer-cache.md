@@ -28,6 +28,28 @@ This is the same approach used by the
 [Tekton Pipelines controller](https://github.com/tektoncd/pipeline/pull/9316)
 to reduce its own cache memory usage.
 
+```mermaid
+flowchart LR
+%% title: What goes into the informer cache and what is fetched from the API server
+  API@{ img: "/icons/api.svg", label: "API server", w: 48, h: 48, constraint: "on" }
+  Inf@{ img: "/icons/listener.svg", label: "Informer", w: 48, h: 48, constraint: "on" }
+  Tr@{ img: "/icons/filter.svg", label: "Transform", w: 48, h: 48, constraint: "on" }
+  Cache@{ img: "/icons/cache.svg", label: "Cache", w: 48, h: 48, constraint: "on" }
+  Rec@{ img: "/icons/controller.svg", label: "Reconciler", w: 48, h: 48, constraint: "on" }
+  API -->|watch| Inf --> Tr --> Cache -->|lister| Rec
+  Rec full@-->|Get| API
+
+%% play: Filling the cache
+%% API -> Inf : PipelineRun | The informer receives every change to a PipelineRun
+%% Inf -> Tr : 10.7 KB | The transform runs before the object is stored
+%% Tr -> Cache : 0.7 KB | Specs, managedFields and large status fields are dropped
+%% Cache -> Rec : state | The reconciler reads labels, annotations and conditions from the cache
+%% play: Needing the full object
+%% Cache -> Rec : PipelineRun
+%% Rec -> API @full : Get | Reporting the final status needs fields the cache dropped
+%% API -> Rec : full object | so the reconciler fetches the complete object from the API server
+```
+
 ## What Gets Stripped
 
 ### Repository Objects

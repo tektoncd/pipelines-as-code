@@ -9,6 +9,40 @@ Pipelines-as-Code follows the standard Tekton template format as closely as poss
 
 Using its [resolver]({{< relref "/docs/guides/pipeline-resolution" >}}), Pipelines-as-Code bundles each PipelineRun with all its referenced Tasks into a single self-contained PipelineRun with no external dependencies.
 
+```mermaid
+flowchart LR
+%% title: How a file in .tekton/ becomes the PipelineRun that runs
+%% autoplay
+  Ev@{ img: "/icons/pull-request.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Dir@{ img: "/icons/folder.svg", label: ".tekton/", w: 48, h: 48, constraint: "on" }
+  Vars@{ img: "/icons/code.svg", label: "Variables", w: 48, h: 48, constraint: "on" }
+  Match@{ img: "/icons/filter.svg", label: "Match", w: 48, h: 48, constraint: "on" }
+  Res@{ img: "/icons/task.svg", label: "Resolver", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Git auth secret", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/stop.svg", label: "Not run", w: 48, h: 48, constraint: "on" }
+  Ev --> Dir --> Vars --> Match
+  Match yes@-->|match| Res
+  Match no@-->|no match| Skip
+  Res --> Sec --> Run
+
+%% play: Matching PipelineRun
+%% skip Skip
+%% Ev -> Dir : push | The controller reads the .tekton/ directory at the commit of the event
+%% Dir -> Vars : YAML | Every {{ var }} is replaced with its value from the event
+%% Vars -> Match
+%% Match -> Res @yes | The annotations of the PipelineRun match the event
+%% Res -> Sec : bundled | Tasks and Pipelines are embedded into one PipelineRun
+%% wait 800
+%% Sec -> Run | A secret with the Git token is created and the PipelineRun starts
+%% play: No match
+%% skip Res Sec Run
+%% Ev -> Dir : push
+%% Dir -> Vars : YAML
+%% Vars -> Match
+%% Match -> Skip @no | When no annotation matches the event, nothing is created
+```
+
 To check out the commit that triggered the webhook, clone the repository at that ref inside your pipeline. In most cases, you can reuse the [git-clone](https://artifacthub.io/packages/tekton-task/git-clone/git-clone) task from Artifact Hub.
 
 To inject parameters such as the commit SHA and repository URL, Pipelines-as-Code provides [dynamic variables](#dynamic-variables) written as `{{ var }}` that you can use anywhere in your template.

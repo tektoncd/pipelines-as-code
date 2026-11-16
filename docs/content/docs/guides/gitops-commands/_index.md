@@ -27,6 +27,48 @@ failure is not with your PR but seems to be an infrastructure issue.
 
 If a successful PipelineRun already exists for the same commit, `/retest` **skips** it to avoid unnecessary duplication. When PipelineRuns have been pruned from the cluster (for example, by a retention policy), Pipelines-as-Code falls back to querying the Git provider's commit status API to determine which pipelines previously succeeded, ensuring only failed pipelines are re-run even when the original PipelineRun objects no longer exist.
 
+```mermaid
+flowchart LR
+%% title: What /test and /retest comments start on a pull request
+  Dev@{ img: "/icons/user.svg", label: "Maintainer", w: 48, h: 48, constraint: "on" }
+  ACL@{ img: "/icons/policy.svg", label: "Access check", w: 48, h: 48, constraint: "on" }
+  Match@{ img: "/icons/filter.svg", label: "Match .tekton/", w: 48, h: 48, constraint: "on" }
+  Named[Pick by name]
+  Hist@{ img: "/icons/search.svg", label: "Past results", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Note@{ img: "/icons/chat.svg", label: "Reply comment", w: 48, h: 48, constraint: "on" }
+  Dev -->|comment| ACL
+  ACL --> Match
+  ACL --> Named --> Run
+  Match all@-->|/test| Run
+  Match -->|/retest| Hist
+  Hist failed@-->|some failed| Run
+  Hist passed@-->|all passed| Note
+
+%% play: /retest
+%% skip Named Note
+%% Dev -> ACL : /retest | A maintainer comments /retest on the pull request, and the controller checks the sender can run CI
+%% ACL -> Match | The PipelineRuns matching the pull request are selected
+%% Match -> Hist | Earlier runs for this commit are read from the cluster, or from the commit statuses once they were pruned
+%% Hist -> Run @failed : failed only | Only the PipelineRuns that failed, or never ran, start again
+%% play: Everything passed
+%% skip Named Run
+%% Dev -> ACL : /retest
+%% ACL -> Match
+%% Match -> Hist
+%% Hist -> Note @passed | Nothing to rerun, so a comment suggests /retest with a name or /test
+%% play: /test
+%% skip Named Hist Note
+%% Dev -> ACL : /test
+%% ACL -> Match
+%% Match -> Run @all : all | Every matching PipelineRun starts, whatever its last result
+%% play: Named PipelineRun
+%% skip Match Hist Note
+%% Dev -> ACL : /retest docs
+%% ACL -> Named | /test or /retest with a name skips the annotation matching
+%% Named -> Run : docs | The named PipelineRun always starts, even if it passed before
+```
+
 **When to use it:** To force a rerun regardless of previous status, use:
 
 ```text
@@ -58,6 +100,52 @@ Pipelines-as-Code verifies the provided SHA against the pull request's current H
 - Full SHAs must match exactly.
 
 If the SHA is missing or invalid, Pipelines-as-Code rejects the comment and replies with instructions to retry using the correct value. Other Git providers already include the commit SHA in their webhook payloads, so this protection applies only to GitHub.
+
+```mermaid
+sequenceDiagram
+%% title: How /ok-to-test with a SHA stops a commit pushed after the review
+  participant Ext as Contributor
+  participant GH as GitHub
+  participant Own as Maintainer
+  participant PAC as Controller
+  Ext->>GH: pull request, head 1a2b3c4
+  GH->>PAC: pull_request event
+  PAC->>GH: pending, waiting for /ok-to-test
+  opt push before the approval
+    Ext->>GH: push 9f8e7d6
+  end
+  Own->>GH: /ok-to-test 1a2b3c4
+  GH->>PAC: issue_comment, no head SHA
+  PAC->>GH: get the pull request
+  GH->>PAC: head SHA
+  alt head moved to 9f8e7d6
+    PAC->>GH: comment: SHA does not match the head
+  else head is still 1a2b3c4
+    PAC->>PAC: start PipelineRuns
+    PAC->>GH: status: running
+  end
+
+%% play: SHA matches
+%% Ext -> GH : PR | An outside contributor opens a pull request
+%% GH -> PAC
+%% PAC -> GH : pending | The contributor is not allowed to run CI yet
+%% Own -> GH : 1a2b3c4 | A maintainer reviews the code and approves that exact commit
+%% GH -> PAC | The comment event does not say which commit is the head
+%% PAC -> GH
+%% GH -> PAC : 1a2b3c4 | The head is still 1a2b3c4, so the SHA matches
+%% PAC -> PAC
+%% PAC -> GH : running
+%% play: Commit pushed after review
+%% Ext -> GH : PR
+%% GH -> PAC
+%% PAC -> GH : pending
+%% Ext -> GH : 9f8e7d6 | The contributor pushes a new commit just before the approval
+%% Own -> GH : 1a2b3c4
+%% GH -> PAC
+%% PAC -> GH
+%% GH -> PAC : 9f8e7d6
+%% PAC -> GH : mismatch | The SHA no longer matches the head, so nothing runs and the reply explains how to retry
+```
 
 ### Targeting Specific PipelineRuns
 

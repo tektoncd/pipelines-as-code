@@ -34,6 +34,53 @@ When the `on-comment` annotation triggers a PipelineRun, Pipelines-as-Code sets 
 
 The `on-comment` annotation follows the pull_request [Policy]({{< relref "/docs/advanced/policy-authorization" >}}) rules. Only users listed in the pull_request policy can trigger the PipelineRun.
 
+```mermaid
+flowchart LR
+%% title: How a pull request comment is matched against on-comment annotations
+  User@{ img: "/icons/user.svg", label: "Commenter", w: 48, h: 48, constraint: "on" }
+  PR@{ img: "/icons/comment.svg", label: "New comment", w: 48, h: 48, constraint: "on" }
+  Cmd@{ img: "/icons/decision.svg", label: "Built-in?", w: 48, h: 48, constraint: "on" }
+  Gops[GitOps command]
+  Re@{ img: "/icons/search.svg", label: "on-comment", w: 48, h: 48, constraint: "on" }
+  ACL@{ img: "/icons/policy.svg", label: "Access check", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "merge-pr", w: 48, h: 48, constraint: "on" }
+  Wait@{ img: "/icons/wait.svg", label: "Pending", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Ignored", w: 48, h: 48, constraint: "on" }
+  User --> PR --> Cmd
+  Cmd -->|yes| Gops
+  Cmd -->|no| Re
+  Re hit@-->|match| ACL
+  Re miss@-->|no match| Drop
+  ACL ok@-->|allowed| Run
+  ACL denied@-->|denied| Wait
+
+%% play: Custom command
+%% skip Gops Drop Wait
+%% User -> PR : /merge-pr | Someone posts a new comment on the pull request
+%% PR -> Cmd
+%% Cmd -> Re | It is not a built-in command, so the on-comment regexes are tried
+%% Re -> ACL @hit | The trimmed comment matches ^/merge-pr
+%% ACL -> Run @ok | The sender is allowed, so merge-pr starts with {{ trigger_comment }} set
+%% play: Built-in command
+%% skip Re ACL Run Wait Drop
+%% User -> PR : /retest
+%% PR -> Cmd
+%% Cmd -> Gops | /test, /retest, /cancel and /ok-to-test are handled before any on-comment matching
+%% play: Plain comment
+%% skip Gops ACL Run Wait
+%% User -> PR : LGTM
+%% PR -> Cmd
+%% Cmd -> Re
+%% Re -> Drop @miss | No regex matches, so nothing runs
+%% play: Sender not allowed
+%% skip Gops Drop Run
+%% User -> PR : /merge-pr
+%% PR -> Cmd
+%% Cmd -> Re
+%% Re -> ACL @hit
+%% ACL -> Wait @denied | The sender is not allowed to run CI, so nothing starts and the commit gets a pending status
+```
+
 {{< callout type="info" >}}
 The `on-comment` annotation works with pull_request events. For push events, Pipelines-as-Code supports it only [when targeting the main branch without arguments]({{< relref "/docs/guides/gitops-commands/push-commands" >}}).
 
@@ -54,6 +101,33 @@ metadata:
     pipelinesascode.tekton.dev/on-label: "[bug, defect]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     pipelinesascode.tekton.dev/on-event: "[pull_request]"
+```
+
+```mermaid
+flowchart LR
+%% title: What runs when a label is added and when a commit is pushed to a labeled pull request
+  Dev@{ img: "/icons/user.svg", label: "Developer", w: 48, h: 48, constraint: "on" }
+  Lab@{ img: "/icons/tag.svg", label: "Label added", w: 48, h: 48, constraint: "on" }
+  Push@{ img: "/icons/commit.svg", label: "New commit", w: 48, h: 48, constraint: "on" }
+  Check@{ img: "/icons/filter.svg", label: "on-label", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "match-bugs-or-defect", w: 48, h: 48, constraint: "on" }
+  Others@{ img: "/icons/pipeline.svg", label: "Other PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Dev --> Lab --> Check
+  Dev --> Push
+  Push --> Check
+  Push --> Others
+  Check --> Run
+
+%% play: Label added
+%% skip Push Others
+%% Dev -> Lab : bug | A developer adds the bug label to a pull request targeting main
+%% Lab -> Check | Only PipelineRuns with an on-label annotation are considered for a label event
+%% Check -> Run | bug is in the list and the branch matches, so only this PipelineRun starts
+%% play: New commit
+%% skip Lab
+%% Dev -> Push : sha | The developer pushes a new commit to the labeled pull request
+%% Push -> Check, Others | Every PipelineRun matching the pull request is evaluated
+%% Check -> Run | The bug label is still there, so match-bugs-or-defect runs again
 ```
 
 * The `on-label` annotation respects the `pull_request` [Policy]({{< relref "/docs/advanced/policy-authorization" >}}) rules.

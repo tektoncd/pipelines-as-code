@@ -201,6 +201,24 @@ production, because gosmee and the platform running
 <https://hook.pipelinesascode.com>
 provide no support or security guarantees.
 
+```mermaid
+flowchart LR
+%% title: How a webhook reaches a local cluster through the proxy
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Hook@{ img: "/icons/cloud.svg", label: "Webhook proxy", w: 48, h: 48, constraint: "on" }
+  Smee@{ img: "/icons/pod.svg", label: "gosmee-client", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Git -->|webhook| Hook
+  Smee -->|connects| Hook
+  Smee -->|forwards| Ctrl
+
+%% play: Forwarding an event
+%% Smee -> Hook | gosmee-client in the cluster opens a connection to your proxy URL
+%% Git -> Hook : event | The Git provider sends its webhook to the Webhook Proxy URL
+%% Hook -> Smee : event | The proxy streams the event down that connection
+%% Smee -> Ctrl : POST | gosmee replays it to the controller service, retrying up to five times
+```
+
 ### Proxying with hook.pipelinesascode.com
 
 To set up webhook forwarding for a minikube or kind cluster, use [hook.pipelinesascode.com](https://hook.pipelinesascode.com/):

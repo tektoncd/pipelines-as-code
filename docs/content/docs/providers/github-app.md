@@ -61,6 +61,42 @@ To create the GitHub App manually:
 
 Pipelines-as-Code needs a Kubernetes secret containing the GitHub App private key and the webhook secret. This secret lets the controller [generate tokens](https://docs.github.com/en/developers/apps/building-github-apps/identifying-and-authorizing-users-for-github-apps) on behalf of the user who triggered the event and validate incoming webhook payloads.
 
+Here is how the controller uses that secret for each event:
+
+```mermaid
+sequenceDiagram
+%% title: How the controller turns a GitHub App event into a token for the PipelineRun
+%% autoplay
+  participant GH as GitHub
+  participant Ctrl as Controller
+  participant Sec as pipelines-as-code-secret
+  participant Run as PipelineRun
+  GH->>Ctrl: webhook with installation ID
+  Ctrl->>Sec: read webhook.secret
+  Ctrl->>Ctrl: verify signature
+  Ctrl->>Sec: read App ID and private key
+  Ctrl->>GH: JWT signed with the private key
+  GH->>Ctrl: installation token
+  Ctrl->>Ctrl: find Repository CR
+  Ctrl->>GH: ask for a token limited to the repository
+  GH->>Ctrl: scoped token
+  Ctrl->>Run: pac-gitauth secret and PipelineRun
+  Ctrl->>GH: check run started
+
+%% play: Event to PipelineRun
+%% GH -> Ctrl : event | GitHub sends the event, with the ID of the App installation
+%% Ctrl -> Sec | The controller reads the webhook secret from its own namespace
+%% Ctrl -> Ctrl : HMAC | and refuses the payload when the signature does not match
+%% Ctrl -> Sec : private key
+%% Ctrl -> GH : JWT | A short lived JWT signed with the private key proves the request comes from the App
+%% GH -> Ctrl : token | GitHub answers with an installation token
+%% Ctrl -> Ctrl | The controller finds the Repository CR for this repository
+%% Ctrl -> GH : repo IDs | It asks for a token limited to this repository, plus any extra repositories from token scoping
+%% GH -> Ctrl : token
+%% Ctrl -> Run : token | The token goes into a pac-gitauth secret that the PipelineRun can use
+%% Ctrl -> GH : check run | Status is reported through the Checks API
+```
+
 Run the following command, replacing the placeholder values:
 
 - `APP_ID` with the GitHub App **App ID** copied in the previous section
@@ -122,6 +158,47 @@ explicitly is therefore the recommended setup for any self hosted instance.
 A hostname that is not routable on the public internet (loopback, a private
 range, or an in-cluster `.svc` name) is never recorded automatically: list it
 explicitly to trust it.
+
+```mermaid
+flowchart LR
+%% title: How the controller decides whether to trust a GitHub hostname
+  Hook@{ img: "/icons/webhook.svg", label: "Signed App webhook", w: 48, h: 48, constraint: "on" }
+  Inc@{ img: "/icons/terminal.svg", label: "Incoming webhook", w: 48, h: 48, constraint: "on" }
+  Key@{ img: "/icons/config.svg", label: "Trusted hosts", w: 48, h: 48, constraint: "on" }
+  Public[Public host]
+  Learn@{ img: "/icons/audit.svg", label: "Auto-trusted annotation", w: 48, h: 48, constraint: "on" }
+  Use@{ img: "/icons/unlock.svg", label: "Credentials sent", w: 48, h: 48, constraint: "on" }
+  No@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  Hook --> Key
+  Inc --> Key
+  Key pub@-->|empty| Public --> Use
+  Key learn@-->|empty| Learn --> Use
+  Key listed@-->|listed| Use
+  Key -->|not trusted| No
+
+%% play: github.com, key empty
+%% skip Inc Learn No
+%% Hook -> Key : github.com
+%% Key -> Public @pub | Public hostnames stay trusted while the key is empty
+%% Public -> Use
+%% play: Enterprise, key empty
+%% skip Inc Public No
+%% Hook -> Key : ghe.example.com | The signature was verified with the App webhook secret
+%% Key -> Learn @learn | so the controller records the hostname in the ConfigMap annotation
+%% Learn -> Use
+%% play: Key set
+%% skip Inc Public Learn No
+%% Hook -> Key : ghe.example.com
+%% Key -> Use @listed | A non-empty list decides alone and the controller stops learning hosts
+%% play: Key set, host missing
+%% skip Inc Public Learn Use
+%% Hook -> Key : github.com
+%% Key -> No | A host missing from a non-empty list is refused, public ones included
+%% play: Incoming webhook
+%% skip Hook Public Learn Use
+%% Inc -> Key : ghe.example.com | An incoming webhook has no signature, so it never teaches the controller a host
+%% Key -> No | Until the host is trusted, the request is refused
+```
 
 If a hostname is not trusted, the controller refuses the request and logs the
 exact command to run:

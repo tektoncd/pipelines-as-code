@@ -47,6 +47,25 @@ Your Git provider needs to reach the Pipelines-as-Code controller over the inter
 
 The next question asks whether to install the webhook forwarding tool [gosmee](https://github.com/chmouel/gosmee). This prompt only appears if you are not running on OpenShift. Installing gosmee is optional, but it is the most straightforward way to make the controller reachable by GitHub.
 
+```mermaid
+flowchart LR
+%% title: How gosmee forwards webhook events to the controller
+  GH@{ img: "/icons/repository.svg", label: "GitHub", w: 48, h: 48, constraint: "on" }
+  Relay@{ img: "/icons/cloud.svg", label: "gosmee URL", w: 48, h: 48, constraint: "on" }
+  Client@{ img: "/icons/listener.svg", label: "gosmee client", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  subgraph Cluster[Your cluster]
+    Client
+    Ctrl
+  end
+  GH -->|webhook| Relay -->|stream| Client -->|POST| Ctrl
+
+%% play: Event delivery
+%% GH -> Relay : event | GitHub sends the event to your public gosmee URL
+%% Relay -> Client | The gosmee client keeps a connection open to that URL, so the event reaches your cluster
+%% Client -> Ctrl : POST | The client replays the request to the controller service
+```
+
 {{< callout type="warning" >}}
 gosmee is intended for development and testing only, not for production use.
 {{< /callout >}}
@@ -206,6 +225,39 @@ This assumes your system is configured to push to GitHub. If not, see the offici
 
 After pushing the branch, create a new pull request by visiting the following URL (replace `yourusername` with your GitHub username):
 <https://github.com/yourusername/pac-demo/pull/new/tektonci>
+
+Here is what happens next, and again after you fix the code in the next section:
+
+```mermaid
+flowchart LR
+%% title: Your first pull request, failing then passing
+%% autoplay
+  Dev@{ img: "/icons/user.svg", label: "You", w: 48, h: 48, constraint: "on" }
+  PR@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Pipelines-as-Code", w: 48, h: 48, constraint: "on" }
+  Lint@{ img: "/icons/test.svg", label: "golangci-lint", w: 48, h: 48, constraint: "on" }
+  Fail@{ img: "/icons/fail.svg", label: "Failed check", w: 48, h: 48, constraint: "on" }
+  Pass@{ img: "/icons/success.svg", label: "Green check", w: 48, h: 48, constraint: "on" }
+  Dev -->|push| PR -->|event| Ctrl -->|PipelineRun| Lint
+  Lint bad@-->|errors| Fail
+  Lint ok@-->|clean| Pass
+  Fail -->|annotations| PR
+
+%% play: First run
+%% skip Pass
+%% Dev -> PR : tektonci | You push the branch and open a pull request
+%% PR -> Ctrl : event
+%% Ctrl -> Lint : .tekton/ | Pipelines-as-Code starts the PipelineRun from .tekton/pipelinerun.yaml
+%% wait 1000 | golangci-lint checks the Go code
+%% Lint -> Fail @bad | The demo code has lint errors, so the check fails
+%% Fail -> PR : annotations | Each error is linked to the line of code that caused it
+%% play: Fix and push
+%% skip Fail
+%% Dev -> PR : fix | You fix main.go and push a new commit to the same branch
+%% PR -> Ctrl : event | A new commit on an open pull request starts a new run
+%% Ctrl -> Lint
+%% Lint -> Pass @ok : success | This time the check is green
+```
 
 Once you create the pull request, Pipelines-as-Code triggers a PipelineRun on it:
 

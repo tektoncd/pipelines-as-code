@@ -113,6 +113,64 @@ You can define multiple `params` with the same name but different filters. Pipel
 - [GitLab Documentation for webhook events](https://docs.gitlab.com/ee/user/project/integrations/webhook_events.html)
 {{< /callout >}}
 
+The following diagram shows how Pipelines-as-Code resolves each entry of `params` and which values can override the result:
+
+```mermaid
+flowchart LR
+%% title: How Pipelines-as-Code resolves custom parameters
+%% autoplay
+  Entry@{ img: "/icons/config.svg", label: "params entry", w: 48, h: 48, constraint: "on" }
+  Filter@{ img: "/icons/filter.svg", label: "CEL filter", w: 48, h: 48, constraint: "on" }
+  Val@{ img: "/icons/document.svg", label: "value", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "secret_ref", w: 48, h: 48, constraint: "on" }
+  Res@{ img: "/icons/check.svg", label: "Resolved params", w: 48, h: 48, constraint: "on" }
+  Cmt@{ img: "/icons/comment.svg", label: "GitOps comment", w: 48, h: 48, constraint: "on" }
+  Inc@{ img: "/icons/webhook.svg", label: "Incoming params", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/stop.svg", label: "Skipped", w: 48, h: 48, constraint: "on" }
+  Entry nof@-->|no filter| Val
+  Entry hasf@-->|filter| Filter
+  Filter yes@-->|true| Val
+  Filter no@-->|false or already matched| Skip
+  Val set@-->|set| Res
+  Val unset@-->|empty| Sec
+  Sec --> Res
+  Cmt -->|key=value| Res
+  Inc -->|params| Res
+  Res -->|"{{ param }}"| Run
+
+%% play: Plain value
+%% skip Filter Sec Cmt Inc Skip
+%% Entry -> Val @nof : company | An entry with a value uses it, even when secret_ref is also set
+%% Val -> Res @set
+%% Res -> Run | Every {{ company }} in the PipelineRun is replaced
+%% play: From a secret
+%% skip Filter Cmt Inc Skip
+%% Entry -> Val @nof
+%% Val -> Sec @unset | Without a value, the key is read from a Secret in the Repository CR namespace
+%% Sec -> Res
+%% Res -> Run
+%% play: Filtered
+%% skip Sec Cmt Inc
+%% Entry -> Filter @hasf : pull_request | The filter sees the pac variables and the webhook body
+%% Filter -> Val @yes : true | The first entry with this name whose filter is true wins
+%% Val -> Res @set
+%% Entry -> Filter @hasf : push
+%% Filter -> Skip @no | Later entries with the same name, or a false filter, are skipped
+%% play: GitOps comment
+%% skip Filter Sec Inc Skip
+%% Entry -> Val @nof
+%% Val -> Res @set
+%% Cmt -> Res : company=acme | A key=value argument on a GitOps command overrides a param that is already defined
+%% Res -> Run
+%% play: Incoming webhook
+%% skip Filter Sec Cmt Skip
+%% Entry -> Val @nof
+%% Val -> Res @set
+%% Inc -> Res : params | Params sent to an incoming webhook are applied last and win
+%% Res -> Run
+```
+
 ### Using custom parameters in CEL matching expressions
 
 Beyond template expansion (`{{ param }}`), you can also use custom parameters as CEL variables in the `on-cel-expression` annotation. This gives you control over which PipelineRuns Pipelines-as-Code triggers, based on repository-specific configuration.

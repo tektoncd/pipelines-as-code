@@ -30,6 +30,59 @@ When using a GitHub webhook, the scoping of the token is what you set when creat
 | **Repository-level** (`settings.github_app_token_scope_repos`) | Must be `false` |
 | **Both combined** | Can stay `true` |
 
+Here is how Pipelines-as-Code builds the list of repositories for the token:
+
+```mermaid
+flowchart LR
+%% title: How Pipelines-as-Code builds the list of repositories for a scoped GitHub App token
+%% autoplay
+  CM@{ img: "/icons/config.svg", label: "Global extra repos", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/repository.svg", label: "Repository CR scope", w: 48, h: 48, constraint: "on" }
+  NS@{ img: "/icons/namespace.svg", label: "Repository CRs in namespace", w: 48, h: 48, constraint: "on" }
+  Flag@{ img: "/icons/policy.svg", label: "token-scoped flag", w: 48, h: 48, constraint: "on" }
+  List@{ img: "/icons/filter.svg", label: "Repository list", w: 48, h: 48, constraint: "on" }
+  GH@{ img: "/icons/api.svg", label: "GitHub App", w: 48, h: 48, constraint: "on" }
+  Token@{ img: "/icons/token.svg", label: "Scoped token", w: 48, h: 48, constraint: "on" }
+  Fail@{ img: "/icons/refuse.svg", label: "CI not run", w: 48, h: 48, constraint: "on" }
+  CM glob@-->|patterns| List
+  Repo --> NS
+  NS match@-->|matched| Flag
+  NS nomatch@-->|no match| Fail
+  Flag allow@-->|allowed| List
+  Flag deny@-->|true, no global list| Fail
+  List -->|plus origin repo| GH --> Token
+
+%% play: Global list
+%% skip Repo NS Flag Fail
+%% CM -> List @glob : owner3/* | The ConfigMap patterns go into the list as they are
+%% List -> GH : origin repo | The repository that sent the event is always added
+%% GH -> Token | Globs are expanded against the repositories the App installation can access, then GitHub mints the token
+%% play: Repository list
+%% skip CM Fail
+%% Repo -> NS : owner/project | Each pattern must match a Repository CR in the same namespace
+%% NS -> Flag @match
+%% Flag -> List @allow | secret-github-app-token-scoped must be false when there is no global list
+%% List -> GH : origin repo
+%% GH -> Token
+%% play: Both
+%% skip Fail
+%% CM -> List @glob : global | With a global list set, the flag can stay true
+%% Repo -> NS : repository
+%% NS -> Flag @match
+%% Flag -> List @allow | and both lists are merged
+%% List -> GH : origin repo
+%% GH -> Token
+%% play: Pattern not in namespace
+%% skip CM Flag List GH Token
+%% Repo -> NS : owner5/*
+%% NS -> Fail @nomatch : error | No Repository CR in the namespace matches, so token scoping fails and CI does not run
+%% play: Flag left on
+%% skip CM List GH Token
+%% Repo -> NS : owner/project
+%% NS -> Flag @match
+%% Flag -> Fail @deny : error | With secret-github-app-token-scoped true and no global list, the repository list is rejected
+```
+
 ## Scoping the GitHub token using Global configuration
 
 Use the global configuration to define a list of repositories accessible from any Repository CR in any namespace.

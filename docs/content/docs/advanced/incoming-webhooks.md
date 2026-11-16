@@ -9,6 +9,57 @@ This page explains how to configure and use incoming webhooks to trigger Pipelin
 
 Pipelines-as-Code supports incoming webhook URLs. Instead of requiring a new code change to trigger a pipeline, you can send an HTTP POST request with a shared secret to start a PipelineRun directly. This is useful for triggering pipelines from tools like `curl`, web services, or automation platforms.
 
+```mermaid
+flowchart LR
+%% title: How the controller handles a request to the incoming webhook endpoint
+%% autoplay
+  Caller@{ img: "/icons/terminal.svg", label: "Caller", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "/incoming", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/config.svg", label: "Repository CR", w: 48, h: 48, constraint: "on" }
+  Rule@{ img: "/icons/filter.svg", label: "Incoming rules", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Incoming secret", w: 48, h: 48, constraint: "on" }
+  Par@{ img: "/icons/document.svg", label: "Allowed params", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  No@{ img: "/icons/refuse.svg", label: "400 invalid request", w: 48, h: 48, constraint: "on" }
+  Caller -->|POST JSON| Ctrl --> Repo --> Rule
+  Rule match@-->|branch matches| Sec
+  Rule nomatch@-->|no match| No
+  Sec same@-->|same| Par
+  Sec diff@-->|different| No
+  Par ok@-->|listed| Run
+  Par bad@-->|not listed| No
+
+%% play: Accepted
+%% skip No
+%% Caller -> Ctrl : repository, branch, pipelinerun, secret | The request names the Repository CR, the branch, the PipelineRun and the secret
+%% Ctrl -> Repo | The Repository CR is looked up by name; add namespace when two share the name
+%% Repo -> Rule : branch | The first incoming rule whose targets match the branch, globs included, is used
+%% Rule -> Sec @match | Its secret is read from the namespace and compared with the one you sent
+%% Sec -> Par @same : params | Only params listed in the rule may be passed
+%% Par -> Run @ok : 202 | The controller answers 202 and starts the matching PipelineRun as an incoming event
+%% play: Branch not matched
+%% skip Sec Par Run
+%% Caller -> Ctrl : branch hotfix
+%% Ctrl -> Repo
+%% Repo -> Rule
+%% Rule -> No @nomatch | No rule targets that branch, so nothing runs
+%% play: Wrong secret
+%% skip Par Run
+%% Caller -> Ctrl : secret
+%% Ctrl -> Repo
+%% Repo -> Rule
+%% Rule -> Sec @match
+%% Sec -> No @diff | The answer is a generic 400, the reason is only in the controller logs
+%% play: Param not allowed
+%% skip Run
+%% Caller -> Ctrl : params
+%% Ctrl -> Repo
+%% Repo -> Rule
+%% Rule -> Sec @match
+%% Sec -> Par @same
+%% Par -> No @bad | A param that the rule does not list rejects the whole request
+```
+
 ## Incoming Webhook URL
 
 To use incoming webhooks, configure the

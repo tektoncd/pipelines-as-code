@@ -40,6 +40,74 @@ Remote task annotations let you pull Task and Pipeline definitions from external
 
 If the resolver finds a PipelineRun referencing a remote task or Pipeline through an annotation, it automatically fetches and inlines the resource.
 
+The value of the annotation decides where the task comes from:
+
+```mermaid
+flowchart LR
+%% title: Where the resolver fetches a remote task from
+  Run@{ img: "/icons/file-code.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  RP@{ img: "/icons/pipeline.svg", label: "Remote Pipeline", w: 48, h: 48, constraint: "on" }
+  Ann@{ img: "/icons/decision.svg", label: "Task annotation", w: 48, h: 48, constraint: "on" }
+  Hub@{ img: "/icons/cloud.svg", label: "Artifact Hub", w: 48, h: 48, constraint: "on" }
+  API@{ img: "/icons/api.svg", label: "Provider API", w: 48, h: 48, constraint: "on" }
+  Web@{ img: "/icons/globe.svg", label: "HTTP URL", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/repository.svg", label: "Repository file", w: 48, h: 48, constraint: "on" }
+  Inline[Inline tasks]
+  Out@{ img: "/icons/success.svg", label: "Self-contained run", w: 48, h: 48, constraint: "on" }
+  Fail@{ img: "/icons/fail.svg", label: "Error reported", w: 48, h: 48, constraint: "on" }
+  Run -->|task| Ann
+  Run -->|pipeline| RP
+  RP -->|relative path| Ann
+  Ann hub@-->|name| Hub
+  Ann api@-->|same host| API
+  Ann url@-->|https://| Web
+  Ann file@-->|path| Repo
+  Hub --> Inline
+  API --> Inline
+  Web --> Inline
+  Repo --> Inline
+  Inline ok@--> Out
+  Inline bad@-->|missing| Fail
+
+%% play: Artifact Hub
+%% skip RP API Web Repo Fail
+%% Run -> Ann : git-clone
+%% Ann -> Hub @hub : git-clone:0.9.0 | A bare name comes from Artifact Hub, a catalog:// prefix from a custom hub
+%% Hub -> Inline : Task
+%% Inline -> Out @ok | The task spec replaces the taskRef, so nothing has to be installed on the cluster
+%% play: HTTP URL
+%% skip RP Hub API Repo Fail
+%% Run -> Ann : https://
+%% Ann -> Web @url : task.yaml | The file is downloaded as is
+%% Web -> Inline : Task
+%% Inline -> Out @ok
+%% play: Private repository
+%% skip RP Hub Web Repo Fail
+%% Run -> Ann : https://
+%% Ann -> API @api : blob URL | A URL on the same host as the repository goes through the Git provider API with the repository token
+%% API -> Inline : Task
+%% Inline -> Out @ok
+%% play: Repository file
+%% skip RP Hub API Web Fail
+%% Run -> Ann : share/tasks/
+%% Ann -> Repo @file : git-clone.yaml | A path is read from the repository at the commit of the event
+%% Repo -> Inline : Task
+%% Inline -> Out @ok
+%% play: Relative task
+%% skip Hub API Repo Fail
+%% Run -> RP : pipeline.yaml | The PipelineRun points to a Pipeline in another repository
+%% RP -> Ann : ./task.yaml | Its task path is joined to the directory of the Pipeline
+%% Ann -> Web @url : task.yaml
+%% Web -> Inline : Task
+%% Inline -> Out @ok
+%% play: Missing task
+%% skip RP API Web Repo Out
+%% Run -> Ann : git-clone
+%% Ann -> Hub @hub
+%% Hub -> Inline
+%% Inline -> Fail @bad : lint | A taskRef that no annotation and no .tekton/ file provides stops the event before anything is created
+```
+
 If multiple annotations reference the same task name, the resolver uses the first one it fetches from the annotations.
 
 An annotation for a remote task looks like this:

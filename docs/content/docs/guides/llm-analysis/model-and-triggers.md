@@ -54,6 +54,48 @@ By default, Pipelines-as-Code runs LLM analysis for completed PipelineRuns (both
 
 If you omit `on_cel`, the role executes for all completed PipelineRuns.
 
+Each role is checked on its own, so one PipelineRun can trigger several roles, each with its own model:
+
+```mermaid
+flowchart LR
+%% title: How each analysis role decides whether to run
+  Run@{ img: "/icons/pipeline.svg", label: "Finished run", w: 48, h: 48, constraint: "on" }
+  Has@{ img: "/icons/decision.svg", label: "on_cel set?", w: 48, h: 48, constraint: "on" }
+  Done[Completed?]
+  Cel@{ img: "/icons/filter.svg", label: "Evaluate CEL", w: 48, h: 48, constraint: "on" }
+  Model@{ img: "/icons/model.svg", label: "Role model", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/stop.svg", label: "Skipped", w: 48, h: 48, constraint: "on" }
+  Err@{ img: "/icons/warning.svg", label: "Role failed", w: 48, h: 48, constraint: "on" }
+  Run --> Has
+  Has unset@-->|no| Done
+  Has set@-->|yes| Cel
+  Done done@-->|yes| Model
+  Cel true@-->|true| Model
+  Cel false@-->|false| Skip
+  Cel bad@-->|error| Err
+
+%% play: No on_cel
+%% skip Cel Skip Err
+%% Run -> Has : role
+%% Has -> Done @unset | Without on_cel, the role runs when the PipelineRun succeeded or failed
+%% Done -> Model @done : gpt-5.4-mini | The role uses its model, or the provider default when none is set
+%% play: Expression matches
+%% skip Done Skip Err
+%% Run -> Has : role
+%% Has -> Cel @set : body | The expression sees body.pipelineRun, body.repository and body.event
+%% Cel -> Model @true : gpt-5
+%% play: Expression is false
+%% skip Done Model Err
+%% Run -> Has : role
+%% Has -> Cel @set
+%% Cel -> Skip @false | The role is skipped quietly
+%% play: Broken expression
+%% skip Done Model Skip
+%% Run -> Has : role
+%% Has -> Cel @set
+%% Cel -> Err @bad | An invalid expression, or one that does not return true or false, fails that role only
+```
+
 ### Overriding the Default Behavior
 
 To run analysis for **all completed PipelineRuns** (both successful and failed), set `on_cel: 'true'`:

@@ -41,6 +41,46 @@ in the target repository, because GitLab only creates pipeline entries for commi
 that actually trigger CI in that specific project. If either status update
 succeeds, Pipelines-as-Code does not post a comment on the Merge Request.
 
+```mermaid
+flowchart LR
+%% title: How the GitLab commit status falls back to a Merge Request comment, depending on comment_strategy
+%% autoplay
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Src@{ img: "/icons/fork.svg", label: "Source project status", w: 48, h: 48, constraint: "on" }
+  Tgt@{ img: "/icons/repository.svg", label: "Target project status", w: 48, h: 48, constraint: "on" }
+  Str[comment_strategy]
+  New@{ img: "/icons/comment.svg", label: "New comment", w: 48, h: 48, constraint: "on" }
+  Upd@{ img: "/icons/rerun.svg", label: "Updated comment", w: 48, h: 48, constraint: "on" }
+  None@{ img: "/icons/stop.svg", label: "No comment", w: 48, h: 48, constraint: "on" }
+  Ctrl --> Src
+  Src -->|fails| Tgt
+  Tgt -->|fails| Str
+  Str -->|default| New
+  Str -->|update| Upd
+  Str -->|disable_all| None
+
+%% play: Status on the fork
+%% Ctrl -> Src : status | The token can write to the source project, so the status lands there and no comment is posted
+%% play: Status upstream
+%% Ctrl -> Src : status
+%% Src -> Tgt : fails | Without access to the fork, the status goes to the target project
+%% play: Default
+%% Ctrl -> Src : status
+%% Src -> Tgt : fails
+%% Tgt -> Str : fails | Both status updates failed, so the result is reported as a comment
+%% Str -> New : default | Each status change adds a new comment on the Merge Request
+%% play: update
+%% Ctrl -> Src : status
+%% Src -> Tgt : fails
+%% Tgt -> Str : fails
+%% Str -> Upd : update | One comment per PipelineRun is edited with the new status and commit SHA
+%% play: disable_all
+%% Ctrl -> Src : status
+%% Src -> Tgt : fails
+%% Tgt -> Str : fails
+%% Str -> None : disable_all | Nothing is posted on the Merge Request
+```
+
 Successful commit status reporting is also important for the `/retest` command.
 When PipelineRuns are pruned from the cluster, Pipelines-as-Code queries
 GitLab's commit status API to identify which pipelines previously succeeded,

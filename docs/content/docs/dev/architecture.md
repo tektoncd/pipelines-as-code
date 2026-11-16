@@ -9,6 +9,52 @@ Pipelines-as-Code (PAC) is built on top of Tekton Pipelines and provides a GitOp
 
 PAC consists of three main components that work together to process Git events and manage pipeline executions. See [Tekton Ecosystem]({{< relref "/docs/ecosystem" >}}) for how PAC connects to Tekton Pipelines, Chains, Results, Dashboard, and Operator.
 
+```mermaid
+flowchart LR
+%% title: How the controller, watcher and admission webhook share the work
+%% autoplay
+  Dev@{ img: "/icons/user.svg", label: "Developer", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Kube@{ img: "/icons/cluster.svg", label: "Kubernetes API", w: 48, h: 48, constraint: "on" }
+  Tekton@{ img: "/icons/pipeline.svg", label: "Tekton", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Admin@{ img: "/icons/user.svg", label: "Admin", w: 48, h: 48, constraint: "on" }
+  Hook@{ img: "/icons/shield.svg", label: "Admission webhook", w: 48, h: 48, constraint: "on" }
+  Dev --> Git
+  Git event@-->|webhook| Ctrl
+  Ctrl api@-->|API| Git
+  Ctrl -->|PipelineRun| Kube
+  Kube -->|runs| Tekton
+  Kube -->|watch| Watch
+  Watch -->|status| Git
+  Admin --> Hook -->|Repository| Kube
+
+%% play: Pull request
+%% skip Admin Hook
+%% Dev -> Git : PR #42
+%% Git -> Ctrl @event : event | The controller answers 202 and handles the event in the background
+%% Ctrl -> Git @api : .tekton/ | It checks the sender and reads the PipelineRuns from the repository
+%% Ctrl -> Kube : PipelineRun | Matching PipelineRuns are created in the Repository namespace
+%% Kube -> Tekton
+%% Kube -> Watch : done | The watcher reconciles PipelineRuns that carry the PAC state annotation
+%% Watch -> Git : success | and posts the final status, then prunes old runs
+%% play: Closed pull request
+%% skip Admin Hook Tekton Watch
+%% Dev -> Git : close
+%% Git -> Ctrl @event : closed
+%% Ctrl -> Kube : cancel | Running PipelineRuns of that pull request are cancelled
+%% play: Skip CI push
+%% skip Admin Hook Kube Tekton Watch
+%% Dev -> Git : [skip ci]
+%% Git -> Ctrl @event : push
+%% Ctrl -> Git @api : skipped | The commit message holds [skip ci], so only a neutral status is posted
+%% play: Repository setup
+%% skip Dev Git Ctrl Tekton Watch
+%% Admin -> Hook : Repository | Creating or updating a Repository CR goes through the admission webhook
+%% Hook -> Kube : allowed | It refuses a missing or invalid URL and a URL another Repository already uses
+```
+
 ## Core Components
 
 ### Controller
@@ -68,6 +114,53 @@ PAC consists of three main components that work together to process Git events a
 ## Event Flow
 
 The following describes how a typical pull request event flows through the system:
+
+```mermaid
+flowchart LR
+%% title: What the controller does with a webhook, from pkg/adapter to the PipelineRun
+  Ev@{ img: "/icons/webhook.svg", label: "Adapter", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/search.svg", label: "Repository CR", w: 48, h: 48, constraint: "on" }
+  Auth@{ img: "/icons/key.svg", label: "Secret and signature", w: 48, h: 48, constraint: "on" }
+  ACL@{ img: "/icons/policy.svg", label: "Sender allowed?", w: 48, h: 48, constraint: "on" }
+  Match@{ img: "/icons/filter.svg", label: "Match .tekton/", w: 48, h: 48, constraint: "on" }
+  Resolve[Resolve tasks]
+  Create@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Wait@{ img: "/icons/wait.svg", label: "Pending approval", w: 48, h: 48, constraint: "on" }
+  Stop@{ img: "/icons/stop.svg", label: "Stopped", w: 48, h: 48, constraint: "on" }
+  Ev --> Repo
+  Repo found@-->|found| Auth
+  Repo none@-->|none| Stop
+  Auth ok@-->|valid| ACL
+  Auth skip@-->|skip ci| Stop
+  ACL yes@-->|yes| Match
+  ACL no@-->|no| Wait
+  Match hit@-->|match| Resolve --> Create
+  Match miss@-->|no match| Stop
+
+%% play: Allowed pull request
+%% skip Wait Stop
+%% Ev -> Repo : PR #42 | The adapter detects the provider, answers 202, and ParsePayload turns the payload into an event
+%% Repo -> Auth @found | The Repository CR with the same URL gives the secret, used to check the webhook signature
+%% Auth -> ACL @ok
+%% ACL -> Match @yes | The author is an owner, a collaborator or listed in OWNERS
+%% Match -> Resolve @hit : YAML | Annotations and CEL pick the PipelineRuns for this event
+%% Resolve -> Create | Remote tasks are inlined, then the PipelineRun is created and a status posted
+%% play: Skip CI
+%% skip ACL Match Resolve Create Wait
+%% Ev -> Repo : push
+%% Repo -> Auth @found
+%% Auth -> Stop @skip : neutral | The commit message holds [skip ci], so a neutral status is posted and nothing runs
+%% play: Outside contributor
+%% skip Match Resolve Create Stop
+%% Ev -> Repo : PR #43
+%% Repo -> Auth @found
+%% Auth -> ACL @ok
+%% ACL -> Wait @no : pending | A pending status asks for /ok-to-test from someone allowed
+%% play: Unknown repository
+%% skip Auth ACL Match Resolve Create Wait
+%% Ev -> Repo : event
+%% Repo -> Stop @none | No Repository CR has this URL, so the controller only logs it
+```
 
 1
 

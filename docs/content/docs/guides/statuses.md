@@ -5,6 +5,58 @@ weight: 7
 
 This page describes how Pipelines-as-Code reports PipelineRun statuses across different Git providers, including log snippets, error annotations, and notification options.
 
+A GitHub App reports through check runs, a webhook through commit statuses and pull request comments:
+
+```mermaid
+flowchart LR
+%% title: How a PipelineRun status reaches the Git provider
+%% autoplay
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Logs@{ img: "/icons/logs.svg", label: "Log snippet", w: 48, h: 48, constraint: "on" }
+  Mask@{ img: "/icons/secret.svg", label: "Hide secrets", w: 48, h: 48, constraint: "on" }
+  Report[Task breakdown]
+  Check@{ img: "/icons/check.svg", label: "Check run", w: 48, h: 48, constraint: "on" }
+  Status@{ img: "/icons/commit.svg", label: "Commit status", w: 48, h: 48, constraint: "on" }
+  Comment@{ img: "/icons/comment.svg", label: "PR comment", w: 48, h: 48, constraint: "on" }
+  Ctrl --> Run
+  Ctrl app@-->|GitHub App| Check
+  Ctrl hook@-->|webhook| Status
+  Run --> Watch
+  Watch ok@-->|succeeded| Report
+  Watch bad@-->|failed| Logs
+  Logs --> Mask --> Report
+  Report --> Check
+  Report --> Status
+  Report -->|pull request| Comment
+
+%% play: GitHub App, failed task
+%% skip Status Comment
+%% Ctrl -> Run
+%% Ctrl -> Check @app : in progress | The controller creates a check run as soon as the PipelineRun starts
+%% Run -> Watch : done
+%% Watch -> Logs @bad : failed | The last lines of the first failed task are collected
+%% Logs -> Mask : 3 lines | Secret values from the environment of tasks and steps become *****
+%% Mask -> Report
+%% Report -> Check : failure | The check run is updated with the breakdown and the snippet
+%% play: Webhook, pull request
+%% skip Check Logs Mask
+%% Ctrl -> Run
+%% Ctrl -> Status @hook : pending | Without a GitHub App, a commit status is set instead
+%% Run -> Watch : done
+%% Watch -> Report @ok : succeeded
+%% Report -> Status : success
+%% Report -> Comment | On a pull request, the breakdown is posted as a comment
+%% play: Webhook, push
+%% skip Check Logs Mask Comment
+%% Ctrl -> Run
+%% Ctrl -> Status @hook : pending
+%% Run -> Watch : done
+%% Watch -> Report @ok : succeeded
+%% Report -> Status : success | A push has no comment, only the commit status
+```
+
 ## GitHub Apps
 
 After a PipelineRun finishes, Pipelines-as-Code displays its status

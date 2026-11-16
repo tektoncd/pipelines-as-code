@@ -109,6 +109,40 @@ metadata:
 
 Pipelines-as-Code triggers this PipelineRun when there are changes in the `docs` directory but not in the `docs/generated` directory.
 
+```mermaid
+flowchart LR
+%% title: How on-path-change and on-path-change-ignore decide whether pipeline-docs-not-generated runs
+  PR@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Br@{ img: "/icons/filter.svg", label: "Event and branch", w: 48, h: 48, constraint: "on" }
+  Inc@{ img: "/icons/diff.svg", label: "on-path-change", w: 48, h: 48, constraint: "on" }
+  Ign@{ img: "/icons/refuse.svg", label: "on-path-change-ignore", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/stop.svg", label: "Not started", w: 48, h: 48, constraint: "on" }
+  PR --> Br --> Inc
+  Inc inhit@-->|a file matches| Ign
+  Inc inmiss@-->|no file matches| Skip
+  Ign ignmiss@-->|no file matches| Run
+  Ign ighit@-->|a file matches| Skip
+
+%% play: Docs change
+%% skip Skip
+%% PR -> Br : PR to main
+%% Br -> Inc : docs/intro.md | The list of changed files comes from the Git provider
+%% Inc -> Ign @inhit | docs/intro.md matches docs/***
+%% Ign -> Run @ignmiss | Nothing matches docs/generated/***, so the PipelineRun starts
+%% play: Generated docs too
+%% skip Run
+%% PR -> Br : PR to main
+%% Br -> Inc : 2 files
+%% Inc -> Ign @inhit | docs/intro.md matches docs/***
+%% Ign -> Skip @ighit | docs/generated/api.md matches the ignore list, and one match is enough to skip the PipelineRun
+%% play: Code only
+%% skip Ign Run
+%% PR -> Br : PR to main
+%% Br -> Inc : main.go
+%% Inc -> Skip @inmiss | No changed file is under docs/, so the PipelineRun does not start
+```
+
 ### Precedence rules
 
 The `on-path-change-ignore` annotation always takes precedence over `on-path-change`. For example, with these annotations:

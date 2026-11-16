@@ -56,6 +56,40 @@ While each GitHub application requires its own controller, only one
 status reconciler ("watcher") component is needed cluster-wide.
 {{< /callout >}}
 
+Each controller writes its name, Secret and ConfigMap into the
+`pipelinesascode.tekton.dev/controller-info` annotation of the PipelineRuns it
+creates. The shared watcher reads that annotation to report back with the right
+credentials:
+
+```mermaid
+flowchart LR
+%% title: Two controllers, one watcher
+  GH@{ img: "/icons/globe.svg", label: "github.com", w: 48, h: 48, constraint: "on" }
+  GHE@{ img: "/icons/repository.svg", label: "GitHub Enterprise", w: 48, h: 48, constraint: "on" }
+  C1@{ img: "/icons/controller.svg", label: "Default controller", w: 48, h: 48, constraint: "on" }
+  C2@{ img: "/icons/controller.svg", label: "ghe controller", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  W@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  St@{ img: "/icons/check.svg", label: "Commit status", w: 48, h: 48, constraint: "on" }
+  GH -->|webhook| C1 --> Run
+  GHE -->|webhook| C2 --> Run
+  Run -->|controller-info| W
+  W -->|status| St
+
+%% play: GitHub Enterprise
+%% skip GH C1
+%% GHE -> C2 : event | The GitHub Enterprise App sends its webhooks to the route of the ghe controller
+%% C2 -> Run : ghe-secret | It uses its own Secret and ConfigMap and records their names on the PipelineRun
+%% Run -> W | The single watcher reads that annotation when the run finishes
+%% W -> St : ghe-secret | and reports the result to GitHub Enterprise with the ghe credentials
+%% play: Public GitHub
+%% skip GHE C2
+%% GH -> C1 : event
+%% C1 -> Run : default secret
+%% Run -> W
+%% W -> St : default secret
+```
+
 ## Automated CI Setup with startpaac
 
 For automated testing environments, [startpaac](https://github.com/pipelines-as-code/startpaac) can install and configure second controllers automatically.

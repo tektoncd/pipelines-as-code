@@ -43,6 +43,46 @@ To disable automatic secret creation, set `secret-auto-create` to `false` in
 the pipelines-as-code ConfigMap.
 {{< /callout >}}
 
+```mermaid
+flowchart LR
+%% title: Lifecycle of the pac-gitauth secret used to clone a private repository
+%% autoplay
+  Tok@{ img: "/icons/token.svg", label: "Provider token", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "pac-gitauth secret", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Clone@{ img: "/icons/task.svg", label: "git-clone", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Private repository", w: 48, h: 48, constraint: "on" }
+  GC@{ img: "/icons/stop.svg", label: "Secret deleted", w: 48, h: 48, constraint: "on" }
+  Tok --> Ctrl
+  Ctrl mk@-->|create| Sec
+  Ctrl --> Run
+  Sec own@-->|ownerRef| Run
+  Run -->|basic-auth| Clone -->|HTTPS| Git
+  Run gone@-->|deleted| GC
+  Ctrl fail@-->|run not created| GC
+
+%% play: Clone a private repository
+%% skip GC
+%% Tok -> Ctrl : token | The token comes from the GitHub App, or from the secret on the Repository CR for webhooks
+%% Ctrl -> Sec @mk : .git-credentials | With secret-auto-create on, a pac-gitauth secret gets .gitconfig, .git-credentials and the raw token
+%% Ctrl -> Run | The PipelineRun refers to it through the git_auth_secret variable
+%% Sec -> Run @own | Once the run exists, the secret gets an ownerRef pointing to it
+%% Run -> Clone : basic-auth | git-clone mounts the secret as the basic-auth workspace
+%% Clone -> Git : clone
+%% play: PipelineRun deleted
+%% skip Tok Clone Git
+%% Ctrl -> Sec @mk
+%% Ctrl -> Run
+%% Sec -> Run @own
+%% Run -> GC @gone | Deleting the PipelineRun lets Kubernetes delete the secret it owns
+%% play: PipelineRun creation fails
+%% skip Run Clone Git
+%% Tok -> Ctrl : token
+%% Ctrl -> Sec @mk
+%% Ctrl -> GC @fail | If the PipelineRun cannot be created, the controller deletes the secret itself
+```
+
 ## Using the generated token in your PipelineRun
 
 The [git-clone task](https://artifacthub.io/packages/tekton-task/git-clone/git-clone)

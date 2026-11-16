@@ -145,5 +145,41 @@ in a repository, you need repository administrator permissions:
   PipelineRun build reported by Pipelines-as-Code.
 - Select Save.
 
+```mermaid
+flowchart LR
+%% title: How a PipelineRun becomes a required build in Bitbucket Data Center
+%% autoplay
+  PR@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Pipelines-as-Code", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Build@{ img: "/icons/build.svg", label: "Build status", w: 48, h: 48, constraint: "on" }
+  Check@{ img: "/icons/policy.svg", label: "Required build check", w: 48, h: 48, constraint: "on" }
+  Merge@{ img: "/icons/merge.svg", label: "Merge allowed", w: 48, h: 48, constraint: "on" }
+  Block@{ img: "/icons/stop.svg", label: "Merge blocked", w: 48, h: 48, constraint: "on" }
+  Note@{ img: "/icons/comment.svg", label: "PR comment", w: 48, h: 48, constraint: "on" }
+  PR -->|webhook| Ctrl --> Run
+  Run -->|result| Build
+  Build --> Check
+  Check pass@-->|successful| Merge
+  Check fail@-->|failed| Block
+  Build cmt@-->|success| Note
+
+%% play: Build passes
+%% skip Block
+%% PR -> Ctrl : event
+%% Ctrl -> Run | The PipelineRun carries the bitbucket-required-build-parent annotation
+%% Run -> Build : success | Its status is reported as a build with pr-validation-build as the parent
+%% Build -> Note @cmt : summary | A successful run also posts a comment on the pull request
+%% Build -> Check
+%% Check -> Merge @pass | The required build check matches the parent, so the merge button is enabled
+%% play: Build fails
+%% skip Merge Note
+%% PR -> Ctrl : event
+%% Ctrl -> Run
+%% Run -> Build : failed
+%% Build -> Check
+%% Check -> Block @fail | A failed or running build keeps the pull request from being merged
+```
+
 For more details, see the [Bitbucket Data Center documentation on checks for
 merging pull requests](https://confluence.atlassian.com/bitbucketserver/checks-for-merging-pull-requests-776640039.html).

@@ -164,6 +164,43 @@ Pipelines-as-Code supports merge requests from forked repositories with an autom
 
 This design ensures status reporting works even with restricted token permissions.
 
+```mermaid
+flowchart LR
+%% title: How Pipelines-as-Code falls back when it cannot set a GitLab commit status
+%% autoplay
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun status", w: 48, h: 48, constraint: "on" }
+  Src@{ img: "/icons/fork.svg", label: "Source project", w: 48, h: 48, constraint: "on" }
+  Tgt@{ img: "/icons/repository.svg", label: "Target project", w: 48, h: 48, constraint: "on" }
+  Mode@{ img: "/icons/config.svg", label: "comment_strategy", w: 48, h: 48, constraint: "on" }
+  Note@{ img: "/icons/comment.svg", label: "MR comment", w: 48, h: 48, constraint: "on" }
+  Ok@{ img: "/icons/success.svg", label: "Commit status", w: 48, h: 48, constraint: "on" }
+  None@{ img: "/icons/stop.svg", label: "Nothing posted", w: 48, h: 48, constraint: "on" }
+  Run --> Src
+  Src srcok@-->|allowed| Ok
+  Src srcno@-->|denied| Tgt
+  Tgt tgtok@-->|allowed| Ok
+  Tgt tgtno@-->|denied| Mode
+  Mode post@-->|default| Note
+  Mode off@-->|disable_all| None
+
+%% play: Branch in the same project
+%% skip Tgt Mode Note None
+%% Run -> Src : status | The token can write to the project, so the status lands there
+%% Src -> Ok @srcok | and shows in the Pipelines tab of the merge request
+%% play: Fork with a project token
+%% skip None
+%% Run -> Src : status
+%% Src -> Tgt @srcno : denied | The token cannot write to the fork, so the controller tries the upstream project
+%% Tgt -> Mode @tgtno : denied | That often fails too when the upstream has no pipeline for the commit
+%% Mode -> Note @post : comment | The status is posted as a merge request comment instead
+%% play: Comments disabled
+%% skip Ok Note
+%% Run -> Src : status
+%% Src -> Tgt @srcno
+%% Tgt -> Mode @tgtno
+%% Mode -> None @off | With comment_strategy set to disable_all, nothing is posted
+```
+
 **Visual Example:**
 
 Status checks appear in GitLab's "Pipelines" tab:
@@ -375,6 +412,60 @@ When both global and repository settings are present, the repository-level value
 3. The old token is revoked and a new token (valid for 30 days) is returned.
 4. The new token is written back to the Kubernetes Secret referenced directly in the Repository CR.
 5. A Kubernetes event (`GitLabTokenRotated`) is emitted on the Repository CR.
+
+```mermaid
+flowchart LR
+%% title: How Pipelines-as-Code decides whether to rotate a GitLab token
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Cache@{ img: "/icons/cache.svg", label: "Introspection cache", w: 48, h: 48, constraint: "on" }
+  GL@{ img: "/icons/api.svg", label: "GitLab API", w: 48, h: 48, constraint: "on" }
+  Dry@{ img: "/icons/inspect.svg", label: "Dry-run update", w: 48, h: 48, constraint: "on" }
+  Rot@{ img: "/icons/token.svg", label: "Rotate token", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Repository secret", w: 48, h: 48, constraint: "on" }
+  Go@{ img: "/icons/success.svg", label: "Event processed", w: 48, h: 48, constraint: "on" }
+  No@{ img: "/icons/refuse.svg", label: "Event rejected", w: 48, h: 48, constraint: "on" }
+  Ev --> Cache
+  Cache fresh@-->|fresh| Go
+  Cache stale@-->|stale| GL
+  GL far@-->|over 7 days| Go
+  GL near@-->|within 7 days| Dry
+  Dry ro@-->|cannot write| Go
+  Dry --> Rot --> Sec
+  Sec ok@-->|updated| Go
+  Sec bad@-->|update failed| No
+
+%% play: Token still valid
+%% skip Dry Rot Sec No
+%% Ev -> Cache | With token_auto_rotation on, the controller first looks at its cache for this repository
+%% Cache -> GL @stale : introspect | Nothing cached in the last hour, so it asks GitLab when the token expires
+%% GL -> Go @far | More than 7 days left, nothing to do
+%% play: Cached
+%% skip GL Dry Rot Sec No
+%% Ev -> Cache
+%% Cache -> Go @fresh | A result less than an hour old for the same token skips the API call
+%% play: Rotation
+%% skip No
+%% Ev -> Cache
+%% Cache -> GL @stale : introspect
+%% GL -> Dry @near : expiring | The token expires within 7 days
+%% Dry -> Rot | The controller checks it can write the Secret before touching the token
+%% Rot -> Sec : new token | GitLab revokes the old token and returns one valid for 30 days
+%% Sec -> Go @ok : GitLabTokenRotated | The Secret is updated and an event is emitted on the Repository CR
+%% play: Secret not writable
+%% skip Rot Sec No
+%% Ev -> Cache
+%% Cache -> GL @stale
+%% GL -> Dry @near
+%% Dry -> Go @ro | Without write access to the Secret, rotation is skipped and the old token keeps working
+%% play: Secret update fails
+%% skip Go
+%% Ev -> Cache
+%% Cache -> GL @stale
+%% GL -> Dry @near
+%% Dry -> Rot
+%% Rot -> Sec : new token
+%% Sec -> No @bad | The old token is already revoked, so this is logged as CRITICAL and the event is rejected
+```
 
 Token rotation is atomic: the old token is revoked the moment the new one is
 created. If the Kubernetes Secret update fails after rotation, the old token is

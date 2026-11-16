@@ -1,0 +1,14 @@
+{{- /*
+  Mermaid blocks are drawn and played by aniflow, see assets/js/aniflow-init.js.
+  "%% title: text" inside the fence labels the diagram for screen readers and
+  "%% autoplay" plays it once when it scrolls into view. aniflow replaces the
+  inner block, so the label sits on the wrapper that stays in the page.
+*/ -}}
+{{- $title := "Diagram" -}}
+{{- with findRESubmatch `(?m)^%%[ \t]*title:[ \t]*(.+?)[ \t]*$` .Inner 1 }}{{ $title = index (index . 0) 1 }}{{ end -}}
+<div class="aniflow-figure" role="group" aria-label="{{ $title }}">
+  <div class="highlight highlight-source-mermaid aniflow-block"
+    {{- if findRE `(?m)^%%[ \t]*autoplay[ \t]*$` .Inner 1 }} data-autoplay{{ end }}>
+    <pre>{{ .Inner | htmlEscape | safeHTML }}</pre>
+  </div>
+</div>

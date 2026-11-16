@@ -4,6 +4,42 @@ title: Pipelines-as-Code Release Process
 
 This page describes the steps to create a new Pipelines-as-Code release.
 
+```mermaid
+flowchart LR
+%% title: From a pushed tag to a published and announced release
+%% autoplay
+  Dev@{ img: "/icons/user.svg", label: "Maintainer", w: 48, h: 48, constraint: "on" }
+  Tag@{ img: "/icons/tag.svg", label: "v1.2.3", w: 48, h: 48, constraint: "on" }
+  GH@{ img: "/icons/repository.svg", label: "GitHub", w: 48, h: 48, constraint: "on" }
+  CI@{ img: "/icons/pipeline.svg", label: "release-pipeline", w: 48, h: 48, constraint: "on" }
+  Branches[Release branches]
+  Gorel@{ img: "/icons/build.svg", label: "goreleaser", w: 48, h: 48, constraint: "on" }
+  Img@{ img: "/icons/image.svg", label: "ghcr.io images", w: 48, h: 48, constraint: "on" }
+  Rel@{ img: "/icons/release.svg", label: "GitHub release", w: 48, h: 48, constraint: "on" }
+  Notes@{ img: "/icons/document.svg", label: "Release notes", w: 48, h: 48, constraint: "on" }
+  Ann@{ img: "/icons/notification.svg", label: "Announce", w: 48, h: 48, constraint: "on" }
+  Dev --> Tag --> GH
+  GH -->|push event| CI
+  GH -->|Actions| Img
+  CI --> Branches --> Gorel -->|pre-release| Rel
+  Dev --> Notes --> Rel --> Ann
+
+%% play: Build the release
+%% skip Notes Ann
+%% Dev -> Tag | Tag the release locally
+%% Tag -> GH : push | and push the tag to tektoncd/pipelines-as-code
+%% GH -> CI, Img | PAC runs release-pipeline on the CI cluster while GitHub Actions builds the images with ko
+%% CI -> Branches : release.yaml | release.yaml is generated and pushed to release-v1.2.3, release-v1.2.x and stable when it is the newest
+%% wait 1000 | goreleaser takes a while
+%% Branches -> Gorel
+%% Gorel -> Rel : v1.2.3 | Binaries and the release YAML land on a GitHub pre-release
+%% play: Publish the release
+%% skip Tag GH CI Branches Gorel Img
+%% Dev -> Notes : /release-notes | Draft the notes from the merged pull requests and review them
+%% Notes -> Rel | Update the GitHub release
+%% Rel -> Ann : Slack | Announce it on Slack and social media
+```
+
 ## Prerequisites
 
 * Clear out any PRs that need to be merged.

@@ -116,6 +116,39 @@ When Pipelines-as-Code creates a PipelineRun, it sets the `tekton.dev/pipelineru
 
 If Tekton Pipelines is also configured with tracing pointing at the same collector, its reconciler spans appear as children of the PaC span, providing a single end-to-end trace from webhook receipt through task execution. See the [Tekton Pipelines tracing documentation](https://github.com/tektoncd/pipeline/blob/main/docs/developers/tracing.md) for Tekton's independent tracing setup.
 
+```mermaid
+flowchart LR
+%% title: How one trace follows an event from webhook to finished PipelineRun
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Tek@{ img: "/icons/operator.svg", label: "Tekton", w: 48, h: 48, constraint: "on" }
+  W@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Col@{ img: "/icons/metrics.svg", label: "Collector", w: 48, h: 48, constraint: "on" }
+  Git -->|webhook| Ctrl -->|annotation| Run
+  Run --> Tek
+  Run --> W
+  Ctrl -->|span| Col
+  Tek -->|spans| Col
+  W -->|spans| Col
+
+%% play: End-to-end trace
+%% Git -> Ctrl : traceparent | An inbound traceparent header makes the controller span part of the caller's trace
+%% Ctrl -> Col : ProcessEvent
+%% Ctrl -> Run : span context | The span context is stored in the tekton.dev/pipelinerunSpanContext annotation
+%% Run -> Tek | Tekton, when it traces to the same collector, adds its spans as children
+%% Tek -> Col : child spans
+%% Run -> W : finished | The watcher reads the same annotation once the run completes
+%% W -> Col : timing spans
+%% play: Pipelines-as-Code only
+%% skip Tek
+%% Git -> Ctrl : webhook
+%% Ctrl -> Col : ProcessEvent
+%% Ctrl -> Run : span context
+%% Run -> W : finished
+%% W -> Col : timing spans | The timing spans hang under the controller span even without Tekton tracing
+```
+
 ## Deploying a trace collector
 
 Pipelines-as-Code exports traces using the standard OpenTelemetry Protocol (OTLP). You need a running OTLP-compatible collector for `OTEL_EXPORTER_OTLP_ENDPOINT` to point to. Common options include:

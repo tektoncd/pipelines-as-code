@@ -1,3 +1,10 @@
 {{- with partial "markdown/url.html" (dict "page" . "absolute" true) }}
   <link rel="alternate" type="text/markdown" href="{{ . }}" title="Markdown version" />
 {{- end }}
+{{- if strings.Contains .RawContent "```mermaid" }}
+  {{- $base := "aniflow/" | relURL }}
+  {{- $init := resources.Get "js/aniflow-init.js" | minify | fingerprint }}
+  <link rel="stylesheet" href="{{ "aniflow/aniflow-diagrams.css" | relURL }}" />
+  <script defer src="{{ "aniflow/aniflow.min.js" | relURL }}"></script>
+  <script defer src="{{ $init.RelPermalink }}" integrity="{{ $init.Data.Integrity }}" data-base="{{ $base }}" data-mermaid="{{ site.Params.aniflow.mermaid }}"></script>
+{{- end }}

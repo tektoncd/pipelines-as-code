@@ -46,6 +46,53 @@ metadata:
       runs.build.status == "Succeeded" && runs.tests.status == "Succeeded"
 ```
 
+```mermaid
+flowchart LR
+%% title: How a follow-up waits on its dependencies and decides to run
+%% autoplay
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Build@{ img: "/icons/build.svg", label: "build", w: 48, h: 48, constraint: "on" }
+  Tests@{ img: "/icons/test.svg", label: "tests", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Cond@{ img: "/icons/decision.svg", label: "Condition", w: 48, h: 48, constraint: "on" }
+  Deploy@{ img: "/icons/deploy.svg", label: "deploy", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Not run", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Ev --> Ctrl
+  Ctrl --> Build
+  Ctrl --> Tests
+  Ctrl skip@-->|skipped| Git
+  Build --> Watch
+  Tests --> Watch
+  Watch --> Cond
+  Cond yes@-->|true| Deploy
+  Cond no@-->|false| Drop
+  Deploy --> Git
+
+%% play: Both succeed
+%% skip Drop
+%% Ev -> Ctrl : PR #42
+%% Ctrl -> Build, Tests | build and tests start, deploy is stored on them and waits
+%% Build, Tests -> Watch : Succeeded
+%% wait 1200 | The watcher evaluates the follow-up only once every run it waits on has finished
+%% Watch -> Cond : runs | The definition is read again at the commit of the event and its condition evaluated
+%% Cond -> Deploy @yes : digest | Results of build and tests are passed through spec.params
+%% Deploy -> Git : status
+%% play: Condition false
+%% skip Deploy
+%% Ev -> Ctrl : PR #43
+%% Ctrl -> Build, Tests
+%% Build, Tests -> Watch : Failed
+%% Watch -> Cond : runs
+%% Cond -> Drop @no | The condition is false, so nothing runs and nothing is reported
+%% play: Dependency did not match
+%% skip Tests Watch Cond Deploy Drop
+%% Ev -> Ctrl : PR #44
+%% Ctrl -> Build | Only build matches this event, tests targets another branch
+%% Ctrl -> Git @skip : skipped | The follow-up can never have all its dependencies, so it is reported as skipped right away
+```
+
 A few rules:
 
 - Use the `metadata.name` of a definition to refer to it, or its `generateName` with the trailing dash, for example `"build-"`.
