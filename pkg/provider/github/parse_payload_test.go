@@ -609,6 +609,7 @@ func TestParsePayLoad(t *testing.T) {
 		targetPipelinerun          string
 		targetCancelPipelinerun    string
 		wantedBranchName           string
+		wantedDefaultBranch        string
 		wantedHeadBranch           string
 		wantedHeadURL              string
 		wantedSender               string
@@ -770,6 +771,7 @@ func TestParsePayLoad(t *testing.T) {
 			shaRet:         "headSHACheckSuite",
 			wantedSender:   "maintainer",
 			wantedUserType: "User",
+			triggerTarget:  "push",
 		},
 		{
 			name:          "good/rerequest check_run null head_branch resolves PR from SHA",
@@ -1441,10 +1443,11 @@ func TestParsePayLoad(t *testing.T) {
 					Body:     new("/retest dummy"),
 				},
 			},
-			muxReplies:        map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
-			shaRet:            "samplePRsha",
-			targetPipelinerun: "dummy",
-			wantedBranchName:  "main",
+			muxReplies:          map[string]any{"/repos/owner/reponame/pulls/777": samplePR},
+			shaRet:              "samplePRsha",
+			targetPipelinerun:   "dummy",
+			wantedBranchName:    "main",
+			wantedDefaultBranch: "main",
 		},
 		{
 			name:          "good/commit comment for retest a pr with prefix",
@@ -2042,6 +2045,9 @@ func TestParsePayLoad(t *testing.T) {
 			}
 			if tt.wantedHeadURL != "" {
 				assert.Equal(t, tt.wantedHeadURL, ret.HeadURL)
+			}
+			if tt.wantedDefaultBranch != "" {
+				assert.Equal(t, tt.wantedDefaultBranch, ret.DefaultBranch)
 			}
 			if tt.wantedSender != "" {
 				assert.Equal(t, tt.wantedSender, ret.Sender)
