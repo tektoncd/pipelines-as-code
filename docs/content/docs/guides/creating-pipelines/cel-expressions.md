@@ -68,6 +68,38 @@ The `cel:` prefix provides access to:
 - `files` - Changed files information (`files.all`, `files.added`, `files.deleted`, `files.modified`, `files.renamed`)
 - `pac` - Standard Pipelines-as-Code parameters (`pac.revision`, `pac.target_branch`, `pac.source_branch`, etc.)
 
+```mermaid
+flowchart LR
+%% title: How a cel: expression is turned into a parameter value
+  Body@{ img: "/icons/webhook.svg", label: "body", w: 48, h: 48, constraint: "on" }
+  Head@{ img: "/icons/document.svg", label: "headers", w: 48, h: 48, constraint: "on" }
+  Files@{ img: "/icons/folder.svg", label: "files", w: 48, h: 48, constraint: "on" }
+  Pac@{ img: "/icons/config.svg", label: "pac", w: 48, h: 48, constraint: "on" }
+  Cel@{ img: "/icons/code.svg", label: "cel: expression", w: 48, h: 48, constraint: "on" }
+  Val@{ img: "/icons/success.svg", label: "Value", w: 48, h: 48, constraint: "on" }
+  Empty@{ img: "/icons/stop.svg", label: "Empty string", w: 48, h: 48, constraint: "on" }
+  Body --> Cel
+  Head --> Cel
+  Files --> Cel
+  Pac --> Cel
+  Cel ok@-->|evaluates| Val
+  Cel bad@-->|error| Empty
+
+%% play: Branch to environment
+%% skip Body Head Files Empty
+%% Pac -> Cel : main | pac.target_branch == "main" ? "production" : "staging"
+%% Cel -> Val @ok : production
+%% play: Go files changed
+%% skip Body Head Pac Empty
+%% Files -> Cel : files.all | files.all.exists(f, f.endsWith(".go"))
+%% Cel -> Val @ok : "true"
+%% play: Broken expression
+%% skip Head Files Pac Val
+%% Body -> Cel : payload | An expression that does not compile or fails to evaluate
+%% wait 800
+%% Cel -> Empty @bad : "" | The parameter gets an empty string and the PipelineRun still runs
+```
+
 The following examples demonstrate common patterns.
 
 ## Examples

@@ -246,6 +246,52 @@ is not present.
 Make sure the same secret value is configured in your Bitbucket Cloud webhook
 settings under **Repository settings → Workflow → Webhooks → Edit → Secret**.
 
+The `bitbucket-cloud-check-source-ip` setting picks which check runs:
+
+```mermaid
+flowchart LR
+%% title: How the controller checks a Bitbucket Cloud webhook
+%% autoplay
+  BB@{ img: "/icons/repository.svg", label: "Bitbucket Cloud", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  IPs@{ img: "/icons/network.svg", label: "Allowed IP ranges", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Repository secret", w: 48, h: 48, constraint: "on" }
+  Sig@{ img: "/icons/shield.svg", label: "Signature", w: 48, h: 48, constraint: "on" }
+  Ok@{ img: "/icons/success.svg", label: "Processed", w: 48, h: 48, constraint: "on" }
+  No@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  BB -->|webhook| Ctrl
+  Ctrl ipon@-->|check on| IPs
+  IPs inrange@-->|in range| Ok
+  IPs outrange@-->|unknown IP| No
+  Ctrl ipoff@-->|check off| Sec
+  Sec --> Sig
+  Sig sigok@-->|valid| Ok
+  Sig sigbad@-->|missing or wrong| No
+
+%% play: IP check on
+%% skip Sec Sig No
+%% BB -> Ctrl : event
+%% Ctrl -> IPs @ipon : source IP | The last address in X-Forwarded-For is compared with ip-ranges.atlassian.com and bitbucket-cloud-additional-source-ip
+%% IPs -> Ok @inrange | This is the default, and the signature is not checked at all
+%% play: Unknown IP
+%% skip Sec Sig Ok
+%% BB -> Ctrl : event
+%% Ctrl -> IPs @ipon : source IP
+%% IPs -> No @outrange | A request from outside those ranges is refused
+%% play: IP check off
+%% skip IPs No
+%% BB -> Ctrl : event
+%% Ctrl -> Sec @ipoff | With the IP check turned off, the webhook secret from the Repository secret is required
+%% Sec -> Sig : HMAC | X-Hub-Signature-256 is checked, or X-Hub-Signature when it is missing
+%% Sig -> Ok @sigok
+%% play: No signature
+%% skip IPs Ok
+%% BB -> Ctrl : event
+%% Ctrl -> Sec @ipoff
+%% Sec -> Sig
+%% Sig -> No @sigbad | No signature header or an empty webhook secret is refused
+```
+
 ## Add Webhook Secret
 
 If the webhook secret for an existing Repository CR has been deleted, or you want to add a new webhook to your project settings, use the `tkn pac webhook add` command. This command adds a webhook to the project repository settings and updates the `webhook.secret` key in the existing secret without modifying the Repository CR.

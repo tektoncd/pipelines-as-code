@@ -161,6 +161,41 @@ spec:
       # key: "webhook.secret"
 ```
 
+With the secret and the Repository CR in place, every event uses your personal access token:
+
+```mermaid
+sequenceDiagram
+%% title: How a GitHub webhook event uses the token from the Repository secret
+%% autoplay
+  participant GH as GitHub
+  participant Ctrl as Controller
+  participant Sec as github-webhook-config
+  participant Run as PipelineRun
+  participant W as Watcher
+  GH->>Ctrl: webhook
+  Ctrl->>Ctrl: find Repository CR
+  Ctrl->>Sec: read provider.token and webhook.secret
+  Ctrl->>Ctrl: verify signature
+  Ctrl->>GH: check token expiry
+  Ctrl->>Run: create
+  Ctrl->>GH: commit status pending
+  Run->>W: finished
+  W->>GH: commit status
+  W->>GH: comment on the pull request
+
+%% play: Pull request
+%% GH -> Ctrl : event | GitHub sends the event, signed with the secret you set on the webhook
+%% Ctrl -> Ctrl | The controller finds the Repository CR that matches the URL
+%% Ctrl -> Sec | and reads the token and the webhook secret from the secret it references
+%% Ctrl -> Ctrl : HMAC | A payload without a valid signature is refused
+%% Ctrl -> GH : token | An expired personal access token stops the event here
+%% Ctrl -> Run
+%% Ctrl -> GH : pending | Without the Checks API, status goes through the commit status API
+%% Run -> W
+%% W -> GH : success
+%% W -> GH : comment | and a summary is posted as a comment on the pull request
+```
+
 ## Notes
 
 - Pipelines-as-Code always assumes that the secret is in the same namespace where the Repository CR has been created.

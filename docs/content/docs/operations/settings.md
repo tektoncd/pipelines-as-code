@@ -43,6 +43,44 @@ A non-empty list is authoritative for every hostname, public ones included, and
 the controller stops learning hosts. Listing only your own instance is how you
 say "this controller must never talk to a public SaaS instance".
 
+```mermaid
+flowchart LR
+%% title: How the controller decides to trust a provider hostname
+  Req@{ img: "/icons/webhook.svg", label: "Request", w: 48, h: 48, constraint: "on" }
+  List@{ img: "/icons/policy.svg", label: "Allowlist", w: 48, h: 48, constraint: "on" }
+  Known@{ img: "/icons/search.svg", label: "Public or learned?", w: 48, h: 48, constraint: "on" }
+  Learn@{ img: "/icons/audit.svg", label: "Record host", w: 48, h: 48, constraint: "on" }
+  Send@{ img: "/icons/key.svg", label: "Send credentials", w: 48, h: 48, constraint: "on" }
+  Stop@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  Req --> List
+  List listed@-->|listed| Send
+  List unlisted@-->|not listed| Stop
+  List empty@-->|empty| Known
+  Known yes@-->|yes| Send
+  Known signed@-->|new, signed| Learn --> Send
+  Known unsigned@-->|new, unsigned| Stop
+
+%% play: Default install
+%% skip Stop
+%% Req -> List : ghe.example.com | The key is empty, so the controller manages trust itself
+%% List -> Known @empty
+%% Known -> Learn @signed | The provider signed this request, so the hostname is added to the annotation
+%% Learn -> Send : token
+%% play: Self-hosted allowlist
+%% skip Known Learn Stop
+%% Req -> List : ghe.example.com
+%% List -> Send @listed : token | The hostname is in trusted-provider-hostnames
+%% play: Public host not listed
+%% skip Known Learn Send
+%% Req -> List : github.com
+%% List -> Stop @unlisted | A non-empty list is authoritative, so even github.com is refused
+%% play: Incoming webhook
+%% skip Learn Send
+%% Req -> List : ghe.example.com
+%% List -> Known @empty
+%% Known -> Stop @unsigned | An incoming webhook carries no provider signature, so the host is not learned
+```
+
 That automatic trust only covers requests the provider signed:
 [incoming webhooks]({{< relref "/docs/advanced/incoming-webhooks.md" >}}) carry
 no provider signature and fail until the hostname is trusted. Set the key

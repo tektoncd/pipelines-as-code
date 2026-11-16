@@ -12,6 +12,46 @@ Pipelines-as-Code follows a two-tier inheritance model for Repository CR setting
 
 This means you can set organization-wide defaults in the global Repository CR and let individual teams override only the settings they need.
 
+```mermaid
+flowchart LR
+%% title: How the global Repository CR fills in a namespace Repository CR
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Local@{ img: "/icons/config.svg", label: "Repository CR", w: 48, h: 48, constraint: "on" }
+  Global@{ img: "/icons/config.svg", label: "Global CR", w: 48, h: 48, constraint: "on" }
+  Merge@{ img: "/icons/merge.svg", label: "Fill empty fields", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Sec@{ img: "/icons/secret.svg", label: "Global secret", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Stop@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  Ev -->|matches| Local --> Merge
+  Global -->|defaults| Merge
+  Merge --> Run
+  Merge same@-->|same type| Sec --> Git
+  Merge other@-->|own url| Stop
+
+%% play: Defaults filled in
+%% skip Sec Git Stop
+%% Ev -> Local : event | The event matches a Repository CR in user-namespace
+%% Local, Global -> Merge | Only fields left empty in the Repository CR take the global value
+%% Merge -> Run : limit 2 | The local concurrency_limit of 2 wins, and the global custom params fill the gap
+%% play: Shared provider secret
+%% skip Run Stop
+%% Ev -> Local : gitlab
+%% Local, Global -> Merge | Both set git_provider.type to gitlab, so the provider settings merge
+%% Merge -> Sec @same : token | The secret is read from the namespace of the global Repository
+%% Sec -> Git : token
+%% play: Different provider type
+%% skip Sec Git Stop
+%% Ev -> Local : github
+%% Local, Global -> Merge | The types differ, so git_provider is not merged at all
+%% Merge -> Run | Other settings still merge, and the Repository CR needs its own provider secret
+%% play: Own provider URL
+%% skip Run Sec Git
+%% Ev -> Local : event
+%% Local, Global -> Merge | The Repository CR sets its own git_provider.url but no secret
+%% Merge -> Stop @other | A credential from the controller namespace is never sent to another endpoint
+```
+
 ## Creating the Global Repository CR
 
 Create the global Repository CR in the namespace where the `pipelines-as-code` controller runs (typically `pipelines-as-code` or `openshift-pipelines`).

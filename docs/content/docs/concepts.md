@@ -11,18 +11,49 @@ Pipelines-as-Code consists of three main components that work together to provid
 
 ```mermaid
 flowchart LR
-  GP[Git Provider]
-  WH[Webhook]
-  CTRL[Controller]
-  WATCH[Watcher]
-  REPO[Repository CR]
-  PR[PipelineRun]
-  GP -->|webhook events| CTRL
-  WH -->|validates| REPO
-  CTRL -->|matches & reads| REPO
-  CTRL -->|creates| PR
-  PR -->|status updates| WATCH
-  WATCH -->|reports back| GP
+%% title: How an event becomes a PipelineRun
+%% autoplay
+  Dev@{ img: "/icons/user.svg", label: "Developer", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Repo@{ img: "/icons/config.svg", label: "Repository CR", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Admin@{ img: "/icons/users.svg", label: "Admin", w: 48, h: 48, constraint: "on" }
+  Hook@{ img: "/icons/shield.svg", label: "Admission webhook", w: 48, h: 48, constraint: "on" }
+  Dev --> Git
+  Git event@-->|webhook| Ctrl
+  Ctrl -->|finds| Repo
+  Ctrl -->|creates| Run
+  Ctrl status@-->|started| Git
+  Run -->|status| Watch
+  Watch -->|reports| Git
+  Admin --> Hook -->|validates| Repo
+
+%% play: Pull request
+%% skip Admin Hook
+%% Dev -> Git : PR #42 | A developer opens a pull request
+%% Git -> Ctrl @event : event | The Git provider sends a webhook to the controller
+%% Ctrl -> Repo | The controller finds the Repository CR whose URL matches the repository
+%% Ctrl -> Run : .tekton/ | Matching pipelines from .tekton/ become PipelineRuns in that namespace
+%% Ctrl -> Git @status : running
+%% Run -> Watch | The watcher follows the PipelineRun until it finishes
+%% Watch -> Git : success | and reports the result back on the pull request
+%% play: Queued run
+%% skip Admin Hook
+%% Dev -> Git : push
+%% Git -> Ctrl @event : event
+%% Ctrl -> Repo
+%% Ctrl -> Run : pending | The repository already runs as many PipelineRuns as its concurrency limit allows
+%% Ctrl -> Git @status : queued
+%% wait 1200 | The new PipelineRun waits in the queue
+%% Watch -> Run : start | A slot frees up and the watcher starts it
+%% Run -> Watch : done
+%% Watch -> Git : success
+%% play: Repository setup
+%% skip Dev Git Ctrl Run Watch
+%% Admin -> Hook : Repository | You apply a Repository CR in the namespace where PipelineRuns should run
+%% Hook -> Repo : url | The admission webhook refuses it when another Repository already claims the same URL
 ```
 
 ### Controller
@@ -151,6 +182,52 @@ You cannot create a Repository CR in the same namespace where Pipelines-as-Code 
 ## Event flow
 
 Understanding how events flow through Pipelines-as-Code helps you troubleshoot issues and optimize your pipelines. The following steps describe the full lifecycle from a Git event to a completed PipelineRun.
+
+```mermaid
+flowchart LR
+%% title: What the controller does with an event
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Find@{ img: "/icons/search.svg", label: "Find Repository", w: 48, h: 48, constraint: "on" }
+  ACL@{ img: "/icons/policy.svg", label: "Sender allowed?", w: 48, h: 48, constraint: "on" }
+  Fetch[Fetch .tekton/]
+  Match@{ img: "/icons/filter.svg", label: "Match", w: 48, h: 48, constraint: "on" }
+  Resolve[Resolve tasks]
+  Create@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Approve@{ img: "/icons/wait.svg", label: "Pending approval", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Ignored", w: 48, h: 48, constraint: "on" }
+  Ev --> Find
+  Find found@-->|found| ACL
+  Find none@-->|none| Drop
+  ACL yes@-->|yes| Fetch --> Match
+  ACL no@-->|no| Approve
+  Match hit@-->|match| Resolve --> Create
+  Match miss@-->|no match| Drop
+
+%% play: Allowed author
+%% skip Approve Drop
+%% Ev -> Find : PR #42
+%% Find -> ACL @found
+%% ACL -> Fetch @yes | The author is an owner, a collaborator or listed in OWNERS
+%% Fetch -> Match : YAML | Templates are read from .tekton/ and their variables filled in
+%% Match -> Resolve @hit | The on-event, on-target-branch, path and CEL annotations pick the PipelineRuns to start
+%% Resolve -> Create | Remote tasks and pipelines are fetched and inlined
+%% play: Outside contributor
+%% skip Fetch Match Resolve Create Drop
+%% Ev -> Find : PR #43
+%% Find -> ACL @found
+%% ACL -> Approve @no : pending | Nothing runs until someone allowed comments /ok-to-test
+%% play: Nothing matches
+%% skip Approve Resolve Create
+%% Ev -> Find : push
+%% Find -> ACL @found
+%% ACL -> Fetch @yes
+%% Fetch -> Match
+%% Match -> Drop @miss | No PipelineRun in .tekton/ matches this event, so nothing starts
+%% play: Unknown repository
+%% skip ACL Fetch Match Resolve Create Approve
+%% Ev -> Find : event
+%% Find -> Drop @none | No Repository CR has this URL, so the event is ignored
+```
 
 ### 1. Git event occurs
 

@@ -48,3 +48,42 @@ In this example:
 * Members of the `ci-admins` team can authorize other users to run the CI on
   pull requests.
 * Members of the `ci-users` team can run CI on their own pull requests.
+
+```mermaid
+flowchart LR
+%% title: How the pull_request and ok_to_test policies decide who can run CI
+%% autoplay
+  Ev@{ img: "/icons/event.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  PRT@{ img: "/icons/users.svg", label: "pull_request teams", w: 48, h: 48, constraint: "on" }
+  OKT@{ img: "/icons/users.svg", label: "ok_to_test teams", w: 48, h: 48, constraint: "on" }
+  Own@{ img: "/icons/document.svg", label: "OWNERS file", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Ref@{ img: "/icons/refuse.svg", label: "Refused", w: 48, h: 48, constraint: "on" }
+  Ev -->|/ok-to-test| OKT
+  Ev -->|pull request| PRT
+  OKT -->|member| Run
+  PRT -->|member| Run
+  OKT -->|not a member| Own
+  PRT -->|not a member| Own
+  Own -->|listed| Run
+  Own -->|not listed| Ref
+
+%% play: Team member
+%% Ev -> PRT : pull request | A member of ci-users opens a pull request
+%% PRT -> Run : member | Team members run CI on their own pull requests
+%% play: Owner outside the team
+%% Ev -> PRT : pull request | A repository owner who is not in ci-users opens a pull request
+%% PRT -> Own : not a member | Being an owner or collaborator is not enough once a policy is set
+%% Own -> Ref : not listed | Nothing runs and the pull request waits for approval
+%% play: OWNERS entry
+%% Ev -> PRT : pull request | A contributor outside ci-users opens a pull request
+%% PRT -> Own : not a member
+%% Own -> Run : listed | Users listed in the OWNERS file can still run CI
+%% play: Approval
+%% Ev -> OKT : /ok-to-test | A ci-admins member comments /ok-to-test on an outside contributor's pull request
+%% OKT -> Run : member | The ok_to_test teams decide, so the PipelineRuns start
+%% play: Approval refused
+%% Ev -> OKT : /ok-to-test | A ci-users member comments /ok-to-test
+%% OKT -> Own : not a member | The pull_request teams do not count for approvals
+%% Own -> Ref : not listed | Nothing runs and the pull request stays pending
+```

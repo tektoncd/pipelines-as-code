@@ -1047,3 +1047,67 @@ body {
     var(--primary-hue) var(--primary-saturation) var(--primary-lightness)
   );
 }
+
+/* ── aniflow diagrams: Hextra palette for its Primer variables ─── */
+:root {
+  --bgColor-default: #ffffff;
+  --bgColor-muted: #f6f8fa;
+  --fgColor-default: #1f2937;
+  --fgColor-muted: #6b7280;
+  --fgColor-accent: #327f99;
+  --fgColor-success: #1a7f37;
+  --fgColor-danger: #cf222e;
+  --fgColor-attention: #9a6700;
+  --borderColor-default: #d1d5db;
+  --borderColor-muted: #e5e7eb;
+}
+
+:is(html[class~="dark"]) {
+  --bgColor-default: #111111;
+  --bgColor-muted: #1a1d21;
+  --fgColor-default: #e5e7eb;
+  --fgColor-muted: #9ca3af;
+  --fgColor-accent: #7ab5c9;
+  --fgColor-success: #3fb950;
+  --fgColor-danger: #f85149;
+  --fgColor-attention: #d29922;
+  --borderColor-default: #3f4651;
+  --borderColor-muted: #2a2f36;
+}
+
+/* The source stays readable until aniflow replaces it with the drawing. */
+.content .aniflow-block {
+  margin: 1.5rem 0;
+  border: 1px solid var(--borderColor-muted);
+  border-radius: 12px;
+  background: var(--bgColor-muted);
+}
+
+.content .aniflow-block pre {
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.content .mermaid-diagram {
+  margin: 1.5rem 0;
+  padding: 20px 16px;
+  border: 1px solid var(--borderColor-muted);
+  border-radius: 12px;
+  background: var(--bgColor-muted);
+}
+
+.content .mermaid-diagram .diagram-tools {
+  top: -14px;
+  right: -10px;
+}
+
+@media (hover: hover) {
+  .content .mermaid-diagram:has(.diagram-play) {
+    padding-top: 40px;
+  }
+
+  .content .mermaid-diagram:has(.diagram-play) .diagram-tools {
+    top: -37px;
+    right: -8px;
+  }
+}

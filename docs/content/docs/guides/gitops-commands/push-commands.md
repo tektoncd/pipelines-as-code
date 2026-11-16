@@ -38,6 +38,50 @@ In practice, this means:
    3. `/retest <pipelinerun-name> branch:test`
    4. `/test <pipelinerun-name> branch:test`
 
+```mermaid
+flowchart LR
+%% title: How a GitOps comment on a pushed commit picks the branch and runs push PipelineRuns
+  Dev@{ img: "/icons/comment.svg", label: "Commit comment", w: 48, h: 48, constraint: "on" }
+  Br[Branch or tag?]
+  Def[Default branch]
+  Named[Named branch]
+  Tag[Tag]
+  Head[Head of the branch?]
+  ACL@{ img: "/icons/policy.svg", label: "Access check", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "Push PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Err[Error]
+  Dev --> Br
+  Br -->|none| Def --> Head
+  Br -->|branch:| Named --> Head
+  Br -->|tag:| Tag --> ACL
+  Head -->|yes| ACL
+  Head -->|no| Err
+  ACL --> Run
+
+%% play: No branch
+%% Dev -> Br : /retest | A maintainer comments /retest on a commit
+%% Br -> Def | Without a branch, the default branch is used
+%% Def -> Head
+%% Head -> ACL : yes | The commit must be the latest commit of that branch
+%% ACL -> Run | Push PipelineRuns matching the default branch run again
+%% play: Named branch
+%% Dev -> Br : /test test-pr branch:test
+%% Br -> Named | branch:test uses the test branch instead
+%% Named -> Head
+%% Head -> ACL : yes
+%% ACL -> Run | test-pr runs in the context of the test branch
+%% play: Tag
+%% Dev -> Br : /retest tag:v1.0.0
+%% Br -> Tag | On GitHub, tag: runs the PipelineRuns for that tag
+%% Tag -> ACL : same SHA | The commented commit must be the one the tag points to
+%% ACL -> Run
+%% play: Older commit
+%% Dev -> Br : /retest
+%% Br -> Def
+%% Def -> Head
+%% Head -> Err : no | Commenting on an older commit of the branch fails and nothing runs
+```
+
 The `/ok-to-test` command does not work on pushed commits. It exists specifically for pull requests, where it authorizes CI for external contributors. Since only authorized users can issue GitOps commands on pushed commits, no separate authorization step is needed.
 
 For example, when you execute a GitOps command like `/test test-pr branch:test` on a pushed commit, verify that `test-pr` exists on the test branch in your repository and includes the `on-event` and `on-target-branch` annotations as shown below:

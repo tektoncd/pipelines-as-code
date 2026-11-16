@@ -7,16 +7,54 @@ Event matching is the mechanism Pipelines-as-Code uses to decide which PipelineR
 
 ```mermaid
 flowchart LR
-  subgraph event [Incoming]
-    E[push / pull_request / tag]
-  end
-  subgraph match [Matching]
-    M[Check annotations\non-event, on-target-branch\npath, CEL, labels]
-  end
-  subgraph run [Result]
-    R[Run matching\nPipelineRuns]
-  end
-  event --> match --> run
+%% title: How an event is matched to the PipelineRuns in .tekton/
+%% autoplay
+  Ev@{ img: "/icons/webhook.svg", label: "Event", w: 48, h: 48, constraint: "on" }
+  Tek@{ img: "/icons/folder.svg", label: ".tekton/", w: 48, h: 48, constraint: "on" }
+  Com@{ img: "/icons/comment.svg", label: "on-comment", w: 48, h: 48, constraint: "on" }
+  Cel@{ img: "/icons/code.svg", label: "CEL", w: 48, h: 48, constraint: "on" }
+  Ann@{ img: "/icons/filter.svg", label: "Event and branch", w: 48, h: 48, constraint: "on" }
+  Extra[Paths and labels]
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Drop@{ img: "/icons/stop.svg", label: "Not started", w: 48, h: 48, constraint: "on" }
+  Ev --> Tek
+  Tek --> Com
+  Tek --> Cel
+  Tek --> Ann
+  Ann hit@-->|match| Extra
+  Ann miss@-->|no match| Drop
+  Extra --> Run
+  Cel celok@-->|true| Run
+  Cel celno@-->|false| Drop
+  Com --> Run
+
+%% play: Pull request
+%% skip Com Cel Drop
+%% Ev -> Tek : PR to main | A pull request targeting main arrives
+%% Tek -> Ann | Each PipelineRun is checked against its on-event and on-target-branch annotations
+%% Ann -> Extra @hit : main
+%% Extra -> Run | Every PipelineRun that matches starts, in parallel
+%% play: Push
+%% skip Com Cel Drop
+%% Ev -> Tek : refs/heads/main | A commit is pushed to main
+%% Tek -> Ann | on-event: [push] and on-target-branch: [main] match the short or the full ref
+%% Ann -> Extra @hit
+%% Extra -> Run
+%% play: Comment
+%% skip Cel Ann Extra Drop
+%% Ev -> Tek : /merge-pr | Someone comments on a pull request
+%% Tek -> Com | Only the on-comment annotations are checked for a comment
+%% Com -> Run | The PipelineRun whose regex matches the comment starts
+%% play: CEL expression
+%% skip Com Ann Extra
+%% Ev -> Tek : PR to main
+%% Tek -> Cel | A PipelineRun with on-cel-expression ignores its other matching annotations
+%% Cel -> Run @celok
+%% play: No match
+%% skip Com Cel Extra Run
+%% Ev -> Tek : push to dev
+%% Tek -> Ann
+%% Ann -> Drop @miss | No PipelineRun targets dev, so nothing runs
 ```
 
 ## Matching by event and branch

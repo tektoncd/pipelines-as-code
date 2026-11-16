@@ -224,6 +224,49 @@ E2E tests require:
 
 Forgejo tests are the easiest to run locally because they’re self-contained.
 
+Each test drives a real pull request through the cluster and checks what PAC reports back:
+
+```mermaid
+flowchart LR
+%% title: What a Forgejo E2E test does, from creating a repository to cleaning up
+%% autoplay
+  Test@{ img: "/icons/test.svg", label: "Go test", w: 48, h: 48, constraint: "on" }
+  Forgejo@{ img: "/icons/repository.svg", label: "Forgejo", w: 48, h: 48, constraint: "on" }
+  Smee@{ img: "/icons/webhook.svg", label: "Smee and gosmee", w: 48, h: 48, constraint: "on" }
+  Kube@{ img: "/icons/namespace.svg", label: "Test namespace", w: 48, h: 48, constraint: "on" }
+  PAC@{ img: "/icons/controller.svg", label: "PAC", w: 48, h: 48, constraint: "on" }
+  Status@{ img: "/icons/check.svg", label: "Commit status", w: 48, h: 48, constraint: "on" }
+  Clean@{ img: "/icons/stop.svg", label: "Teardown", w: 48, h: 48, constraint: "on" }
+  Test setup@-->|repo, branch, PR| Forgejo
+  Test crd@-->|Repository CR| Kube
+  Forgejo -->|webhook| Smee --> PAC
+  PAC -->|PipelineRun| Kube
+  PAC -->|status| Status
+  Test poll@-->|poll| Status
+  Test done@--> Clean
+
+%% play: Passing test
+%% Test -> Forgejo @setup : repo | The test creates a Forgejo repository whose webhook points to TEST_GITEA_SMEEURL
+%% Test -> Kube @crd : Repository | then a namespace, a token secret and a Repository CR for it
+%% Test -> Forgejo @setup : PR | It pushes the .tekton/ files to a branch and opens a pull request
+%% Forgejo -> Smee : event
+%% Smee -> PAC | gosmee forwards the event to the controller
+%% PAC -> Kube : PipelineRun
+%% PAC -> Status : success
+%% Test -> Status @poll | WaitForStatus checks the commit statuses every five seconds
+%% Test -> Clean @done | The namespace and the Forgejo repository are deleted
+%% play: TEST_NOCLEANUP
+%% skip Clean
+%% Test -> Forgejo @setup : repo
+%% Test -> Kube @crd
+%% Test -> Forgejo @setup : PR
+%% Forgejo -> Smee
+%% Smee -> PAC
+%% PAC -> Kube : PipelineRun
+%% PAC -> Status : failure
+%% Test -> Status @poll | With TEST_NOCLEANUP=true the namespace, PipelineRuns and pull request stay for debugging
+```
+
 1
 
 Set up Forgejo with startpaac

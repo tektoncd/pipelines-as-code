@@ -125,6 +125,10 @@ The project uses several tools to maintain code quality:
 
 See [Development Setup]({{< relref "setup" >}}) for installation instructions.
 
+## Diagrams
+
+Diagrams in the docs are Mermaid fences that [aniflow](https://github.com/chmouel/aniflow) plays as animated walkthroughs. Run `aniflow --spec` for the syntax and follow the [aniflow-diagrams skill](https://github.com/chmouel/aniflow/tree/main/skills/aniflow-diagrams) for style. Start each diagram with a `%% title:` line describing it for screen readers, and add `%% autoplay` to play it once when it scrolls into view. Preview with `aniflow docs/content` and check with `aniflow --check` on the pages you changed.
+
 ## Testing Requirements
 
 All code contributions must include appropriate tests. PAC uses `gotest.tools/v3` for unit tests (never testify).

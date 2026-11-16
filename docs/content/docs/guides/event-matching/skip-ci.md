@@ -41,6 +41,50 @@ When a commit message contains a skip command, Pipelines-as-Code behaves as foll
 1. **Pull requests**: Pipelines-as-Code does not create any PipelineRuns when the PR opens or updates and the HEAD commit contains a skip command. A neutral status check appears on the PR indicating that CI was skipped.
 2. **Push events**: Pipelines-as-Code does not create any PipelineRuns when you push a commit with a skip command. A neutral status check appears on the commit.
 
+```mermaid
+flowchart LR
+%% title: How a skip command in a commit message stops PipelineRuns, and how a GitOps comment overrides it
+  Dev@{ img: "/icons/user.svg", label: "Developer", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Msg@{ img: "/icons/search.svg", label: "Skip command?", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/pause.svg", label: "CI Skipped", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRuns", w: 48, h: 48, constraint: "on" }
+  Dev --> Git
+  Git --> Ctrl
+  Ctrl --> Msg
+  Msg skip@-->|yes| Skip
+  Msg go@-->|no| Run
+  Skip -->|status| Git
+  Ctrl cmt@-->|GitOps comment| Run
+
+%% play: Push with skip
+%% skip Run
+%% Dev -> Git : [skip ci] | You push a commit whose message contains [skip ci]
+%% Git -> Ctrl : push
+%% Ctrl -> Msg | The controller looks for [skip ci], [ci skip], [skip tkn] or [tkn skip]
+%% Msg -> Skip @skip
+%% Skip -> Git : neutral | A CI Skipped status shows the commit was seen and skipped on purpose
+%% play: Pull request with skip
+%% skip Run
+%% Dev -> Git : PR #7
+%% Git -> Ctrl : pull_request
+%% Ctrl -> Msg | For a pull request, the message of the head commit is fetched from the Git provider
+%% Msg -> Skip @skip
+%% Skip -> Git : neutral
+%% play: Then /test
+%% skip Msg Skip
+%% Dev -> Git : /test | Later, you comment /test on the pull request
+%% Git -> Ctrl : comment
+%% Ctrl -> Run @cmt | Comments are not checked for skip commands, so the PipelineRuns start
+%% play: Normal commit
+%% skip Skip
+%% Dev -> Git : fix: typo
+%% Git -> Ctrl : push
+%% Ctrl -> Msg
+%% Msg -> Run @go | No skip command, so matching goes on as usual
+```
+
 {{< callout type="info" >}}
 Pipelines-as-Code creates a neutral status check on your Git provider to indicate that it acknowledged the commit but intentionally skipped CI. This helps you distinguish between commits where CI was skipped and commits where CI has not yet run.
 {{< /callout >}}

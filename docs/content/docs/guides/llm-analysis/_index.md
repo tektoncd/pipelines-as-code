@@ -18,6 +18,56 @@ LLM-powered analysis lets you:
 - **Post insights as PR comments** so your team sees them immediately
 - **Configure custom analysis scenarios** using different prompts and triggers
 
+The analysis starts when a PipelineRun finishes, after Pipelines-as-Code has reported its final status:
+
+```mermaid
+flowchart LR
+%% title: How a finished PipelineRun gets an AI analysis comment
+%% autoplay
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Role@{ img: "/icons/filter.svg", label: "Role trigger", w: 48, h: 48, constraint: "on" }
+  Ctx@{ img: "/icons/search.svg", label: "Collect context", w: 48, h: 48, constraint: "on" }
+  LLM@{ img: "/icons/model.svg", label: "LLM provider", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/comment.svg", label: "PR comment", w: 48, h: 48, constraint: "on" }
+  Skip@{ img: "/icons/stop.svg", label: "No comment", w: 48, h: 48, constraint: "on" }
+  Log@{ img: "/icons/logs.svg", label: "Warning in logs", w: 48, h: 48, constraint: "on" }
+  Run -->|finished| Watch --> Role
+  Role yes@-->|match| Ctx --> LLM
+  Role no@-->|no match| Skip
+  LLM ok@-->|answer| Git
+  LLM nopr@-->|no PR| Skip
+  LLM err@-->|error| Log
+
+%% play: Failed pull request
+%% skip Skip Log
+%% Run -> Watch : failed | A PipelineRun on a pull request fails
+%% Watch -> Role | Each role checks its on_cel expression, or by default accepts any completed run
+%% Role -> Ctx @yes | Errors, log lines, commit and PR details are gathered as the role asks
+%% Ctx -> LLM : prompt | The prompt and context go to the model, with the API key from the Repository namespace
+%% LLM -> Git @ok : analysis | The answer is posted on the pull request, and later runs update the same comment
+%% play: Role does not match
+%% skip Ctx LLM Git Log
+%% Run -> Watch : succeeded
+%% Watch -> Role
+%% Role -> Skip @no | The on_cel expression is false for this run, so nothing is sent to the model
+%% play: Push event
+%% skip Git Log
+%% Run -> Watch : failed
+%% Watch -> Role
+%% Role -> Ctx @yes
+%% Ctx -> LLM : prompt
+%% LLM -> Skip @nopr | A push has no pull request, so the answer has nowhere to go
+%% play: Provider error
+%% skip Git Skip
+%% Run -> Watch : failed
+%% Watch -> Role
+%% Role -> Ctx @yes
+%% Ctx -> LLM : prompt
+%% wait 1200 | A failed request is tried up to three times, two seconds apart
+%% LLM -> Log @err | The error is logged and the PipelineRun status does not change
+```
+
 {{< callout type="info" >}}
 Additional output destinations (`check-run` and `annotation`) and structured JSON output are planned for future releases.
 {{< /callout >}}

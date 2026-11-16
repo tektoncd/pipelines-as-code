@@ -1,0 +1,174 @@
+  .mermaid-diagram { margin:0 0 16px; overflow-x:auto; text-align:center; }
+  .mermaid-diagram svg { max-width:100%; height:auto; }
+  .diagram-stage { position:relative; touch-action:pan-y; }
+  .diagram-stage > svg { display:block; margin:0 auto; user-select:none; -webkit-user-select:none; }
+  .diagram-stage.zoomed { touch-action:none; cursor:grab; }
+  .diagram-stage.zoomed:active { cursor:grabbing; }
+  .diagram-tools { position:absolute; top:0; right:0; display:flex; gap:2px; max-width:100%; box-sizing:border-box; padding:3px; border:1px solid var(--borderColor-default); border-radius:9px; background:var(--bgColor-default); opacity:0; transition:opacity .15s; }
+  .mermaid-diagram:is(:hover, :focus-within) .diagram-tools, .diagram-dialog .diagram-tools { opacity:1; }
+  @media (hover:none) { .diagram-tools { opacity:1; } .mermaid-diagram .diagram-tools { position:static; width:max-content; max-width:100%; box-sizing:border-box; margin:0 0 8px auto; } .diagram-tools > * { flex-shrink:0; } .diagram-tools > .diagram-play, .diagram-play select { flex-shrink:1; min-width:0; } }
+  .diagram-tools button { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:none; color:var(--fgColor-muted); cursor:pointer; }
+  .diagram-tools button:hover:not(:disabled) { background:var(--bgColor-muted); color:var(--fgColor-default); }
+  .diagram-tools button:focus-visible { outline:2px solid var(--fgColor-accent); outline-offset:-2px; }
+  .diagram-tools button:disabled { opacity:.4; cursor:default; }
+  .diagram-tools button[aria-pressed=true] { background:color-mix(in srgb, var(--fgColor-accent) 16%, transparent); color:var(--fgColor-accent); }
+  .diagram-tools svg { fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .diagram-dialog { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:0; border:0; background:var(--bgColor-default); color:var(--fgColor-default); }
+  .diagram-dialog::backdrop { background:var(--bgColor-default); }
+  .diagram-dialog .diagram-stage { width:100%; height:100%; touch-action:none; cursor:grab; }
+  .diagram-dialog .diagram-stage:active { cursor:grabbing; }
+  .diagram-dialog .diagram-stage > svg { width:100%; height:100%; max-width:none !important; padding:56px 16px 16px; }
+  .diagram-dialog .diagram-tools { top:max(10px, env(safe-area-inset-top)); right:max(10px, env(safe-area-inset-right)); }
+  .diagram-caption { max-width:46em; margin:10px auto 0; padding:8px 14px; border:1px solid var(--borderColor-muted); border-radius:9px; background:var(--bgColor-muted); color:var(--fgColor-default); font:500 15px/1.45 system-ui,-apple-system,sans-serif; text-align:center; }
+  .diagram-caption[hidden] { display:none; }
+  .diagram-dialog .diagram-caption { position:absolute; left:50%; bottom:max(16px, env(safe-area-inset-bottom)); width:max-content; max-width:min(46em, calc(100% - 32px)); margin:0; transform:translateX(-50%); font-size:17px; box-shadow:0 8px 24px color-mix(in srgb, var(--fgColor-default) 14%, transparent); pointer-events:none; }
+  .diagram-play { position:relative; display:flex; align-items:center; gap:2px; margin-right:3px; padding-right:3px; border-right:1px solid var(--borderColor-muted); }
+  .diagram-tools > * { flex-shrink:0; }
+  .diagram-tools > .diagram-play, .diagram-play select { flex-shrink:1; min-width:0; }
+  .diagram-play > button { flex-shrink:0; }
+  .diagram-play select { max-width:14em; height:30px; padding:0 4px; border:0; border-radius:6px; background:none; color:var(--fgColor-default); font:500 12px/1 system-ui,-apple-system,sans-serif; cursor:pointer; }
+  .diagram-play select:hover { background:var(--bgColor-muted); }
+  .diagram-play button[hidden] { display:none; }
+  .diagram-play .play-toggle svg { fill:currentColor; }
+  .diagram-tools .diagram-play .play-toggle { margin:0 2px; border-radius:50%; background:var(--fgColor-accent); color:var(--bgColor-default); }
+  .diagram-tools .diagram-play .play-toggle:hover:not(:disabled) { background:color-mix(in srgb, var(--fgColor-accent) 82%, var(--fgColor-default)); color:var(--bgColor-default); }
+  .diagram-tools .diagram-play .play-toggle:focus-visible { outline-offset:2px; }
+  .diagram-play.stepped { padding-bottom:7px; }
+  .play-rail { position:absolute; left:4px; right:7px; bottom:0; display:flex; gap:2px; }
+  .play-rail[hidden] { display:none; }
+  .play-rail span { flex:1; min-width:3px; height:7px; padding-top:4px; border-radius:2px; background:var(--borderColor-default); background-clip:content-box; cursor:pointer; transition:background-color .2s; }
+  .play-rail span:hover { background-color:var(--fgColor-muted); }
+  .play-rail span.done { background-color:color-mix(in srgb, var(--fgColor-accent) 55%, var(--borderColor-default)); }
+  .play-rail span.now { background-color:var(--fgColor-accent); }
+  .diagram-share { position:relative; display:flex; margin-right:3px; padding-right:3px; border-right:1px solid var(--borderColor-muted); }
+  .diagram-play.playing .play-toggle svg { fill:none; }
+  .diagram-play .play-stop svg { fill:currentColor; stroke:none; }
+  .diagram-tools .diagram-play .play-speed { width:auto; min-width:36px; padding:0 5px; font:600 12px/1 system-ui,-apple-system,sans-serif; font-variant-numeric:tabular-nums; }
+  .diagram-share .play-record.busy { width:auto; min-width:30px; padding:0 6px; color:var(--fgColor-default); font:600 11px/1 system-ui,-apple-system,sans-serif; font-variant-numeric:tabular-nums; }
+  .diagram-export { position:absolute; top:calc(100% + 6px); right:0; z-index:3; display:flex; flex-direction:column; gap:2px; min-width:11em; padding:4px; border:1px solid var(--borderColor-default); border-radius:9px; background:var(--bgColor-default); box-shadow:0 8px 24px color-mix(in srgb, var(--fgColor-default) 18%, transparent); }
+  .diagram-export[hidden] { display:none; }
+  .mermaid-diagram:has(.diagram-export:not([hidden])) { overflow:visible; }
+  .diagram-tools .diagram-export button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; height:auto; padding:7px 10px; color:var(--fgColor-default); font:500 13px/1.2 system-ui,-apple-system,sans-serif; text-align:left; }
+  .diagram-export button small { color:var(--fgColor-muted); font-size:11px; }
+  .diagram-warnings { position:relative; }
+  .diagram-tools button.play-warn { display:flex; gap:3px; width:auto; padding:0 6px; color:var(--fgColor-attention); font:600 12px/1 system-ui,-apple-system,sans-serif; }
+  .diagram-tools button.play-warn:hover:not(:disabled) { color:var(--fgColor-attention); }
+  .diagram-problems { position:absolute; top:calc(100% + 9px); right:0; z-index:3; display:flex; flex-direction:column; gap:8px; width:max-content; max-width:min(30em, 80vw); max-height:50vh; overflow:auto; margin:0; padding:10px 12px; list-style:none; border:1px solid var(--borderColor-default); border-radius:9px; background:var(--bgColor-default); color:var(--fgColor-default); box-shadow:0 8px 24px color-mix(in srgb, var(--fgColor-default) 18%, transparent); font:13px/1.35 system-ui,-apple-system,sans-serif; text-align:left; }
+  .diagram-problems[hidden] { display:none; }
+  .diagram-problems li { display:flex; flex-direction:column; gap:2px; margin:0; }
+  .diagram-problems small { color:var(--fgColor-muted); font-size:11px; }
+  .diagram-problems code { color:var(--fgColor-muted); font-size:12px; overflow-wrap:anywhere; }
+  .mermaid-diagram:has(.diagram-problems:not([hidden])) { overflow:visible; }
+  .diagram-stage.recording :is(g.node, g.image-shape, g.node .label-container, g.node .label-container > *, g.image-shape > g:first-child > path) { transition:none !important; }
+  .diagram-stage.recording :is(g.node, g.image-shape).play-active { animation:none; filter:drop-shadow(0 0 6px color-mix(in srgb, var(--fgColor-accent) 65%, transparent)); }
+  .mermaid-diagram:has(.diagram-play.playing, .diagram-export:not([hidden]), .diagram-problems:not([hidden]), .play-warn, .play-record.busy) .diagram-tools { opacity:1; }
+  .diagram-stage :is(g.node, g.image-shape) { transition:opacity .25s; }
+  .diagram-stage :is(g.node .label-container, g.node .label-container > *, g.image-shape > g:first-child > path) { transition:fill .25s, stroke .25s; }
+  .diagram-stage g.node.play-active :is(.label-container, .label-container > *), .diagram-stage g.image-shape.play-active > g:first-child > path:first-child { fill:color-mix(in srgb, var(--fgColor-accent) 26%, var(--bgColor-default)) !important; }
+  .diagram-stage g.node.play-active :is(.label-container, .label-container > *), .diagram-stage g.image-shape.play-active > g:first-child > path:last-child { stroke:var(--fgColor-accent) !important; stroke-width:2px !important; }
+  .diagram-stage :is(g.node, g.image-shape).play-active { animation:play-glow 1.1s ease-in-out infinite alternate; }
+  .diagram-stage g.node.play-done :is(.label-container, .label-container > *), .diagram-stage g.image-shape.play-done > g:first-child > path:first-child { fill:color-mix(in srgb, var(--fgColor-success) 14%, var(--bgColor-default)) !important; }
+  .diagram-stage g.node.play-done :is(.label-container, .label-container > *), .diagram-stage g.image-shape.play-done > g:first-child > path:last-child { stroke:color-mix(in srgb, var(--fgColor-success) 70%, transparent) !important; }
+  .diagram-stage :is(g.node, g.image-shape).play-skipped { opacity:.3; }
+  .diagram-stage .play-actor { transition:opacity .25s; }
+  .diagram-stage .play-actor > :is(rect, line, circle) { transition:fill .25s, stroke .25s; }
+  .diagram-stage .play-actor.play-active > rect.actor { fill:color-mix(in srgb, var(--fgColor-accent) 26%, var(--bgColor-default)) !important; stroke:var(--fgColor-accent) !important; stroke-width:2px !important; }
+  .diagram-stage g.actor-man.play-active > :is(line, circle) { stroke:var(--fgColor-accent) !important; stroke-width:2px !important; }
+  .diagram-stage line.play-actor.play-active { stroke:var(--fgColor-accent) !important; stroke-width:3px !important; stroke-dasharray:none !important; }
+  .diagram-stage g.play-actor.play-active { animation:play-glow 1.1s ease-in-out infinite alternate; }
+  .diagram-stage .play-actor.play-done > rect.actor, .diagram-stage g.actor-man.play-done > :is(line, circle) { stroke:color-mix(in srgb, var(--fgColor-success) 70%, transparent) !important; }
+  .diagram-stage .play-actor.play-done > rect.actor { fill:color-mix(in srgb, var(--fgColor-success) 14%, var(--bgColor-default)) !important; }
+  .diagram-stage .play-actor.play-skipped { opacity:.3; }
+  .diagram-stage text.messageText { transition:fill .25s; }
+  .diagram-stage text.messageText.play-edge { fill:var(--fgColor-accent) !important; font-weight:600; }
+  .diagram-stage text.messageText.play-edge-done { fill:var(--fgColor-success) !important; }
+  .diagram-stage.recording g.play-actor.play-active { animation:none; filter:drop-shadow(0 0 6px color-mix(in srgb, var(--fgColor-accent) 65%, transparent)); }
+  .diagram-stage.focusable :is(g.node, g.image-shape) { cursor:pointer; }
+  .diagram-stage.drawing, .diagram-dialog .diagram-stage.drawing, .diagram-stage.drawing > svg * { touch-action:none; cursor:crosshair; }
+  .diagram-ink { pointer-events:none; }
+  .diagram-ink path { fill:none; stroke:var(--fgColor-danger); }
+  .diagram-ink .ink-laser { stroke-width:5; opacity:.75; filter:drop-shadow(0 0 4px var(--fgColor-danger)); }
+  .diagram-ink circle { fill:var(--fgColor-danger); filter:drop-shadow(0 0 6px var(--fgColor-danger)); }
+  .diagram-stage :is(path[data-edge], g.edgeLabel) { transition:opacity .25s; }
+  .diagram-stage.focusing :is(g.node, g.image-shape):not(.focus-on, .focus-near, .play-active) { opacity:.2; }
+  .diagram-stage.focusing :is(path[data-edge], g.edgeLabel):not(.focus-near, .play-edge) { opacity:.15; }
+  .diagram-stage g.node.focus-on :is(.label-container, .label-container > *), .diagram-stage g.image-shape.focus-on > g:first-child > path:first-child { fill:color-mix(in srgb, var(--fgColor-accent) 26%, var(--bgColor-default)) !important; }
+  .diagram-stage g.node.focus-on :is(.label-container, .label-container > *), .diagram-stage g.image-shape.focus-on > g:first-child > path:last-child { stroke:var(--fgColor-accent) !important; stroke-width:2.5px !important; }
+  .diagram-stage :is(g.node, g.image-shape).focus-on { filter:drop-shadow(0 0 8px color-mix(in srgb, var(--fgColor-accent) 70%, transparent)); }
+  .diagram-tools .note-toggle { display:none; position:relative; }
+  .diagram-dialog .diagram-tools .note-toggle { display:grid; }
+  .note-toggle .count { position:absolute; top:0; right:0; min-width:15px; height:15px; padding:0 4px; box-sizing:border-box; border-radius:8px; background:var(--fgColor-accent); color:var(--bgColor-default); font:700 9.5px/15px system-ui,-apple-system,sans-serif; pointer-events:none; }
+  .note-toggle .count[hidden] { display:none; }
+  .diagram-dialog { --notes-width:min(380px, 42vw); }
+  .diagram-dialog.commenting .diagram-stage { width:calc(100% - var(--notes-width)); }
+  .diagram-dialog .diagram-stage.commenting { cursor:crosshair; }
+  .diagram-dialog .diagram-stage.commenting.note-aim { cursor:pointer; }
+  .diagram-stage :is(g.node, g.image-shape):is(.note-hover, .note-picked, .note-lit) :is(.label-container, .label-container > *), .diagram-stage g.image-shape:is(.note-hover, .note-picked, .note-lit) > g:first-child > path:last-child { stroke:var(--fgColor-accent) !important; stroke-width:2.5px !important; }
+  .diagram-stage g.node.note-picked :is(.label-container, .label-container > *), .diagram-stage g.image-shape.note-picked > g:first-child > path:first-child { fill:color-mix(in srgb, var(--fgColor-accent) 18%, var(--bgColor-default)) !important; }
+  .diagram-stage path[data-edge]:is(.note-hover, .note-picked, .note-lit) { stroke:var(--fgColor-accent) !important; stroke-width:3.5px !important; }
+  .diagram-stage :is(g.node, g.image-shape, g.edgeLabel):is(.note-picked, .note-lit) { filter:drop-shadow(0 0 7px color-mix(in srgb, var(--fgColor-accent) 65%, transparent)); }
+  .diagram-pins { pointer-events:none; }
+  .diagram-pin { pointer-events:auto; cursor:pointer; }
+  .diagram-pin circle { fill:var(--fgColor-accent); stroke:var(--bgColor-default); stroke-width:2; transition:r .15s; }
+  .diagram-pin text { fill:var(--bgColor-default); font:700 11px system-ui,-apple-system,sans-serif; text-anchor:middle; dominant-baseline:central; }
+  .diagram-pin:is(:hover, .lit) circle { r:13; filter:drop-shadow(0 0 5px color-mix(in srgb, var(--fgColor-accent) 70%, transparent)); }
+  .diagram-notes { position:absolute; top:0; right:0; bottom:0; display:flex; flex-direction:column; width:var(--notes-width); box-sizing:border-box; border-left:1px solid var(--borderColor-default); background:var(--bgColor-muted); color:var(--fgColor-default); font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .diagram-notes > header { display:flex; align-items:center; gap:8px; padding:max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 4px 16px; }
+  .diagram-notes h2 { flex:1; margin:0; font-size:15px; font-weight:650; }
+  .diagram-notes-close { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:none; color:var(--fgColor-muted); cursor:pointer; }
+  .diagram-notes-close:hover { background:var(--bgColor-default); color:var(--fgColor-default); }
+  .diagram-notes-close svg { fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .diagram-notes-hint { margin:0; padding:0 16px 10px; color:var(--fgColor-muted); font-size:12.5px; }
+  .diagram-notes-list { flex:1; display:flex; flex-direction:column; gap:10px; min-height:0; overflow:auto; padding:4px 12px 12px; overscroll-behavior:contain; }
+  .diagram-notes-empty { margin:28px 8px; color:var(--fgColor-muted); text-align:center; }
+  .diagram-note { flex:none; padding:10px 12px; border:1px solid var(--borderColor-default); border-radius:10px; background:var(--bgColor-default); box-shadow:0 1px 3px color-mix(in srgb, var(--fgColor-default) 8%, transparent); transition:border-color .2s, box-shadow .2s; }
+  .diagram-note:hover, .diagram-note.draft { border-color:color-mix(in srgb, var(--fgColor-accent) 55%, var(--borderColor-default)); }
+  .diagram-note.lit { border-color:var(--fgColor-accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--fgColor-accent) 25%, transparent); }
+  .diagram-note > header { display:flex; align-items:center; gap:8px; min-width:0; margin-bottom:6px; }
+  .diagram-note-pin { flex:none; display:grid; place-items:center; min-width:20px; height:20px; padding:0 5px; box-sizing:border-box; border-radius:10px; background:var(--fgColor-accent); color:var(--bgColor-default); font:700 11px/1 system-ui,-apple-system,sans-serif; }
+  .diagram-note-new { flex:none; padding:1px 7px; border-radius:10px; background:color-mix(in srgb, var(--fgColor-accent) 16%, transparent); color:var(--fgColor-accent); font-size:11.5px; font-weight:650; }
+  .diagram-note-what { flex:1; min-width:0; overflow:hidden; padding:0; border:0; background:none; color:var(--fgColor-default); font:inherit; font-size:13px; font-weight:600; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+  button.diagram-note-what { cursor:pointer; }
+  button.diagram-note-what:hover { color:var(--fgColor-accent); }
+  .diagram-note-reply { flex:none; padding:2px 8px; border:0; border-radius:6px; background:none; color:var(--fgColor-accent); font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
+  .diagram-note-reply:hover { background:var(--bgColor-muted); }
+  .diagram-note-entry + .diagram-note-entry { margin-top:8px; padding-top:8px; border-top:1px solid var(--borderColor-muted); }
+  .diagram-note-meta { display:flex; align-items:center; gap:6px; color:var(--fgColor-muted); font-size:12px; }
+  .diagram-note-meta .review-tools { display:flex; gap:2px; margin-left:auto; opacity:0; transition:opacity .15s; }
+  .diagram-note:is(:hover, :focus-within) .review-tools, .diagram-note .review-tools:has(.danger) { opacity:1; }
+  @media (hover:none) { .diagram-note-meta .review-tools { opacity:1; } }
+  .diagram-notes .review-tools button { min-height:24px; padding:0 8px; border-color:transparent; background:none; color:var(--fgColor-muted); font-size:12px; }
+  .diagram-notes .review-tools button:hover { border-color:var(--borderColor-default); color:var(--fgColor-default); }
+  .diagram-notes .review-tools button.danger { border-color:var(--fgColor-danger); color:var(--fgColor-danger); }
+  .diagram-note-outdated { padding:0 6px; border-radius:6px; background:color-mix(in srgb, var(--fgColor-attention) 18%, transparent); color:var(--fgColor-attention); font-size:11px; font-weight:650; cursor:help; }
+  .diagram-note-body { margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .diagram-note-form textarea { display:block; width:100%; min-height:4.8em; box-sizing:border-box; padding:8px 10px; border:1px solid var(--borderColor-default); border-radius:8px; background:var(--bgColor-default); color:var(--fgColor-default); font:inherit; font-size:15px; resize:vertical; }
+  .diagram-note-form textarea:focus { border-color:var(--fgColor-accent); outline:2px solid color-mix(in srgb, var(--fgColor-accent) 30%, transparent); outline-offset:0; }
+  .diagram-notes .review-actions { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-top:8px; }
+  .diagram-notes .review-actions button { min-height:30px; }
+  .diagram-note-keys { margin-right:auto; color:var(--fgColor-muted); font-size:11.5px; }
+  @media (pointer:coarse) { .diagram-note-keys { display:none; } }
+  .diagram-notes > footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; padding:10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 12px; border-top:1px solid var(--borderColor-default); }
+  .diagram-notes > footer button { display:inline-flex; align-items:center; min-height:32px; padding:0 12px; border:1px solid var(--borderColor-default); border-radius:8px; background:var(--bgColor-default); color:var(--fgColor-default); font:600 13px/1 system-ui,-apple-system,sans-serif; white-space:nowrap; cursor:pointer; }
+  .diagram-notes > footer button.primary { border-color:var(--fgColor-accent); background:var(--fgColor-accent); color:var(--bgColor-default); }
+  .diagram-notes > footer button:disabled { opacity:.5; cursor:default; }
+  .diagram-notes-status { flex:1 1 8em; min-width:0; color:var(--fgColor-muted); font-size:12px; }
+  .diagram-notes-status.error { color:var(--fgColor-danger); }
+  @media (max-width:700px) {
+    .diagram-dialog { --notes-height:min(48dvh, 420px); }
+    .diagram-dialog.commenting .diagram-stage { width:100%; height:calc(100% - var(--notes-height)); }
+    .diagram-notes { top:auto; left:0; width:auto; height:var(--notes-height); border-top:1px solid var(--borderColor-default); border-left:0; border-radius:14px 14px 0 0; box-shadow:0 -8px 24px color-mix(in srgb, var(--fgColor-default) 12%, transparent); }
+    .diagram-notes > header { padding-top:10px; }
+  }
+  .diagram-stage path.focus-near:not(.play-edge) { stroke:var(--fgColor-accent) !important; stroke-width:2.5px !important; }
+  .diagram-stage :is(path, line).play-edge { stroke:var(--fgColor-accent) !important; stroke-width:2.5px !important; }
+  .diagram-stage :is(path, line).play-edge-done { stroke:color-mix(in srgb, var(--fgColor-success) 65%, var(--borderColor-default)) !important; }
+  .diagram-stage .play-check circle { fill:var(--fgColor-success) !important; stroke:var(--bgColor-default) !important; stroke-width:1.5px !important; }
+  .diagram-stage .play-check path { fill:none !important; stroke:var(--bgColor-default) !important; stroke-width:1.8px !important; stroke-linecap:round; stroke-linejoin:round; }
+  .diagram-stage .play-token { pointer-events:none; }
+  .diagram-stage .play-token > circle { fill:var(--fgColor-accent); stroke:var(--bgColor-default); stroke-width:2px; filter:drop-shadow(0 0 5px var(--fgColor-accent)); }
+  .diagram-stage .play-tag rect { fill:var(--fgColor-accent); }
+  .diagram-stage .play-tag text { fill:var(--bgColor-default); font:600 12px/1 system-ui,-apple-system,sans-serif; }
+  @keyframes play-glow { from { filter:drop-shadow(0 0 2px color-mix(in srgb, var(--fgColor-accent) 45%, transparent)); } to { filter:drop-shadow(0 0 9px color-mix(in srgb, var(--fgColor-accent) 75%, transparent)); } }
+  @media (prefers-reduced-motion:reduce) { .diagram-stage :is(g.node, g.image-shape, g.play-actor).play-active { animation:none; filter:drop-shadow(0 0 5px color-mix(in srgb, var(--fgColor-accent) 60%, transparent)); } .diagram-stage :is(g.node, g.image-shape, g.node .label-container, g.node .label-container > *, g.image-shape > g:first-child > path) { transition:none; } }
+  @media (min-width:768px) { .page { padding:32px 32px 80px; } }

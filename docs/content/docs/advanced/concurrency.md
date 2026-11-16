@@ -7,35 +7,49 @@ This page illustrates how Pipelines-as-Code manages concurrent PipelineRun execu
 ## Flow diagram
 
 ```mermaid
-graph TD
-    A1[Controller] --> B1(Validate & Process Event)
-    B1 --> C1{Is concurrency defined?}
-    C1 -->|Not Defined| D1[Create PipelineRun with state='started']
-    C1 -->|Defined| E1[Create PipelineRun with pending status and state='queued']
+flowchart LR
+%% title: How the controller and the watcher queue PipelineRuns under a concurrency limit
+%% autoplay
+  Ctrl@{ img: "/icons/controller.svg", label: "Controller", w: 48, h: 48, constraint: "on" }
+  Limit@{ img: "/icons/decision.svg", label: "concurrency_limit", w: 48, h: 48, constraint: "on" }
+  Run@{ img: "/icons/pipeline.svg", label: "PipelineRun", w: 48, h: 48, constraint: "on" }
+  Watch@{ img: "/icons/monitor.svg", label: "Watcher", w: 48, h: 48, constraint: "on" }
+  Queue@{ img: "/icons/queue.svg", label: "Queue", w: 48, h: 48, constraint: "on" }
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Done@{ img: "/icons/success.svg", label: "completed", w: 48, h: 48, constraint: "on" }
+  Ctrl --> Limit
+  Limit none@-->|not set| Run
+  Limit set@-->|set| Run
+  Ctrl -->|status| Git
+  Run --> Watch
+  Watch --> Queue
+  Queue -->|start| Run
+  Watch -->|status| Git
+  Watch --> Done
 
-    Z[Pipelines-as-Code]
-
-    A[Watcher] --> B(PipelineRun Reconciler)
-    B --> C{Check state}
-    C --> |completed| F(Return, nothing to do!)
-    C --> |queued| D(Create Queue for Repository)
-    C --> |started| E{Is PipelineRun Done?}
-    D --> O(Add PipelineRun in the queue)
-    O --> P{If PipelineRuns running < concurrency_limit}
-    P --> |Yes| Q(Start the top most PipelineRun in the Queue)
-    Q --> P
-    P --> |No| R[Return and wait for your turn]
-    E --> |Yes| G(Report Status to provider)
-    E --> |No| H(Requeue Request)
-    H --> B
-    G --> I(Update status in Repository)
-    I --> J(Update state to 'completed')
-    J --> K{Check if concurrency was defined?}
-    K --> |Yes| L(Remove PipelineRun from Queue)
-    L --> M(Start the next PipelineRun from Queue)
-    M --> N[Done!]
-    K --> |No| N
-
+%% play: Queued
+%% skip Done
+%% Ctrl -> Limit : event
+%% Limit -> Run @set : pending | Every matched PipelineRun is created pending with the state queued
+%% Ctrl -> Git : queued | The controller reports them as queued and stores their order, sorted by name
+%% Run -> Watch : queued
+%% Watch -> Queue | The watcher adds them to the queue of their Repository
+%% Queue -> Run : start | While fewer runs than the limit are running, the first one in the queue starts
+%% Watch -> Git : running
+%% play: Started
+%% skip Queue Done
+%% Ctrl -> Limit : event
+%% Limit -> Run @none : started | Without a limit the PipelineRun starts right away with the state started
+%% Ctrl -> Git : running
+%% Run -> Watch | The watcher follows it and does nothing until it is done
+%% play: Completed
+%% skip Ctrl Limit
+%% Run -> Watch : done
+%% Watch -> Git : success | The final status goes to the Git provider first
+%% Watch -> Queue | The run leaves the queue and frees its slot
+%% wait 1000 | The next pending PipelineRun of the Repository takes the slot
+%% Queue -> Run : next
+%% Watch -> Done | The finished run gets the state completed
 ```
 
 ## Inspecting the queue at runtime

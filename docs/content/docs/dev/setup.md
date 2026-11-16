@@ -204,6 +204,34 @@ kubectl logs -n pipelines-as-code -l app.kubernetes.io/name=controller -f
 
 When making code changes:
 
+```mermaid
+flowchart LR
+%% title: Redeploying a code change to the kind cluster with ko
+%% autoplay
+  Code@{ img: "/icons/code.svg", label: "Go code", w: 48, h: 48, constraint: "on" }
+  Fumpt[make fumpt]
+  Ko@{ img: "/icons/build.svg", label: "ko apply", w: 48, h: 48, constraint: "on" }
+  Reg@{ img: "/icons/registry.svg", label: "KO_DOCKER_REPO", w: 48, h: 48, constraint: "on" }
+  Kube@{ img: "/icons/cluster.svg", label: "kind cluster", w: 48, h: 48, constraint: "on" }
+  Pods@{ img: "/icons/pod.svg", label: "PAC pods", w: 48, h: 48, constraint: "on" }
+  Logs@{ img: "/icons/logs.svg", label: "kubectl logs", w: 48, h: 48, constraint: "on" }
+  Code --> Fumpt --> Ko
+  Ko -->|image| Reg
+  Ko -->|config/| Kube
+  Kube --> Pods
+  Reg -->|pull| Pods
+  Pods --> Logs
+
+%% play: Redeploy
+%% Code -> Fumpt : edit
+%% Fumpt -> Ko
+%% Ko -> Reg : image | ko builds an image for each binary and pushes it to the registry
+%% Ko -> Kube : YAML | then applies config/ with the image references replaced
+%% Kube -> Pods | The deployments roll out new pods
+%% Reg -> Pods : pull
+%% Pods -> Logs | Follow the controller logs to try the change
+```
+
 1. Edit your Go files
 2. Run formatting:
 
@@ -374,6 +402,33 @@ Open <http://localhost:1313> in your browser. Changes to documentation files aut
 ## Debugging
 
 ### Debugging the Controller
+
+A controller running on your machine is not reachable from a hosted Git provider, so a webhook relay carries the events to it:
+
+```mermaid
+flowchart LR
+%% title: Forwarding and replaying webhooks to a local controller with gosmee
+  Git@{ img: "/icons/repository.svg", label: "Git provider", w: 48, h: 48, constraint: "on" }
+  Relay@{ img: "/icons/cloud.svg", label: "hook.pipelinesascode.com", w: 48, h: 48, constraint: "on" }
+  Gosmee@{ img: "/icons/terminal.svg", label: "gosmee client", w: 48, h: 48, constraint: "on" }
+  Ctrl@{ img: "/icons/controller.svg", label: "localhost:8080", w: 48, h: 48, constraint: "on" }
+  Saved@{ img: "/icons/folder.svg", label: "--saveDir", w: 48, h: 48, constraint: "on" }
+  Git -->|webhook| Relay --> Gosmee
+  Gosmee fwd@--> Ctrl
+  Gosmee --> Saved
+  Saved replay@-->|replay| Ctrl
+
+%% play: Forward events
+%% skip Saved
+%% Git -> Relay : event | The Git provider sends its webhook to your hook URL
+%% Relay -> Gosmee | gosmee keeps a connection open to the relay
+%% Gosmee -> Ctrl @fwd : POST | and posts each event to the local controller
+%% play: Replay an event
+%% Git -> Relay : event
+%% Relay -> Gosmee
+%% Gosmee -> Ctrl @fwd, Saved : POST | With --saveDir, each event is forwarded and also saved as a shell script
+%% Saved -> Ctrl @replay : POST | Run the script to send the same event again, without touching the Git provider
+```
 
 1
 

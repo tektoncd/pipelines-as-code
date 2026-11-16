@@ -46,6 +46,9 @@ menu:
         type: search
 
 params:
+  aniflow:
+    # Keep in step with the Mermaid build aniflow ships in src/aniflow/vendor.
+    mermaid: https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.min.js
   navbar:
     displayTitle: true
     displayLogo: true

@@ -240,6 +240,10 @@ check-links: ## Check documentation links (set CHECK_EXTERNAL=false to skip exte
 fix-links: ## Auto-fix bare relative links to use relref shortcode
 	./hack/check-links.sh --fix
 
+.PHONY: update-aniflow
+update-aniflow: ## Vendor the aniflow diagram player into docs/static/aniflow (ANIFLOW_REF=main or ANIFLOW_DIR=checkout)
+	./hack/update-aniflow.sh $(ANIFLOW_DIR)
+
 .PHONY: dev-docs
 dev-docs: download-hugo ## preview live your docs with hugo
 	@$(HUGO_BIN) server -s docs/ &

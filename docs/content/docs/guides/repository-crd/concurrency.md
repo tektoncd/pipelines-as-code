@@ -22,6 +22,40 @@ Pipelines-as-Code executes all PipelineRuns in alphabetical order, one after the
 other. At any given time, only one PipelineRun is in the running state,
 while the rest are queued.
 
+```mermaid
+flowchart LR
+%% title: Three PipelineRuns sharing a concurrency limit
+  Ev@{ img: "/icons/pull-request.svg", label: "Pull request", w: 48, h: 48, constraint: "on" }
+  Queue@{ img: "/icons/queue.svg", label: "Queue", w: 48, h: 48, constraint: "on" }
+  A@{ img: "/icons/build.svg", label: "build", w: 48, h: 48, constraint: "on" }
+  B@{ img: "/icons/test.svg", label: "lint", w: 48, h: 48, constraint: "on" }
+  C@{ img: "/icons/test.svg", label: "unit", w: 48, h: 48, constraint: "on" }
+  Done@{ img: "/icons/success.svg", label: "Finished", w: 48, h: 48, constraint: "on" }
+  Ev -->|3 runs| Queue
+  Queue --> A
+  Queue --> B
+  Queue --> C
+  A --> Done
+  B --> Done
+  C --> Done
+
+%% play: Limit of 1
+%% Ev -> Queue : 3 runs | The three PipelineRuns are queued in alphabetical order
+%% Queue -> A : start
+%% A -> Done | Only when build finishes does the next one start
+%% Queue -> B : start
+%% B -> Done
+%% Queue -> C : start
+%% C -> Done
+%% play: Limit of 2
+%% Ev -> Queue : 3 runs
+%% Queue -> A, B | Two PipelineRuns run side by side
+%% wait 1000 | unit waits for a free slot
+%% A -> Done
+%% Queue -> C : start
+%% B, C -> Done
+```
+
 For additional concurrency strategies and global configuration options, see [Advanced Concurrency]({{< relref "/docs/advanced/concurrency" >}}).
 
 ## Kueue - Kubernetes-native Job Queueing
