@@ -23,8 +23,8 @@ const (
 
 // RunState is one dependency as seen by a waiting follow-up.
 type RunState struct {
-	// Name is the created PipelineRun name.
 	Name string
+	UID  string
 	// Status is one of Succeeded, Failed, Cancelled, Error or Missing.
 	Status string
 	// Reason is the Tekton condition reason, kept as detail.
@@ -37,6 +37,7 @@ type RunState struct {
 func RunStateFromPR(pr *tektonv1.PipelineRun) RunState {
 	return RunState{
 		Name:    pr.GetName(),
+		UID:     string(pr.GetUID()),
 		Status:  StatusFromPR(pr),
 		Reason:  pr.Status.GetCondition(apis.ConditionSucceeded).GetReason(),
 		Results: ResultsFromPR(pr),
@@ -118,6 +119,7 @@ func BuildRunsMap(deps []string, states map[string]RunState) map[string]any {
 		}
 		runs[dep] = map[string]any{
 			"name":    state.Name,
+			"uid":     state.UID,
 			"status":  state.Status,
 			"reason":  state.Reason,
 			"results": results,

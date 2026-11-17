@@ -14,7 +14,7 @@ import (
 var runsPlaceholderRe = regexp.MustCompile(`\{\{\s*runs\.([A-Za-z0-9_.-]+)\s*\}\}`)
 
 // runFieldRe matches the field part of a runs placeholder.
-var runFieldRe = regexp.MustCompile(`^(name|status|reason|results\.[A-Za-z0-9_.-]+)$`)
+var runFieldRe = regexp.MustCompile(`^(name|uid|status|reason|results\.[A-Za-z0-9_.-]+)$`)
 
 // InjectRunParams resolves {{ runs.* }} placeholders in spec.params as plain
 // data, without re-templating, and returns the unresolved references.
@@ -58,6 +58,10 @@ func resolvePlaceholder(placeholder string, states map[string]RunState, unresolv
 	switch {
 	case field == "name":
 		return state.Name, true
+	case field == "uid":
+		if state.UID != "" {
+			return state.UID, true
+		}
 	case field == "status":
 		return state.Status, true
 	case field == "reason":

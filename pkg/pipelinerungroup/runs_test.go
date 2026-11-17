@@ -7,6 +7,7 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"gotest.tools/v3/assert"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/apis"
 )
 
@@ -88,12 +89,14 @@ func TestStatusFromPR(t *testing.T) {
 
 func TestRunStateFromPR(t *testing.T) {
 	pr := donePR("build-abc", corev1.ConditionTrue, string(tektonv1.PipelineRunReasonSuccessful))
+	pr.UID = types.UID("source-uid")
 	pr.Status.Results = []tektonv1.PipelineRunResult{
 		{Name: "digest", Value: tektonv1.ResultValue{Type: tektonv1.ParamTypeString, StringVal: "sha256:abc"}},
 	}
 
 	state := RunStateFromPR(pr)
 	assert.Equal(t, "build-abc", state.Name)
+	assert.Equal(t, "source-uid", state.UID)
 	assert.Equal(t, StatusSucceeded, state.Status)
 	assert.Equal(t, string(tektonv1.PipelineRunReasonSuccessful), state.Reason)
 	assert.Equal(t, "sha256:abc", state.Results["digest"])
@@ -213,6 +216,7 @@ func TestBuildRunsMap(t *testing.T) {
 	states := map[string]RunState{
 		"build": {
 			Name:    "build-abc",
+			UID:     "source-uid",
 			Status:  StatusSucceeded,
 			Reason:  "Succeeded",
 			Results: map[string]string{"digest": "sha256:abc"},
@@ -223,6 +227,7 @@ func TestBuildRunsMap(t *testing.T) {
 	build, ok := runs["build"].(map[string]any)
 	assert.Assert(t, ok, "build entry is not a map")
 	assert.Equal(t, "build-abc", build["name"])
+	assert.Equal(t, "source-uid", build["uid"])
 	assert.Equal(t, StatusSucceeded, build["status"])
 	assert.Equal(t, "Succeeded", build["reason"])
 	buildResults, ok := build["results"].(map[string]any)
@@ -231,6 +236,7 @@ func TestBuildRunsMap(t *testing.T) {
 
 	ghost, ok := runs["ghost"].(map[string]any)
 	assert.Assert(t, ok, "ghost entry is not a map")
+	assert.Equal(t, "", ghost["uid"])
 	assert.Equal(t, StatusError, ghost["status"])
 	assert.Equal(t, ReasonMissing, ghost["reason"])
 }
