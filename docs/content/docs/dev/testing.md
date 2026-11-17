@@ -302,7 +302,7 @@ make test-e2e
 
 ### Provider-Specific E2E Tests
 
-For GitHub, GitLab, and Bitbucket tests, you need to set up provider-specific environment variables. See the [E2E on kind workflow](https://github.com/tektoncd/pipelines-as-code/blob/main/.github/workflows/kind-e2e-tests.yaml) for the complete list.
+For GitHub, GitLab, and Bitbucket tests, you need provider-specific settings. See the [E2E settings](https://github.com/tektoncd/pipelines-as-code/blob/main/test/README.md#settings) for the complete list and the YAML configuration option. The [E2E workflow](https://github.com/tektoncd/pipelines-as-code/blob/main/.github/workflows/e2e.yaml) shows how CI loads that configuration.
 
 ### Debugging E2E Tests
 

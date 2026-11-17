@@ -156,4 +156,4 @@ metadata:
     pipelinesascode.tekton.dev/on-path-change-ignore: "[***.md, ***.yaml]"
 ```
 
-if a pull request changes the files `.tekton/pipelinerun.yaml`, `README.md`, and `main.go`, Pipelines-as-Code does not trigger the PipelineRun because the `on-path-change-ignore` annotation excludes the `***.md` and `***.yaml` files.
+if a pull request changes the files `.tekton/pipelinerun.yaml`, `README.md`, and `main.go`, Pipelines-as-Code does not trigger the PipelineRun. The PipelineRun is skipped as soon as any changed file matches `on-path-change-ignore`, even if other changed files match `on-path-change`.

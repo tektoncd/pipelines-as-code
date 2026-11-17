@@ -5,7 +5,9 @@ weight: 2
 
 This page covers how to configure Pipelines-as-Code with a GitHub webhook. Use this method when you cannot create a GitHub App, for example in environments where App installation is restricted.
 
-Because a webhook integration does not use the [GitHub CheckRun API](https://docs.github.com/en/rest/guides/getting-started-with-the-checks-api), Pipelines-as-Code reports task status as a comment on the pull request instead of through the **Checks** tab. GitOps comments such as `/retest` and `/ok-to-test` are also not supported. To restart CI, create a new commit:
+Because a webhook integration does not use the [GitHub CheckRun API](https://docs.github.com/en/rest/guides/getting-started-with-the-checks-api), Pipelines-as-Code reports task status as a comment on the pull request instead of through the **Checks** tab. The `/retest` and `/ok-to-test` commands work in pull-request comments with both GitHub webhooks and GitHub Apps. Commands on commit comments, used for pushed-commit runs, require the App integration. The **Re-run** button on a GitHub check run also requires the App.
+
+To trigger a new run without using a GitOps command, create a new commit:
 
 ```console
 git commit --amend -a --no-edit && git push --force-with-lease origin branchname

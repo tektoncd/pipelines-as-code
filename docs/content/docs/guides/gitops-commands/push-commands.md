@@ -5,12 +5,12 @@ weight: 1
 
 This page explains how to trigger GitOps commands on pushed commits. Use these commands when you want to retest or cancel PipelineRuns triggered by push events rather than pull requests.
 
-{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
+{{< support_matrix github_app="true" github_webhook="false" forgejo="false" gitlab="true" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
 
-You can trigger GitOps commands on a pushed commit by including them in your commit messages. Pipelines-as-Code supports two scopes:
+You can trigger GitOps commands on a pushed commit by commenting on the commit. Commands in the commit message do not trigger GitOps actions. Pipelines-as-Code supports two scopes:
 
-1. **Restart all PipelineRuns:** Use `/retest` or `/test` within your commit message.
-2. **Restart a specific PipelineRun:** Use `/retest <pipelinerun-name>` or `/test <pipelinerun-name>` within your commit message. Replace `<pipelinerun-name>` with the name of the PipelineRun you want to restart.
+1. **Restart all PipelineRuns:** Comment `/retest` or `/test` on the commit.
+2. **Restart a specific PipelineRun:** Comment `/retest <pipelinerun-name>` or `/test <pipelinerun-name>` on the commit. Replace `<pipelinerun-name>` with the name of the PipelineRun you want to restart.
 
 Pipelines-as-Code triggers a PipelineRun only on the latest commit (HEAD) of the branch and ignores older commits.
 

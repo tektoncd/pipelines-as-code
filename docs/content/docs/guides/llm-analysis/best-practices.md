@@ -53,7 +53,7 @@ LLM analysis runs in the background and does not block your pipeline. However, l
 1. **Set reasonable timeouts**: The default of 30 seconds is usually sufficient for most analyses.
 2. **Include only relevant context**: Enable only the context items you actually need for your prompt.
 3. **Limit log fetching**: Setting `container_logs.max_lines` above 500 can degrade performance when Pipelines-as-Code fetches logs from many containers. Start with 50-100 and increase only if needed.
-4. **Monitor failures**: If analysis consistently fails, check the Pipelines-as-Code controller logs for errors.
+4. **Monitor failures**: If analysis consistently fails, check the Pipelines-as-Code watcher logs for errors.
 
 ## Troubleshooting
 
@@ -76,10 +76,10 @@ If Pipelines-as-Code receives an error from the LLM provider, check these common
 - **429 Rate Limited**: You are exceeding the LLM provider's rate limits. Reduce analysis frequency or upgrade your plan.
 - **Timeout**: The request took too long. Increase `timeout_seconds` or reduce context size.
 
-To inspect detailed error messages, check the controller logs:
+To inspect detailed error messages, check the watcher logs:
 
 ```bash
-kubectl logs -n pipelines-as-code deployment/pipelines-as-code-controller | grep "LLM"
+kubectl logs -n pipelines-as-code deployment/pipelines-as-code-watcher | grep "LLM"
 ```
 
 ### High Costs

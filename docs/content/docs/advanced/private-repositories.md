@@ -20,7 +20,7 @@ needs to clone private repositories.
 When Pipelines-as-Code creates a new PipelineRun in the target namespace,
 it also creates a secret with this name format:
 
-`pac-gitauth-REPOSITORY_OWNER-REPOSITORY_NAME-RANDOM_STRING`
+`pac-gitauth-RANDOM_STRING`
 
 This secret contains a [Git Config](https://git-scm.com/docs/git-config) file named
 `.gitconfig` and a [Git credentials](https://git-scm.com/docs/gitcredentials)
