@@ -12,7 +12,7 @@ To limit the number of retained runs, add the following annotation to your Pipel
 pipelinesascode.tekton.dev/max-keep-runs: "maxNumber"
 ```
 
-After a PipelineRun finishes successfully, Pipelines-as-Code detects this annotation and removes older PipelineRuns, keeping only the last `maxNumber` runs.
+After a PipelineRun finishes, whether it succeeded or failed, Pipelines-as-Code detects this annotation and removes older PipelineRuns, keeping only the last `maxNumber` runs.
 
 Pipelines-as-Code skips any PipelineRun in a `Running` or `Pending` state during cleanup. However, it does not skip PipelineRuns with an `Unknown` status.
 

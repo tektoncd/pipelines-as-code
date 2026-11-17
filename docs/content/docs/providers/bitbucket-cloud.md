@@ -217,8 +217,8 @@ You can only reference a user by the `ACCOUNT_ID` in a owner file. For reason se
 
 ### IP-based validation (defense-in-depth)
 
-Pipelines-as-Code verifies that webhooks originate from Bitbucket Cloud IP addresses by fetching the
-IP list from <https://ip-ranges.atlassian.com/>.
+By default, Pipelines-as-Code verifies that webhooks originate from Bitbucket Cloud IP addresses by fetching the
+IP list from <https://ip-ranges.atlassian.com/>. When this check is enabled, signature validation is skipped.
 
 - To add extra IP addresses or networks, set the
   `bitbucket-cloud-additional-source-ip` key in the `pipelines-as-code`
@@ -230,11 +230,8 @@ IP list from <https://ip-ranges.atlassian.com/>.
 
 ### Webhook Secret Validation
 
-In addition to IP-based validation, Pipelines-as-Code can also verify
-Bitbucket Cloud supports HMAC webhook secrets. When you configure a
-webhook secret on the Repository CR, Pipelines-as-Code validates the
-signature header on every incoming webhook to verify the payload was
-sent by Bitbucket Cloud and has not been tampered with.
+When IP-based validation is disabled, Pipelines-as-Code verifies the webhook
+signature using the secret configured on the Repository CR.
 
 Note: If IP-Based validation is disabled, Pipelines-as-Code falls back to
 webhook secret validation to protect PipelineRuns being triggered from unverified source.

@@ -7,7 +7,7 @@ Pipelines-as-Code (PAC) is built on top of Tekton Pipelines and provides a GitOp
 
 ## Architecture Overview
 
-PAC consists of three main components that work together to process Git events and manage pipeline executions. See [Tekton Ecosystem]({{< relref "/docs/ecosystem" >}}) for how PAC connects to Tekton Pipelines, Chains, Results, Dashboard, and Operator.
+The controller receives Git events and creates PipelineRuns; the watcher follows those runs and reports their results. A separate admission webhook validates Repository resources. See [Tekton Ecosystem]({{< relref "/docs/ecosystem" >}}) for how PAC connects to Tekton Pipelines, Chains, Results, Dashboard, and Operator.
 
 ```mermaid
 flowchart LR
@@ -403,24 +403,28 @@ PAC supports multiple Git providers through a common interface:
 
 ### Provider Interface
 
-All providers implement the `Interface` in `pkg/provider/interface.go`:
+All providers implement `provider.Interface` in `pkg/provider/interface.go`. Its methods include:
 
 ```go
+import (
+    "context"
+    "net/http"
+
+    "github.com/openshift-pipelines/pipelines-as-code/pkg/changedfiles"
+    "github.com/openshift-pipelines/pipelines-as-code/pkg/params"
+    "github.com/openshift-pipelines/pipelines-as-code/pkg/params/info"
+    "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
+    "go.uber.org/zap"
+)
+
 type Interface interface {
-    // Validate webhook signature
-    Validate(req *http.Request) error
-
-    // Parse webhook payload
-    ParsePayload(payload []byte) (*info.Event, error)
-
-    // Create status check/comment
-    CreateStatus(repo string, sha string, status string) error
-
-    // Post comment on PR/MR
-    CreateComment(repo string, prNum int, comment string) error
-
-    // Get changed files
-    GetFiles(repo string, prNum int) ([]string, error)
+    Validate(context.Context, *params.Run, *info.Event) error
+    Detect(*http.Request, string, *zap.SugaredLogger) (bool, bool, *zap.SugaredLogger, string, error)
+    ParsePayload(context.Context, *params.Run, *http.Request, string) (*info.Event, error)
+    IsAllowed(context.Context, *info.Event) (bool, error)
+    CreateStatus(context.Context, *info.Event, status.StatusOpts) error
+    GetFiles(context.Context, *info.Event) (changedfiles.ChangedFiles, error)
+    CreateComment(ctx context.Context, event *info.Event, comment, updateMarker string) error
 }
 ```
 

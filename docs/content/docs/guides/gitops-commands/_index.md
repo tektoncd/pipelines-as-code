@@ -3,9 +3,9 @@ title: GitOps Commands
 weight: 6
 ---
 
-GitOps commands let you control Pipelines-as-Code directly from pull request (PR) comments or pushed commits. Use them to retest failures, cancel running pipelines, or trigger specific PipelineRuns without leaving your Git provider's interface.
+GitOps commands let you control Pipelines-as-Code from pull request (PR) comments and comments on pushed commits. Use them to retest failures, cancel running pipelines, or trigger specific PipelineRuns without leaving your Git provider's interface.
 
-Because every command lives in the PR comment history, you get a built-in journal of every pipeline execution right next to your code.
+PR commands stay in the pull request's comment history, and push commands stay in the commit's comment history.
 
 ## GitOps Commands on Pull Requests
 
@@ -82,7 +82,7 @@ Similarly, the `/ok-to-test` command only triggers new PipelineRuns when no succ
 ### Requiring a SHA with `/ok-to-test`
 
 {{< tech_preview "Requiring a SHA argument to `/ok-to-test`" >}}
-{{< support_matrix github_app="true" github_webhook="false" forgejo="false" gitlab="false" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
+{{< support_matrix github_app="true" github_webhook="true" forgejo="false" gitlab="false" bitbucket_cloud="false" bitbucket_datacenter="false" >}}
 
 **What it does:** This setting forces reviewers to include the commit SHA when approving external contributions, closing a timing window that could otherwise let unreviewed code run in CI.
 
