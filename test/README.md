@@ -366,6 +366,19 @@ If a test fails in CI, you can:
 1. Examine the workflow logs in GitHub Actions
 2. Download the artifacts (logs) for detailed investigation
 3. Use the "debug_enabled" option when manually triggering the workflow to get a tmate session
+4. Re-run only what you need when triggering the workflow manually: `providers`
+   takes a comma-separated list of matrix entries, and `test_pattern` a
+   `go test -run` pattern that replaces the test list of those providers. The
+   pattern is passed as is, so add your own anchors, and use `Test/subtest` to
+   pick a subtest. The job fails when the pattern matches no test.
+
+   ```shell
+   gh workflow run e2e.yaml -R tektoncd/pipelines-as-code \
+     -f providers=gitlab_bitbucket -f test_pattern='^TestBitbucketCloud'
+   ```
+
+   Pick a provider whose setup matches the test, for example a Gitea test on
+   `gitea_1`, since each provider only sets up its own forge.
 
 For local debugging, you can:
 

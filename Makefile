@@ -59,12 +59,15 @@ windows: ## compile windows binaries
 	env GOOS=windows GOARCH=amd64 go build -mod=vendor $(FLAGS)  -v -o ./bin/tkn-pac.exe ./cmd/tkn-pac/main.go
 
 ##@ Testing
-test: test-unit ## Run test-unit
+test: test-unit test-hack ## Run test-unit and hack script tests
 test-clean:  ## Clean testcache
 	@echo "Cleaning test cache"
 	@go clean -testcache
-.PHONY: test test-unit
+.PHONY: test test-unit test-hack
 test-no-cache: test-clean test-unit ## Run test-unit without caching
+test-hack: ## Run hack shell script tests
+	@echo "Running hack script tests..."
+	@./hack/gh-workflow-ci-test.sh
 test-unit: ## Run unit tests
 	@mkdir -p tmp/
 	@echo "Running unit tests..."
