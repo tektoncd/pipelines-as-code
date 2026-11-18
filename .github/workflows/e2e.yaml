@@ -14,6 +14,14 @@ on:
         type: string
         description: "Target ref to run the tests against"
         required: false
+      providers:
+        type: string
+        description: "Comma-separated providers to run (e.g. gitlab_bitbucket,gitea_1), empty runs all"
+        required: false
+      test_pattern:
+        type: string
+        description: "go test -run pattern, passed as is, replacing the test list of each selected provider (e.g. ^TestBitbucketCloud or ^TestGiteaPush$/subtest); pair it with providers"
+        required: false
   pull_request_target:
     types:
       - opened
@@ -28,14 +36,48 @@ on:
       - "hack/**"
 
 jobs:
-  e2e-tests:
+  e2e-matrix:
     # Run on schedule, unconditional workflow_dispatch,
     # or pull_request_target if the actor has write/admin permissions.
+    # e2e-tests needs this job, so it is skipped whenever this one is.
     if: >
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request_target' && github.event.action != 'labeled') ||
       (github.event_name == 'pull_request_target' && github.event.action == 'labeled' && github.event.label.name == 'ok-to-test')
+    name: e2e matrix
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      providers: ${{ steps.matrix.outputs.providers }}
+    steps:
+      - name: Select providers
+        id: matrix
+        env:
+          ALL_PROVIDERS: >-
+            github_public github_ghe_1 github_ghe_2 github_ghe_3
+            gitlab_bitbucket gitea_1 gitea_2 gitea_3 concurrency
+          REQUESTED: ${{ inputs.providers }}
+        run: |
+          set -euo pipefail
+          read -ra all <<<"${ALL_PROVIDERS}"
+          selected=()
+          IFS=', ' read -ra requested <<<"${REQUESTED}"
+          for provider in "${requested[@]}"; do
+            [[ -n ${provider} ]] || continue
+            if [[ " ${all[*]} " != *" ${provider} "* ]]; then
+              echo "::error::unknown provider '${provider}', valid ones: ${all[*]}"
+              exit 1
+            fi
+            # A duplicate would start two jobs sharing a concurrency group.
+            [[ " ${selected[*]} " == *" ${provider} "* ]] || selected+=("${provider}")
+          done
+          ((${#selected[@]})) || selected=("${all[@]}")
+          echo "providers=$(printf '%s\n' "${selected[@]}" | jq -Rnc '[inputs]')" >>"${GITHUB_OUTPUT}"
+          echo "Running providers: ${selected[*]}"
+
+  e2e-tests:
+    needs: [e2e-matrix]
     concurrency:
       group: ${{ github.workflow }}-${{ matrix.provider }}-${{ github.event.pull_request.number || github.ref_name }}
       cancel-in-progress: true
@@ -49,18 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider:
-          [
-            github_public,
-            github_ghe_1,
-            github_ghe_2,
-            github_ghe_3,
-            gitlab_bitbucket,
-            gitea_1,
-            gitea_2,
-            gitea_3,
-            concurrency,
-          ]
+        provider: ${{ fromJSON(needs.e2e-matrix.outputs.providers) }}
 
     env:
       # Common/Infra
@@ -313,7 +344,14 @@ jobs:
           TEST_GITEA_SMEEURL: ${{ steps.gosmee-url.outputs.url }}
           TEST_GITLAB_SMEEURL: ${{ steps.gosmee-gitlab-url.outputs.url }}
           TEST_GITHUB_SECOND_WEBHOOK_SMEE_URL: ${{ steps.gosmee-ghe-webhook-url.outputs.url }}
+          TEST_PATTERN: ${{ inputs.test_pattern }}
         run: |
+          # The helper comes from target_ref, which may predate test_pattern
+          # and would then run the whole provider list.
+          if [[ -n "${TEST_PATTERN}" ]] && ! grep -q 'TEST_PATTERN' hack/gh-workflow-ci.sh; then
+            echo "::error::hack/gh-workflow-ci.sh on this ref does not support test_pattern"
+            exit 1
+          fi
           ./hack/gh-workflow-ci.sh run_e2e_tests
 
       - name: Generate GitHub Step Summary
