@@ -123,33 +123,6 @@ changelog:
       - Merge branch
       - go mod tidy
 
-aurs:
-  - name: tkn-pac
-    homepage: "https://pipelinesascode.com"
-    skip_upload: true
-    description: tkn-pac - A command line interface for interacting with Pipelines as Code
-    maintainers:
-      - "Chmouel Boudjnah <chmouel@chmouel.com>"
-    license: Apache 2.0
-    private_key: "{{ .Env.AUR_PRIVATE_KEY }}"
-    git_url: ssh://aur@aur.archlinux.org/tkn-pac.git
-    package: |-
-      # bin
-      install -Dm755 "./tkn-pac" "${pkgdir}/usr/bin/tkn-pac"
-
-      # license
-      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/tkn-pac/LICENSE"
-
-      # completions
-      mkdir -p "${pkgdir}/usr/share/bash-completion/completions/"
-      mkdir -p "${pkgdir}/usr/share/zsh/site-functions/"
-
-      ./tkn-pac completion zsh > tkn-pac.zsh
-      ./tkn-pac completion bash > tkn-pac.bash
-
-      install -Dm644 "tkn-pac.bash" "${pkgdir}/usr/share/bash-completion/completions/tkn-pac"
-      install -Dm644 "tkn-pac.zsh" "${pkgdir}/usr/share/zsh/site-functions/_tkn-pac"
-
 universal_binaries:
   - replace: true
     name_template: "tkn-pac"
