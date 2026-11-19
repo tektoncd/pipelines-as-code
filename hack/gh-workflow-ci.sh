@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2038,SC2153
 # Helper script for GitHub Actions CI, used from e2e tests.
-set -exufo pipefail
+# hack/gh-workflow-ci-test.sh sources it to test the helpers below.
+if [[ ${BASH_SOURCE[0]} == "${0}" ]]; then
+  set -exufo pipefail
+fi
 
 export PAC_API_INSTRUMENTATION_DIR=/tmp/api-instrumentation
 export TEST_GITLAB_API_URL=https://gitlab.pipelinesascode.com
@@ -232,30 +235,103 @@ check_e2e_rate_limits() {
   esac
 }
 
+# split_test_pattern <pattern> <separator>
+# Print the parts of a go test -run pattern split on the separator outside of
+# brackets, parentheses and escapes, like the testing package does: "|" for
+# the alternatives, then "/" for the levels of each alternative.
+split_test_pattern() {
+  local pattern="$1" separator="$2" part="" char i brackets=0 parens=0
+  for ((i = 0; i < ${#pattern}; i++)); do
+    char="${pattern:i:1}"
+    case "${char}" in
+    "[") brackets=$((brackets + 1)) ;;
+    "]") if ((brackets > 0)); then brackets=$((brackets - 1)); fi ;;
+    "(") if ((brackets == 0)); then parens=$((parens + 1)); fi ;;
+    ")") if ((brackets == 0)); then parens=$((parens - 1)); fi ;;
+    "\\")
+      part+="${char}"
+      i=$((i + 1))
+      char="${pattern:i:1}"
+      ;;
+    "${separator}")
+      if ((brackets == 0 && parens == 0)); then
+        printf '%s\n' "${part}"
+        part=""
+        continue
+      fi
+      ;;
+    esac
+    part+="${char}"
+  done
+  printf '%s\n' "${part}"
+}
+
+# test_pattern_ran <gotestsum json file> <pattern>
+# Report whether the run went as deep as the -run pattern asks. go test only
+# starts a test or subtest whose name matches its level of the pattern, so a
+# started test as deep as the last non-empty level proves a match. Parents
+# start even when none of their subtests match, so a shallower test does not.
+# With alternatives of different depths the shallowest one is used, which can
+# miss a failed deeper alternative but never fails a run that matched.
+# Counting levels instead of matching names keeps Go regexp syntax out of
+# bash.
+test_pattern_ran() {
+  local raw_output="$1" pattern="$2" depth=0 alternative alt_depth idx
+  local -a alternatives parts
+  mapfile -t alternatives < <(split_test_pattern "${pattern}" "|")
+  for alternative in "${alternatives[@]}"; do
+    mapfile -t parts < <(split_test_pattern "${alternative}" "/")
+    alt_depth=1
+    for idx in "${!parts[@]}"; do
+      [[ -n ${parts[idx]} ]] && alt_depth=$((idx + 1))
+    done
+    if ((depth == 0 || alt_depth < depth)); then depth=${alt_depth}; fi
+  done
+  jq -en --argjson depth "${depth}" \
+    '[inputs | select(.Action == "run" and .Test != null) | .Test | split("/") | length] | any(. >= $depth)' \
+    "${raw_output}" >/dev/null 2>&1
+}
+
 run_e2e_tests() {
   set +x
   target="${TEST_PROVIDER}"
   export PAC_E2E_KEEP_NS=true
 
-  mapfile -t tests < <(get_tests "${target}")
-  echo "About to run ${#tests[@]} tests: ${tests[*]}"
+  local test_pattern
+  if [[ -n "${TEST_PATTERN:-}" ]]; then
+    # Set from the workflow_dispatch test_pattern input and passed to -run
+    # unchanged, so it can select subtests (Test/subtest) and set its own
+    # anchors.
+    test_pattern="${TEST_PATTERN}"
+    echo "About to run tests matching: ${test_pattern}"
+  else
+    mapfile -t tests < <(get_tests "${target}")
+    echo "About to run ${#tests[@]} tests: ${tests[*]}"
 
-  if [[ ${#tests[@]} -eq 0 || (-z "${tests[0]}" && ${#tests[@]} -eq 1) ]]; then
-    echo "No tests to run for target '${target}', exiting successfully."
-    return 0
+    if [[ ${#tests[@]} -eq 0 || (-z "${tests[0]}" && ${#tests[@]} -eq 1) ]]; then
+      echo "No tests to run for target '${target}', exiting successfully."
+      return 0
+    fi
+
+    # shellcheck disable=SC2001
+    test_pattern="^($(echo "${tests[*]}" | sed 's/ /|/g'))$"
   fi
 
   mkdir -p /tmp/logs
 
-  local test_pattern
   local test_status=0
   local raw_output=/tmp/logs/e2e-test-output.json
-
-  # shellcheck disable=SC2001
-  test_pattern="$(echo "${tests[*]}" | sed 's/ /|/g')"
   ./hack/install-gotestsum.sh 1.13.0 "${HOME}/go/bin"
   gotestsum --format standard-verbose --jsonfile "${raw_output}" -- \
-    -race -failfast -timeout 45m -count=1 -tags=e2e -run "^(${test_pattern})$" ./test || test_status=$?
+    -race -failfast -timeout 45m -count=1 -tags=e2e -run "${test_pattern}" ./test || test_status=$?
+
+  # go test passes when -run matches nothing, which would hide a mistyped
+  # test_pattern behind a green job.
+  if [[ ${test_status} -eq 0 && -n "${TEST_PATTERN:-}" ]] &&
+    ! test_pattern_ran "${raw_output}" "${TEST_PATTERN}"; then
+    echo "No test matched TEST_PATTERN '${TEST_PATTERN}'"
+    test_status=1
+  fi
   return "${test_status}"
 }
 
@@ -403,6 +479,7 @@ help() {
   run_e2e_tests
     Run the e2e tests
     Required env vars: TEST_PROVIDER plus many test-specific environment variables
+    Optional env vars: TEST_PATTERN (go test -run pattern, passed as is, replacing the provider's test list)
 
   collect_logs
     Collect logs from the cluster
@@ -421,6 +498,11 @@ help() {
 
 EOF
 }
+
+# Allow the script to be sourced by hack/gh-workflow-ci-test.sh.
+if [[ ${BASH_SOURCE[0]} != "${0}" ]]; then
+  return 0
+fi
 
 case ${1-""} in
 check_e2e_rate_limits)
