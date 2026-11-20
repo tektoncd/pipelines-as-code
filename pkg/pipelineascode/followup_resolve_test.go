@@ -1,6 +1,7 @@
 package pipelineascode
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -90,8 +91,14 @@ func TestResolveFollowUpDefinition(t *testing.T) {
 		paramFilters   map[string]string
 		remoteTasks    bool
 		wantStage      string
+		wantResolver   string
 		wantErr        string
 	}{
+		{
+			name:           "an installed Pipeline uses the cluster resolver without a repository definition",
+			tektonDir:      strings.Replace(followUpTektonDir, "spec:\n  params:", "spec:\n  pipelineRef:\n    resolver: cluster\n    params:\n    - name: name\n      value: paco-diagnosis\n    - name: namespace\n      value: namespace\n    - name: kind\n      value: pipeline\n  params:", 1),
+			definitionName: "deploy", remoteTasks: true, wantResolver: "cluster",
+		},
 		{
 			name:           "a param selected by a payload filter at event time is templated from the recorded outcome",
 			tektonDir:      followUpWithBrokenSiblingTektonDir,
@@ -160,6 +167,10 @@ func TestResolveFollowUpDefinition(t *testing.T) {
 			// remote task resolution turns the name into a generateName, like
 			// at event time: the watcher sets the deterministic name afterwards
 			assert.Equal(t, "deploy", prgroup.DefinitionName(pr))
+			if tt.wantResolver != "" {
+				assert.Assert(t, pr.Spec.PipelineRef != nil)
+				assert.Equal(t, string(pr.Spec.PipelineRef.Resolver), tt.wantResolver)
+			}
 			secretName := pr.GetAnnotations()[keys.GitAuthSecret]
 			assert.Assert(t, secretName != "", "the git auth secret annotation is stamped")
 			var revision, secret, stage string

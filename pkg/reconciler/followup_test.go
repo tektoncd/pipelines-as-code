@@ -285,6 +285,8 @@ func TestCreateFollowUp(t *testing.T) {
 			logger := zap.NewNop().Sugar()
 			deploy := prgroup.FollowUp{ID: "deploy-group1", Name: "deploy", Deps: []string{"build"}, State: prgroup.StatePending}
 			build := finishedGroupRun(t, "build", "build", deploy)
+			build.Status.Conditions[0].Status = corev1.ConditionFalse
+			build.Status.Conditions[0].Reason = "Failed"
 			stdata, informers := testclient.SeedTestData(t, ctx, testclient.Data{PipelineRuns: []*tektonv1.PipelineRun{build}})
 			if tt.rejectCreate {
 				stdata.Pipeline.PrependReactor("create", "pipelineruns", func(_ k8stesting.Action) (bool, runtime.Object, error) {
@@ -373,9 +375,14 @@ func TestCreateFollowUp(t *testing.T) {
 				vcx, event, run, prgroup.Decision{}))
 			assert.Equal(t, tt.wantFollowUp, storedFollowUpState(ctx, t, stdata.Pipeline, deploy.ID))
 
+			original, err := stdata.Pipeline.TektonV1().PipelineRuns("namespace").Get(ctx, "build", metav1.GetOptions{})
+			assert.NilError(t, err)
+			assert.DeepEqual(t, original.Status.Conditions, build.Status.Conditions)
+
 			// nothing retries a failed creation: it is reported once
 			failures := 0
 			for _, status := range vcx.statuses {
+				assert.Assert(t, status.PipelineRunName != build.Name)
 				if status.Conclusion == providerstatus.ConclusionFailure {
 					failures++
 					assert.Equal(t, "pipelinerun start failure", status.Title)
