@@ -491,6 +491,15 @@ func TestCelEvaluateErrorBranches(t *testing.T) {
 			},
 			vcx: &testprovider.TestProviderImp{},
 		},
+		{
+			name: "release event not matching retest target",
+			expr: `event == "release"`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Retest,
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			vcx: &testprovider.TestProviderImp{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -502,6 +511,87 @@ func TestCelEvaluateErrorBranches(t *testing.T) {
 			}
 			assert.NilError(t, err)
 			assert.Equal(t, types.False, out)
+		})
+	}
+}
+
+func TestCelEvaluateReleaseEvent(t *testing.T) {
+	tests := []struct {
+		name  string
+		expr  string
+		event *info.Event
+		want  bool
+	}{
+		{
+			name: "event matches release",
+			expr: `event == "release"`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Release,
+				EventType:     "release",
+				BaseBranch:    "refs/tags/v1.0.0",
+				HeadBranch:    "refs/tags/v1.0.0",
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			want: true,
+		},
+		{
+			name: "event does not match release for push",
+			expr: `event == "release"`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Push,
+				EventType:     "push",
+				BaseBranch:    "main",
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			want: false,
+		},
+		{
+			name: "release with tag prefix CEL",
+			expr: `event == "release" && target_branch.startsWith("refs/tags/v")`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Release,
+				EventType:     "release",
+				BaseBranch:    "refs/tags/v1.0.0",
+				HeadBranch:    "refs/tags/v1.0.0",
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			want: true,
+		},
+		{
+			name: "release with non-matching tag prefix",
+			expr: `event == "release" && target_branch.startsWith("refs/tags/v")`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Release,
+				EventType:     "release",
+				BaseBranch:    "refs/tags/beta-1",
+				HeadBranch:    "refs/tags/beta-1",
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			want: false,
+		},
+		{
+			name: "release event_title falls back to ReleaseName",
+			expr: `event_title == "My Release"`,
+			event: &info.Event{
+				TriggerTarget: triggertype.Release,
+				EventType:     "release",
+				ReleaseName:   "My Release",
+				BaseBranch:    "refs/tags/v1.0.0",
+				Request:       &info.Request{Header: http.Header{}},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := celEvaluate(context.Background(), tt.expr, tt.event, &testprovider.TestProviderImp{}, nil, nil, nil)
+			assert.NilError(t, err)
+			if tt.want {
+				assert.Equal(t, types.True, out)
+			} else {
+				assert.Equal(t, types.False, out)
+			}
 		})
 	}
 }
