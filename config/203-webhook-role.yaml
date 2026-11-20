@@ -76,6 +76,9 @@ metadata:
     app.kubernetes.io/instance: default
     app.kubernetes.io/part-of: pipelines-as-code
 rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update"]
   - apiGroups: ["pipelinesascode.tekton.dev"]
     resources: ["repositories"]
     verbs: ["get", "list", "watch"]

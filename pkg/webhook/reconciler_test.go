@@ -56,6 +56,7 @@ func TestReconcileLeaderSecretAndWebhook(t *testing.T) {
 		&admissionregistrationv1.ValidatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-webhook"},
 			Webhooks: []admissionregistrationv1.ValidatingWebhook{
+				{Name: "queued-token.pipelinesascode.tekton.dev", ClientConfig: admissionregistrationv1.WebhookClientConfig{Service: &admissionregistrationv1.ServiceReference{Name: "svc", Namespace: "test-ns"}}},
 				{
 					Name: "test-webhook",
 					ClientConfig: admissionregistrationv1.WebhookClientConfig{
@@ -96,6 +97,9 @@ func TestReconcileLeaderSecretAndWebhook(t *testing.T) {
 	assert.NilError(t, err)
 	assert.DeepEqual(t, updated.Webhooks[0].ClientConfig.CABundle, []byte("fake-ca-cert"))
 	assert.Equal(t, *updated.Webhooks[0].ClientConfig.Service.Path, "/validate")
+	assert.Equal(t, len(updated.Webhooks), 2)
+	assert.DeepEqual(t, updated.Webhooks[1].ClientConfig.CABundle, []byte("fake-ca-cert"))
+	assert.Equal(t, *updated.Webhooks[1].ClientConfig.Service.Path, "/validate")
 }
 
 func TestReconcileMissingSecret(t *testing.T) {

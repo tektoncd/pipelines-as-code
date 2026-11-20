@@ -11,7 +11,7 @@ This page lists the prerequisites you must meet before installing Pipelines-as-C
 
 For standard Kubernetes clusters:
 
-- **Kubernetes version**: 1.27 or higher (recommended: latest stable)
+- **Kubernetes version**: 1.28 or higher (recommended: latest stable)
 - **Cluster access**: Admin permissions to install CRDs and cluster roles
 - **Resources**: Minimum cluster resources:
   - 2 CPU cores available
@@ -26,7 +26,7 @@ Pipelines-as-Code has been tested on the following Kubernetes distributions:
 
 For OpenShift clusters:
 
-- **OpenShift version**: 4.10 or higher
+- **OpenShift version**: 4.15 or higher
 - **OpenShift Pipelines**: Version 1.7.x or higher (includes Tekton Pipelines)
 - **Cluster access**: Admin permissions for operator installation or manual installation
 
@@ -304,7 +304,7 @@ Store authentication credentials as Kubernetes Secrets.
 
 | Pipelines-as-Code | Tekton Pipelines | Kubernetes | OpenShift | Go Version |
 | --- | --- | --- | --- | --- |
-| v0.30.x+ | v0.50.0+ | 1.27+ | 4.10+ | 1.25+ |
+| v0.30.x+ | v0.50.0+ | 1.28+ | 4.15+ | 1.25+ |
 | v0.25.x - v0.29.x | v0.44.0+ | 1.23+ | 4.10+ | 1.22+ |
 
 Based on go.mod, Pipelines-as-Code is currently built with Go 1.25.0 and requires Tekton Pipelines v1.7.0.
@@ -329,7 +329,7 @@ For using the Pipelines-as-Code GitHub App creation flow:
 
 Before proceeding with installation:
 
-- Kubernetes 1.27+ or OpenShift 4.10+ cluster
+- Kubernetes 1.28+ or OpenShift 4.15+ cluster
 - Tekton Pipelines v0.50.0+ installed
 - kubectl (and oc for OpenShift) CLI installed
 - Cluster admin access

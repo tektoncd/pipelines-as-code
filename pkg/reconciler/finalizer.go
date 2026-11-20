@@ -32,7 +32,7 @@ func (r *Reconciler) finalizeKind(ctx context.Context, pr *tektonv1.PipelineRun)
 	// ConfigMap. Without the namespace that read targets "" and every deletion
 	// of a running PipelineRun would silently stop reporting.
 	ctx = info.StoreNS(ctx, system.Namespace())
-	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	controllerInfo, err := info.ControllerInfoFromAnnotations(pr.GetAnnotations(), r.run.Info.Controller)
 	if err != nil {
 		return err
 	}

@@ -102,6 +102,8 @@ func NewController() func(context.Context, configmap.Watcher) *controller.Impl {
 			logging.FromContext(ctx).Panicf("Couldn't register Repository informer event handler: %v", err)
 		}
 
+		go metrics.ReportRunningPipelineRuns(ctx, r.pipelineRunLister)
+
 		return impl
 	}
 }
