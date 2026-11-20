@@ -69,7 +69,7 @@ func TestGiteaErrorSnippetCustomLines(t *testing.T) {
 	topts.Regexp = regexp.MustCompile(`Hey man i just wanna to say i am not such a failure, i am useful in my failure`)
 	tgitea.WaitForPullRequestCommentMatch(t, topts)
 
-	comments, _, err := topts.GiteaCNX.Client().ListRepoIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, forgejo.ListIssueCommentOptions{})
+	comments, _, err := topts.GiteaCNX.Client().ListIssueComments(topts.PullRequest.Base.Repository.Owner.UserName, topts.PullRequest.Base.Repository.Name, topts.PullRequest.Index, forgejo.ListIssueCommentOptions{})
 	assert.NilError(t, err)
 	assert.Assert(t, len(comments) > 0)
 	lastComment := comments[len(comments)-1]
