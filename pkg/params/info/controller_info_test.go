@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 	"gotest.tools/v3/assert"
 )
 
@@ -141,6 +142,80 @@ func TestGetCurrentControllerName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := GetCurrentControllerName(tt.args.ctx); got != tt.want {
 				t.Errorf("GetCurrentControllerName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestControllerInfoFromAnnotations(t *testing.T) {
+	fallback := &ControllerInfo{Name: "default", Secret: "default-secret"}
+	tests := []struct {
+		name       string
+		annotation string
+		fallback   *ControllerInfo
+		want       *ControllerInfo
+		wantErrSub string
+	}{
+		{
+			name:       "controller annotation",
+			annotation: `{"name":"secondary","configmap":"secondary-config","secret":"secondary-secret","gRepo":"secondary-global"}`,
+			fallback:   fallback,
+			want: &ControllerInfo{
+				Name:             "secondary",
+				Configmap:        "secondary-config",
+				Secret:           "secondary-secret",
+				GlobalRepository: "secondary-global",
+			},
+		},
+		{
+			name:     "fallback controller",
+			fallback: fallback,
+			want:     fallback,
+		},
+		{
+			name:     "default controller without fallback",
+			fallback: nil,
+			want: &ControllerInfo{
+				Name:             "default",
+				Configmap:        DefaultPipelinesAscodeConfigmapName,
+				Secret:           DefaultPipelinesAscodeSecretName,
+				GlobalRepository: DefaultGlobalRepoName,
+			},
+		},
+		{
+			name:       "invalid annotation",
+			annotation: "{",
+			fallback:   fallback,
+			wantErrSub: "failed to parse controllerInfo",
+		},
+		{
+			name:       "null annotation",
+			annotation: "null",
+			fallback:   fallback,
+			wantErrSub: "value must not be null",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PAC_CONTROLLER_LABEL", "default")
+			t.Setenv("PAC_CONTROLLER_SECRET", DefaultPipelinesAscodeSecretName)
+			t.Setenv("PAC_CONTROLLER_CONFIGMAP", DefaultPipelinesAscodeConfigmapName)
+			t.Setenv("PAC_CONTROLLER_GLOBAL_REPOSITORY", DefaultGlobalRepoName)
+
+			annotations := map[string]string{}
+			if tt.annotation != "" {
+				annotations[keys.ControllerInfo] = tt.annotation
+			}
+			got, err := ControllerInfoFromAnnotations(annotations, tt.fallback)
+			if tt.wantErrSub != "" {
+				assert.ErrorContains(t, err, tt.wantErrSub)
+				return
+			}
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.want)
+			if tt.fallback != nil {
+				assert.Assert(t, got != tt.fallback, "controller info must be copied per call")
 			}
 		})
 	}
