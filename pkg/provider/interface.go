@@ -43,3 +43,10 @@ type CommitStatusInfo struct {
 }
 
 const DefaultProviderAPIUser = "git"
+
+const (
+	// Fetch from event source branch/SHA.
+	ProvenanceSource = "source"
+	// Fetch from repository default branch.
+	ProvenanceDefaultBranch = "default_branch"
+)

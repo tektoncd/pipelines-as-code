@@ -154,7 +154,10 @@ func pipelineRunProvenance(repo *v1alpha1.Repository) string {
 
 // getPipelineRunsFromRepo fetches pipelineruns from git repository and prepare them for creation.
 func (p *PacRun) getPipelineRunsFromRepo(ctx context.Context, repo *v1alpha1.Repository) ([]matcher.Match, map[string]*tektonv1.PipelineRun, error) {
-	provenance := pipelineRunProvenance(repo)
+	provenance := provider.ProvenanceSource
+	if repo.Spec.Settings != nil && repo.Spec.Settings.PipelineRunProvenance != "" {
+		provenance = repo.Spec.Settings.PipelineRunProvenance
+	}
 	repositoryRevision := getRepositoryRevisionForProvenance(p.event, provenance)
 	p.debugf("getPipelineRunsFromRepo: repo=%s/%s provenance=%s", repo.GetNamespace(), repo.GetName(), provenance)
 	rawTemplates, err := p.vcx.GetTektonDir(ctx, p.event, tektonDir, provenance)
@@ -484,7 +487,7 @@ func getRepositoryRevisionForProvenance(event *info.Event, provenance string) st
 	if event.PipelineRunSourceRevision == "" {
 		return ""
 	}
-	if provenance == "default_branch" {
+	if provenance == provider.ProvenanceDefaultBranch {
 		return event.DefaultBranch
 	}
 	return event.PipelineRunSourceRevision
