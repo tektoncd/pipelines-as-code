@@ -30,6 +30,12 @@ func (ac *reconciler) Path() string {
 
 // Admit implements AdmissionController.
 func (ac *reconciler) Admit(ctx context.Context, request *v1.AdmissionRequest) *v1.AdmissionResponse {
+	if request.Resource.Group == "tekton.dev" && request.Resource.Resource == "pipelineruns" {
+		if err := ac.refreshBeforeRelease(ctx, request, ac.issueQueuedToken); err != nil {
+			return webhook.MakeErrorStatus("%s", err.Error())
+		}
+		return &v1.AdmissionResponse{Allowed: true}
+	}
 	raw := request.Object.Raw
 	repo := v1alpha1.Repository{}
 	if _, _, err := universalDeserializer.Decode(raw, nil, &repo); err != nil {

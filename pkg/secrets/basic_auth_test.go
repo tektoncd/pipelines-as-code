@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -32,6 +33,7 @@ func TestCreateBasicAuthSecret(t *testing.T) {
 		expectedStartSecretName string
 		expectedError           bool
 		expectedLabels          map[string]string
+		expectedTokenExpiry     string
 	}{
 		{
 			name:                    "Target secret not there",
@@ -149,6 +151,56 @@ func TestCreateBasicAuthSecret(t *testing.T) {
 			expectedGitCredentials:  "https://x-token-auth:ATCT-access-token@bitbucket.org/workspace/repo",
 			expectedStartSecretName: "pac-gitauth-access-token",
 		},
+		{
+			name:     "github app sets UTC RFC3339 token expiry annotation",
+			targetNS: nsthere,
+			event: info.Event{
+				Organization:   "owner",
+				Repository:     "repo",
+				URL:            "https://github.com/owner/repo",
+				InstallationID: 42,
+				Provider: &info.Provider{
+					Token:                secrete,
+					GitHubTokenExpiresAt: time.Date(2026, 11, 20, 14, 30, 0, 0, time.FixedZone("UTC+2", 2*3600)),
+				},
+			},
+			expectedGitConfigURL:    "https://github.com",
+			expectedGitCredentials:  "https://git:verysecrete@github.com/owner/repo",
+			expectedStartSecretName: "pac-gitauth-owner-repo",
+			expectedTokenExpiry:     "2026-11-20T12:30:00Z",
+		},
+		{
+			name:     "github app with zero token expiry omits expiry annotation",
+			targetNS: nsthere,
+			event: info.Event{
+				Organization:   "owner",
+				Repository:     "repo",
+				URL:            "https://github.com/owner/repo",
+				InstallationID: 42,
+				Provider: &info.Provider{
+					Token: secrete,
+				},
+			},
+			expectedGitConfigURL:    "https://github.com",
+			expectedGitCredentials:  "https://git:verysecrete@github.com/owner/repo",
+			expectedStartSecretName: "pac-gitauth-owner-repo",
+		},
+		{
+			name:     "non-app credential with token expiry omits expiry annotation",
+			targetNS: nsthere,
+			event: info.Event{
+				Organization: "owner",
+				Repository:   "repo",
+				URL:          "https://github.com/owner/repo",
+				Provider: &info.Provider{
+					Token:                secrete,
+					GitHubTokenExpiresAt: time.Date(2026, 11, 20, 12, 30, 0, 0, time.UTC),
+				},
+			},
+			expectedGitConfigURL:    "https://github.com",
+			expectedGitCredentials:  "https://git:verysecrete@github.com/owner/repo",
+			expectedStartSecretName: "pac-gitauth-owner-repo",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -163,6 +215,13 @@ func TestCreateBasicAuthSecret(t *testing.T) {
 				if d := cmp.Diff(secret.GetLabels(), tt.expectedLabels); d != "" {
 					t.Fatalf("-got, +want: %v", d)
 				}
+			}
+			gotExpiry, hasExpiry := secret.GetAnnotations()[keys.GitHubTokenExpiry]
+			if tt.expectedTokenExpiry != "" {
+				assert.Assert(t, hasExpiry, "expected %s annotation to be set", keys.GitHubTokenExpiry)
+				assert.Equal(t, gotExpiry, tt.expectedTokenExpiry)
+			} else {
+				assert.Assert(t, !hasExpiry, "expected %s annotation to be absent, got %q", keys.GitHubTokenExpiry, gotExpiry)
 			}
 			assert.Assert(t, strings.HasPrefix(secret.GetName(), tt.expectedStartSecretName))
 			gitConfig := secret.StringData[".gitconfig"]
