@@ -120,7 +120,7 @@ spec:
                   --branch="${branch}"
             - name: post-preview-status
               displayName: "Post Preview Status"
-              image: docker.io/curlimages/curl
+              image: quay.io/curl/curl
               env:
                 - name: HUB_TOKEN
                   valueFrom:
