@@ -9,7 +9,7 @@ This page walks you through installing and configuring Pipelines-as-Code on a Ku
 
 Before you begin, ensure that:
 
-- Your cluster runs Kubernetes version 1.27 or higher.
+- Your cluster runs Kubernetes version 1.28 or higher.
 - You have installed Tekton Pipelines by applying the
 [pipeline](https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml)
 `release.yaml` file on your cluster.

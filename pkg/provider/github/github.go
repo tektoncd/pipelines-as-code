@@ -66,6 +66,7 @@ type Provider struct {
 	eventEmitter    *events.EventEmitter
 	PaginedNumber   int
 	userType        string // The type of user i.e bot or not
+	tokenExpiresAt  time.Time
 	skippedRun
 	triggerEvent       string
 	cachedChangedFiles *changedfiles.ChangedFiles
@@ -470,6 +471,10 @@ func (v *Provider) SetClient(ctx context.Context, run *params.Run, event *info.E
 				return fmt.Errorf("failed to scope token to triggering repository: %w", err)
 			}
 			event.Provider.Token = scopedToken
+		}
+		event.Provider.GitHubTokenExpiresAt = time.Time{}
+		if event.GHEURL == "" && (len(v.RepositoryIDs) > 0 || len(v.RepositoryNames) > 0) && v.Token != nil && *v.Token == event.Provider.Token {
+			event.Provider.GitHubTokenExpiresAt = v.tokenExpiresAt
 		}
 	}
 

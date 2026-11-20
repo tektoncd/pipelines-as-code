@@ -102,10 +102,13 @@ func (ac *reconciler) reconcileValidatingWebhook(ctx context.Context, caCert []b
 	webhook.OwnerReferences = nil
 
 	for i, wh := range webhook.Webhooks {
-		if wh.Name != webhook.Name {
+		switch wh.Name {
+		case webhook.Name:
+			webhook.Webhooks[i].Rules = rules
+		case "queued-token.pipelinesascode.tekton.dev":
+		default:
 			continue
 		}
-		webhook.Webhooks[i].Rules = rules
 		webhook.Webhooks[i].ClientConfig.CABundle = caCert
 		if webhook.Webhooks[i].ClientConfig.Service == nil {
 			return fmt.Errorf("missing service reference for webhook: %s", wh.Name)

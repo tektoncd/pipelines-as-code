@@ -97,6 +97,7 @@ type State struct {
 }
 
 type Provider struct {
+	GitHubTokenExpiresAt            time.Time
 	Token                           string
 	URL                             string
 	User                            string
