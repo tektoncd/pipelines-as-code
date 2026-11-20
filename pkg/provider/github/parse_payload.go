@@ -130,6 +130,10 @@ func (v *Provider) GetAppToken(ctx context.Context, kube kubernetes.Interface, g
 	if err != nil {
 		return "", err
 	}
+	v.tokenExpiresAt, _, err = itr.Expiry()
+	if err != nil {
+		return "", err
+	}
 	v.Token = new(token)
 
 	return token, err

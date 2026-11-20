@@ -121,24 +121,6 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	return reconciler.reconcileKind(ctx, pr)
 }
 
-func controllerInfoForPipelineRun(pr *tektonv1.PipelineRun, fallback *info.ControllerInfo) (*info.ControllerInfo, error) {
-	if controllerInfo, ok := pr.GetAnnotations()[keys.ControllerInfo]; ok {
-		var parsedControllerInfo *info.ControllerInfo
-		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
-			return nil, fmt.Errorf("failed to parse controllerInfo: %w", err)
-		}
-		if parsedControllerInfo == nil {
-			return nil, fmt.Errorf("failed to parse controllerInfo: value must not be null")
-		}
-		return parsedControllerInfo, nil
-	}
-	if fallback != nil {
-		controllerInfo := *fallback
-		return &controllerInfo, nil
-	}
-	return info.GetControllerInfoFromEnvOrDefault(), nil
-}
-
 func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun) pkgreconciler.Event {
 	ctx = info.StoreNS(ctx, system.Namespace())
 	logger := logging.FromContext(ctx).With("namespace", pr.GetNamespace())
@@ -191,7 +173,7 @@ func (r *Reconciler) reconcileKind(ctx context.Context, pr *tektonv1.PipelineRun
 	//
 	// We always assume the controller is in the same namespace as the original
 	// controller but that may changes
-	controllerInfo, err := controllerInfoForPipelineRun(pr, r.run.Info.Controller)
+	controllerInfo, err := info.ControllerInfoFromAnnotations(pr.GetAnnotations(), r.run.Info.Controller)
 	if err != nil {
 		return err
 	}

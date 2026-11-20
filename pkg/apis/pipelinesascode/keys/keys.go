@@ -23,6 +23,10 @@ import (
 )
 
 const (
+	GitHubTokenExpiry = pipelinesascode.GroupName + "/github-token-expiry"
+)
+
+const (
 	ControllerInfo         = pipelinesascode.GroupName + "/controller-info"
 	Task                   = pipelinesascode.GroupName + "/task"
 	Pipeline               = pipelinesascode.GroupName + "/pipeline"
