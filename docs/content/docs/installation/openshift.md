@@ -9,7 +9,7 @@ This page walks you through installing Pipelines-as-Code on OpenShift using the 
 
 Before you begin, ensure that:
 
-- Your cluster runs OpenShift 4.10 or higher.
+- Your cluster runs OpenShift 4.15 or higher.
 - You have cluster-admin access to install operators.
 
 ## Install

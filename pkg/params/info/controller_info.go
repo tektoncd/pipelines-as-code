@@ -2,7 +2,11 @@ package info
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
+
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
 )
 
 var currentControllerName = contextKey("current-controller-name")
@@ -27,6 +31,25 @@ type ControllerInfo struct {
 	Configmap        string `json:"configmap"`
 	Secret           string `json:"secret"`
 	GlobalRepository string `json:"gRepo"`
+}
+
+// ControllerInfoFromAnnotations resolves the originating PaC controller for a PipelineRun.
+func ControllerInfoFromAnnotations(annotations map[string]string, fallback *ControllerInfo) (*ControllerInfo, error) {
+	if controllerInfo, ok := annotations[keys.ControllerInfo]; ok {
+		var parsedControllerInfo *ControllerInfo
+		if err := json.Unmarshal([]byte(controllerInfo), &parsedControllerInfo); err != nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: %w", err)
+		}
+		if parsedControllerInfo == nil {
+			return nil, fmt.Errorf("failed to parse controllerInfo: value must not be null")
+		}
+		return parsedControllerInfo, nil
+	}
+	if fallback != nil {
+		controllerInfo := *fallback
+		return &controllerInfo, nil
+	}
+	return GetControllerInfoFromEnvOrDefault(), nil
 }
 
 // GetControllerInfoFromEnvOrDefault retrieves controller info from the env or use the defaults

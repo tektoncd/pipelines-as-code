@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
@@ -82,6 +83,9 @@ func MakeBasicAuthSecret(runevent *info.Event, secretName string) (*corev1.Secre
 		keys.URLRepository:               runevent.Repository,
 	}
 
+	if runevent.InstallationID > 0 && !runevent.Provider.GitHubTokenExpiresAt.IsZero() {
+		annotations[keys.GitHubTokenExpiry] = runevent.Provider.GitHubTokenExpiresAt.UTC().Format(time.RFC3339)
+	}
 	labels := map[string]string{
 		"app.kubernetes.io/managed-by": pipelinesascode.GroupName,
 		keys.URLOrg:                    formatting.CleanValueKubernetes(runevent.Organization),

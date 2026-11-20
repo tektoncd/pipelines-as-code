@@ -9,6 +9,12 @@ This page explains how to use the temporary GitHub App installation token that P
 
 Pipelines-as-Code generates a temporary installation token from the GitHub App for each PipelineRun. You can use this token to access the GitHub API. The token value is stored in the temporary git-auth secret that Pipelines-as-Code generates for [private repositories]({{< relref "/docs/advanced/private-repositories" >}}), under the key `git-provider-token`.
 
+## Refreshing a token after a queue wait
+
+When a queue clears `PipelineRunPending`, PaC checks the expiry of its GitHub.com App token. If the token has five minutes or less left, PaC issues a replacement using the usual repository and global scoping rules, then saves it in the same Secret before the run starts. If refresh fails, the run stays pending for retry.
+
+Refresh needs Kubernetes 1.28 or later (OpenShift 4.15 or later). Clusters on Kubernetes 1.27 or OpenShift 4.14 and earlier aren't supported.
+
 ## Adding a comment to a pull request
 
 To add a comment to a pull request, use the [github-add-comment](https://artifacthub.io/packages/tekton-task/tekton-catalog-tasks/github-add-comment) task from [Artifact Hub](https://artifacthub.io) (a public registry for discovering Tekton tasks and other cloud-native artifacts) with a [Pipelines-as-Code annotation]({{< relref "/docs/guides/pipeline-resolution#hub-support-for-tasks" >}}):
