@@ -78,7 +78,7 @@ jobs:
         with:
           ref: ${{ inputs.target_ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-          allow-unsafe-pr-checkout: true # zizmor: ignore[unsafe-checkout]
+          allow-unsafe-pr-checkout: true
 
       - name: Check user permissions on PRs
         if: github.event_name == 'pull_request_target'
