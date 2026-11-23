@@ -10,3 +10,8 @@ rules:
   dangerous-triggers:
     ignore:
       - e2e.yaml
+
+  # Checkout of PR head is gated by the ok-to-test permission check step.
+  unsafe-checkout:
+    ignore:
+      - e2e.yaml
