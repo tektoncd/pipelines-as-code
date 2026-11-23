@@ -263,24 +263,19 @@ The script filters tests by category using pattern matching on test function nam
 
 #### Second Controller Setup
 
-In CI, use [startpaac](https://github.com/pipelines-as-code/startpaac) to install the second GitHub controller (GHE). When running with the `--ci` flag, startpaac automatically installs the second controller when `PAC_SECOND_SECRET_FOLDER` is set.
+In CI, use [startpaac](https://github.com/pipelines-as-code/startpaac) to install the second GitHub controller (GHE). When running with the `--ci` flag, startpaac reads `PAC_E2E_CONFIG` natively and automatically installs the second controller when `github_enterprise` credentials are populated.
 
-Example from e2e.yaml workflow (the second-controller credentials come from
-the `github_enterprise` section of the config file):
+Example from e2e.yaml workflow:
 
 ```yaml
 - name: Start installing cluster with startpaac
+  env:
+    PAC_DIR: ${{ github.workspace }}
+    PAC_DOMAIN: paac-127-0-0-1.nip.io
+    TARGET_HOST: local
   run: |
-    cfg() { yq -r "$1 // \"\"" "$PAC_E2E_CONFIG"; }
-    mkdir -p ~/secrets-second
-    cfg .github_enterprise.application_id > ~/secrets-second/github-application-id
-    cfg .github_enterprise.private_key > ~/secrets-second/github-private-key
-    cfg .github_enterprise.webhook_secret > ~/secrets-second/webhook.secret
-    cfg .github_enterprise.smee_url > ~/secrets-second/smee
-    export PAC_SECOND_SECRET_FOLDER=~/secrets-second
-
     cd startpaac
-    ./startpaac --ci -a  # Automatically installs second controller
+    ./startpaac --ci -a  # Reads PAC_E2E_CONFIG and installs second controller automatically
 ```
 
 For manual setup or non-CI environments, see the [Second Controller documentation](https://pipelinesascode.com/docs/install/second_controller/).

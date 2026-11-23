@@ -275,27 +275,9 @@ jobs:
       - name: Start installing cluster with startpaac
         env:
           PAC_DIR: ${{ github.workspace }}
+          PAC_DOMAIN: paac-127-0-0-1.nip.io
+          TARGET_HOST: local
         run: |
-          cfg() { yq -r "$1 // \"\"" "$PAC_E2E_CONFIG"; }
-          mkdir -p ~/secrets
-          cfg .github.application_id > ~/secrets/github-application-id
-          cfg .github.private_key > ~/secrets/github-private-key
-          cfg .common.webhook_secret > ~/secrets/webhook.secret
-          cfg .github.smee_url > ~/secrets/smee
-
-          mkdir -p ~/secrets-second
-          cfg .github_enterprise.application_id > ~/secrets-second/github-application-id
-          cfg .github_enterprise.private_key > ~/secrets-second/github-private-key
-          cfg .github_enterprise.webhook_secret > ~/secrets-second/webhook.secret
-          cfg .github_enterprise.smee_url > ~/secrets-second/smee
-          export PAC_SECRET_FOLDER=~/secrets
-          export PAC_SECOND_SECRET_FOLDER=~/secrets-second
-          PAC_WEBHOOK_SECRET=$(cfg .common.webhook_secret)
-          PAC_GITHUB_SECOND_HOSTNAME=$(cfg .github_enterprise.api_url)
-          export PAC_WEBHOOK_SECRET PAC_GITHUB_SECOND_HOSTNAME
-          export PAC_DOMAIN=paac-127-0-0-1.nip.io
-          export TARGET_HOST=local
-
           cd startpaac
           ./startpaac --ci -a
 

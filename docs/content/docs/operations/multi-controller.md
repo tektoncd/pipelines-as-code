@@ -97,31 +97,22 @@ For automated testing environments, [startpaac](https://github.com/pipelines-as-
 ### Prerequisites
 
 - startpaac installed and configured
-- Secret files for the second GitHub application
+- A Pipelines-as-Code E2E YAML config file (`PAC_E2E_CONFIG`) with the `github_enterprise` section populated
 
 ### Automatic Installation in CI Mode
 
-When you run startpaac with the `--ci` flag, it automatically detects and installs the second controller if:
+When you run startpaac with the `--ci` flag, it automatically detects and installs the second controller when `PAC_E2E_CONFIG` (or `--e2e-config FILE`) contains the required `github_enterprise` fields:
 
-1. The `PAC_SECOND_SECRET_FOLDER` environment variable is set
-2. The folder contains the required secret files:
-   - `github-application-id`
-   - `github-private-key`
-   - `webhook.secret`
-   - `smee` (optional, for webhook tunneling)
+- `github_enterprise.application_id`
+- `github_enterprise.private_key`
+- `github_enterprise.webhook_secret`
+- `github_enterprise.smee_url` (optional, for webhook tunneling)
+- `github_enterprise.api_url` (optional, normalized to a bare hostname for `trusted-provider-hostnames`)
 
 Example:
 
 ```bash
-# Create secret folder with GitHub App credentials
-mkdir -p ~/secrets-second
-echo "12345" > ~/secrets-second/github-application-id
-echo "...RSA PRIVATE KEY..." > ~/secrets-second/github-private-key
-echo "webhook-secret-value" > ~/secrets-second/webhook.secret
-echo "https://smee.io/your-channel" > ~/secrets-second/smee
-
-# Export environment variable
-export PAC_SECOND_SECRET_FOLDER=~/secrets-second
+export PAC_E2E_CONFIG=/path/to/e2e-config.yaml
 
 # Run startpaac in CI mode
 cd startpaac
@@ -131,9 +122,9 @@ cd startpaac
 This will:
 
 - Generate TLS certificates using minica for the second controller domain
-- Create Kubernetes secrets from the secret folder
+- Create Kubernetes secrets from `PAC_E2E_CONFIG`
 - Deploy the second controller with proper ingress/route configuration
-- Configure gosmee for webhook tunneling (if you provided a smee URL)
+- Configure gosmee for webhook tunneling (if `github_enterprise.smee_url` is set)
 
 ### Manual Setup
 
