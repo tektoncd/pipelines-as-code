@@ -3,6 +3,7 @@ package pipelineascode
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -85,21 +86,22 @@ func defaultStartPRTestConfig() startPRTestConfig {
 
 // startPRTestFixture holds all the components needed for a startPR test.
 type startPRTestFixture struct {
-	cs         *params.Run
-	event      *info.Event
-	logger     *zap.SugaredLogger
-	ctx        context.Context
-	fakeclient *github.Client
-	teardown   func()
-	kint       *kitesthelper.KinterfaceTest
-	pacInfo    *info.PacOpts
-	vcx        provider.Interface
-	pac        PacRun
+	cs           *params.Run
+	event        *info.Event
+	logger       *zap.SugaredLogger
+	observedLogs *zapobserver.ObservedLogs
+	ctx          context.Context
+	fakeclient   *github.Client
+	teardown     func()
+	kint         *kitesthelper.KinterfaceTest
+	pacInfo      *info.PacOpts
+	vcx          provider.Interface
+	pac          PacRun
 }
 
 func setupStartPRTestWithConfig(t *testing.T, config startPRTestConfig) *startPRTestFixture {
 	t.Helper()
-	cs, event, logger, ctx, fakeclient, teardown := setupStartPRTest(t)
+	cs, event, logger, observedLogs, ctx, fakeclient, teardown := setupStartPRTest(t)
 
 	kint := &kitesthelper.KinterfaceTest{
 		ConsoleURL:        config.consoleURL,
@@ -125,16 +127,17 @@ func setupStartPRTestWithConfig(t *testing.T, config startPRTestConfig) *startPR
 	}
 
 	return &startPRTestFixture{
-		cs:         cs,
-		event:      event,
-		logger:     logger,
-		ctx:        ctx,
-		fakeclient: fakeclient,
-		teardown:   teardown,
-		kint:       kint,
-		pacInfo:    pacInfo,
-		vcx:        vcx,
-		pac:        NewPacs(event, vcx, cs, pacInfo, kint, logger, nil),
+		cs:           cs,
+		event:        event,
+		logger:       logger,
+		observedLogs: observedLogs,
+		ctx:          ctx,
+		fakeclient:   fakeclient,
+		teardown:     teardown,
+		kint:         kint,
+		pacInfo:      pacInfo,
+		vcx:          vcx,
+		pac:          NewPacs(event, vcx, cs, pacInfo, kint, logger, nil),
 	}
 }
 
@@ -146,11 +149,11 @@ func setupStartPRTestDefault(t *testing.T) *startPRTestFixture {
 }
 
 // setupStartPRTest creates common test fixtures for startPR tests.
-func setupStartPRTest(t *testing.T) (*params.Run, *info.Event, *zap.SugaredLogger, context.Context, *github.Client, func()) {
+func setupStartPRTest(t *testing.T) (*params.Run, *info.Event, *zap.SugaredLogger, *zapobserver.ObservedLogs, context.Context, *github.Client, func()) {
 	t.Helper()
 	ctx, _ := rtesting.SetupFakeContext(t)
 	fakeclient, mux, ghTestServerURL, teardown := ghtesthelper.SetupGH()
-	observer, _ := zapobserver.New(zap.InfoLevel)
+	observer, observedLogs := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(observer).Sugar()
 
 	stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
@@ -202,7 +205,7 @@ func setupStartPRTest(t *testing.T) (*params.Run, *info.Event, *zap.SugaredLogge
 	replyString(mux, fmt.Sprintf("/repos/%s/%s/statuses/%s", event.Organization, event.Repository, event.SHA), "{}")
 	replyString(mux, fmt.Sprintf("/repos/%s/%s/check-runs", event.Organization, event.Repository), `{"id": 123}`)
 
-	return cs, event, logger, ctx, fakeclient, teardown
+	return cs, event, logger, observedLogs, ctx, fakeclient, teardown
 }
 
 // setupProviderForTest creates and configures a GitHub provider for testing.
@@ -436,16 +439,25 @@ func TestStartPRStatusCreationFailure(t *testing.T) {
 	config.createStatusErorring = true
 	fixture := setupStartPRTestWithConfig(t, config)
 	defer fixture.teardown()
+	expectedLogMsg := "cannot use the API on the provider platform to create a in_progress status"
 
 	match := createTestMatch(true, nil)
 
 	pr, err := fixture.pac.startPR(fixture.ctx, match)
+	assert.NilError(t, err)
+	logEntries := fixture.observedLogs.All()
+	found := false
+	for _, entry := range logEntries {
+		if strings.Contains(entry.Message, expectedLogMsg) {
+			found = true
+			break
+		}
+	}
+	assert.Assert(t, found, "Expected log message %s not found", expectedLogMsg)
 
 	// When CreateStatus fails, the PR should still be returned along with the error
 	// This allows the caller to handle the situation and avoid nil pointer dereferences
 	assert.Assert(t, pr != nil, "PipelineRun should be returned even when CreateStatus fails")
-	assert.ErrorContains(t, err, "cannot use the API on the provider platform")
-	assert.ErrorContains(t, err, "in_progress status")
 }
 
 func TestStartPRGitHubAppLogURLHandling(t *testing.T) {
@@ -661,7 +673,7 @@ func runConcurrentStartPR(t *testing.T, count int, fn func(idx int) (*pipelinev1
 }
 
 func TestStartPRConcurrentCreation(t *testing.T) {
-	cs, event, logger, ctx, fakeclient, teardown := setupStartPRTest(t)
+	cs, event, logger, _, ctx, fakeclient, teardown := setupStartPRTest(t)
 	defer teardown()
 
 	kint := &kitesthelper.KinterfaceTest{
@@ -935,7 +947,7 @@ func TestStartPRSecretOwnerRefUpdateErrors(t *testing.T) {
 }
 
 func TestStartPRConcurrentWithSameSecret(t *testing.T) {
-	cs, event, logger, ctx, fakeclient, teardown := setupStartPRTest(t)
+	cs, event, logger, _, ctx, fakeclient, teardown := setupStartPRTest(t)
 	defer teardown()
 
 	kint := &KinterfaceTestWithSecretTracking{}

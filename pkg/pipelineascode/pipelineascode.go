@@ -466,7 +466,8 @@ func (p *PacRun) startPR(ctx context.Context, match matcher.Match) (*tektonv1.Pi
 	if err := p.vcx.CreateStatus(ctx, p.event, status); err != nil {
 		// we still return the created PR with error, and allow caller to decide what to do with the PR, and avoid
 		// unneeded SIGSEGV's
-		return pr, fmt.Errorf("cannot use the API on the provider platform to create a in_progress status: %w", err)
+		delete(patchAnnotations, keys.SCMReportingPLRStarted)
+		p.eventEmitter.EmitMessage(match.Repo, zap.ErrorLevel, "RepositoryStatusCheckReportFailed", fmt.Sprintf("cannot use the API on the provider platform to create a %s status: %v", status.Status, err))
 	}
 	p.debugf("startPR: created status for pipelinerun=%s status=%s conclusion=%s", pr.GetName(), status.Status, status.Conclusion)
 
