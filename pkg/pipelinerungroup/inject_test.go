@@ -18,6 +18,7 @@ func TestInjectRunParams(t *testing.T) {
 	states := map[string]RunState{
 		"build": {
 			Name:   "build-abc",
+			UID:    "source-uid",
 			Status: StatusSucceeded,
 			Reason: "Succeeded",
 			Results: map[string]string{
@@ -37,6 +38,16 @@ func TestInjectRunParams(t *testing.T) {
 		expected   tektonv1.Params
 		unresolved []string
 	}{
+		{
+			name:     "source UID comes from resource metadata",
+			params:   tektonv1.Params{{Name: "uid", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "{{ runs.build.uid }}"}}},
+			expected: tektonv1.Params{{Name: "uid", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "source-uid"}}},
+		},
+		{
+			name:       "missing source UID is unresolved",
+			params:     tektonv1.Params{{Name: "uid", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "{{ runs.build.v2.uid }}"}}},
+			unresolved: []string{"{{ runs.build.v2.uid }}"},
+		},
 		{
 			name: "string param",
 			params: tektonv1.Params{{

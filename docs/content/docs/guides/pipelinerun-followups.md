@@ -137,6 +137,12 @@ Only `spec.params` is substituted. A placeholder anywhere else, such as a pipeli
 
 A run exposes at most 32 results, and values larger than 4096 bytes are dropped. A parameter referencing a missing result skips the follow-up.
 
+## Passing run identity
+
+`runs.<name>.uid` contains the Kubernetes UID, empty for a missing dependency.
+
+The `name`, `uid`, `status` and `reason` fields can also be passed in `spec.params`, for example `{{ runs.build.uid }}`. A missing UID is unresolved and skips the follow-up; it cannot silently select a replacement run with the same name.
+
 ## When a follow-up does not run
 
 - The condition is false: nothing runs and nothing is reported.
@@ -151,6 +157,10 @@ A run exposes at most 32 results, and values larger than 4096 bytes are dropped.
 - `/test <name>` on a follow-up is rejected: re-run one of its dependencies instead.
 
 A follow-up always sees the results of the latest runs of its dependencies.
+
+## Diagnostic comments
+
+GitHub comments starting with the reserved `<!-- paco-diagnosis source=` marker are diagnostic output. They are ignored before GitOps command detection and custom comment matching, including when edited, so evidence quoted in a diagnosis cannot trigger another run.
 
 ## Concurrency and cancellation
 

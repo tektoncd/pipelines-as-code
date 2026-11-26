@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
@@ -11,6 +12,8 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 	"go.uber.org/zap"
 )
+
+const diagnosisCommentPrefix = "<!-- paco-diagnosis source="
 
 var (
 	pullRequestOpenSyncEvent = []string{"opened", "synchronize", "synchronized", "reopened", "ready_for_review"}
@@ -76,6 +79,9 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 		}
 		return "", fmt.Sprintf("pull_request: unsupported action \"%s\"", event.GetAction())
 	case *github.IssueCommentEvent:
+		if strings.HasPrefix(event.GetComment().GetBody(), diagnosisCommentPrefix) {
+			return "", "issue_comment: diagnosis output cannot trigger pipelines"
+		}
 		isEdiCommentEvent := event.GetAction() == "edited" && v.pacInfo.SupportEditedComments
 		if event.GetAction() != "created" && !isEdiCommentEvent {
 			return "", fmt.Sprintf("issue_comment: unsupported action \"%s\"", event.GetAction())
@@ -105,6 +111,9 @@ func (v *Provider) detectTriggerTypeFromPayload(ghEventType string, eventInt any
 		}
 		return "", fmt.Sprintf("check_run: unsupported action \"%s\"", event.GetAction())
 	case *github.CommitCommentEvent:
+		if strings.HasPrefix(event.GetComment().GetBody(), diagnosisCommentPrefix) {
+			return "", "commit_comment: diagnosis output cannot trigger pipelines"
+		}
 		isEdiCommentEvent := event.GetAction() == "edited" && v.pacInfo.SupportEditedComments
 		if event.GetAction() != "created" && !isEdiCommentEvent {
 			return "", fmt.Sprintf("commit_comment: unsupported action \"%s\"", event.GetAction())

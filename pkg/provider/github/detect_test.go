@@ -25,6 +25,16 @@ func TestProviderDetect(t *testing.T) {
 		wantReason            string
 	}{
 		{
+			name:      "diagnosis output with a test command is ignored",
+			event:     github.IssueCommentEvent{Action: new("created"), Comment: &github.IssueComment{Body: new("<!-- paco-diagnosis source=source -->\n/test")}},
+			eventType: "issue_comment", isGH: true, wantReason: "issue_comment: diagnosis output cannot trigger pipelines",
+		},
+		{
+			name:      "edited diagnosis output cannot match comment triggers",
+			event:     github.IssueCommentEvent{Action: new("edited"), Comment: &github.IssueComment{Body: new("<!-- paco-diagnosis source=source -->\n/paco review")}},
+			eventType: "issue_comment", isGH: true, supportEditedComments: true, wantReason: "issue_comment: diagnosis output cannot trigger pipelines",
+		},
+		{
 			name:       "not a github Event",
 			eventType:  "",
 			isGH:       false,
@@ -309,6 +319,27 @@ func TestProviderDetect(t *testing.T) {
 			isGH:                  true,
 			processReq:            false,
 			wantReason:            "issue_comment: unsupported action \"edited\"",
+		},
+		{
+			name: "diagnosis commit comment with a test command is ignored",
+			event: github.CommitCommentEvent{
+				Action:  new("created"),
+				Comment: &github.RepositoryComment{Body: new("<!-- paco-diagnosis source=source -->\n/test")},
+			},
+			eventType:  "commit_comment",
+			isGH:       true,
+			wantReason: "commit_comment: diagnosis output cannot trigger pipelines",
+		},
+		{
+			name: "edited diagnosis commit comment cannot match comment triggers",
+			event: github.CommitCommentEvent{
+				Action:  new("edited"),
+				Comment: &github.RepositoryComment{Body: new("<!-- paco-diagnosis source=source -->\n/paco review")},
+			},
+			eventType:             "commit_comment",
+			isGH:                  true,
+			supportEditedComments: true,
+			wantReason:            "commit_comment: diagnosis output cannot trigger pipelines",
 		},
 		{
 			name: "commit comment event with cancel comment",
