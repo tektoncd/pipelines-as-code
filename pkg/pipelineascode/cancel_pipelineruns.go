@@ -22,6 +22,7 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/opscomments"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/triggertype"
 	prgroup "github.com/openshift-pipelines/pipelines-as-code/pkg/pipelinerungroup"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/provider"
 )
 
 type matchingCond func(pr tektonv1.PipelineRun) bool
@@ -356,7 +357,7 @@ func (p *PacRun) resolveRepoForTargetCancelPipelineRun(ctx context.Context, repo
 		return repo
 	}
 
-	provenance := "source"
+	provenance := provider.ProvenanceSource
 	if repo.Spec.Settings != nil && repo.Spec.Settings.PipelineRunProvenance != "" {
 		provenance = repo.Spec.Settings.PipelineRunProvenance
 	}
