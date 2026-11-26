@@ -24,9 +24,12 @@ spec:
         workspaces:
           - name: source
             workspace: source
+          - name: basic-auth
+            workspace: basic-auth
         taskSpec:
           workspaces:
             - name: source
+            - name: basic-auth
           steps:
             - name: fetch-repo
               displayName: "Fetch Repository"
@@ -50,6 +53,8 @@ spec:
                   value: "$(params.repo_url)"
                 - name: revision
                   value: "$(params.revision)"
+                - name: basic-auth-path
+                  value: $(workspaces.basic-auth.path)
             - name: cache-fetch
               displayName: "Fetch Cache"
               ref:
@@ -146,6 +151,7 @@ spec:
                   value: "false"
     workspaces:
       - name: source
+      - name: basic-auth
     finally:
       - name: finally
         params:
@@ -184,3 +190,6 @@ spec:
   workspaces:
     - name: source
       emptyDir: {}
+    - name: basic-auth
+      secret:
+        secretName: "{{ git_auth_secret }}"

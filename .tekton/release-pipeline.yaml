@@ -22,6 +22,7 @@ spec:
       - name: revision
     workspaces:
       - name: source
+      - name: basic-auth
     tasks:
       - name: fetch-repository
         taskRef:
@@ -29,6 +30,8 @@ spec:
         workspaces:
           - name: output
             workspace: source
+          - name: basic-auth
+            workspace: basic-auth
         params:
           - name: depth
             value: "0"
@@ -140,3 +143,6 @@ spec:
           resources:
             requests:
               storage: 3Gi
+    - name: basic-auth
+      secret:
+        secretName: "{{ git_auth_secret }}"
