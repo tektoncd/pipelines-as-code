@@ -14,14 +14,18 @@ import (
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/params/settings"
 	providerstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/provider/status"
 	testclient "github.com/openshift-pipelines/pipelines-as-code/pkg/test/clients"
+	"github.com/openshift-pipelines/pipelines-as-code/pkg/test/kubernetestint"
 	tprovider "github.com/openshift-pipelines/pipelines-as-code/pkg/test/provider"
 	tektontest "github.com/openshift-pipelines/pipelines-as-code/pkg/test/tekton"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 	"gotest.tools/v3/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"knative.dev/pkg/apis"
+	knativeduckv1 "knative.dev/pkg/apis/duck/v1"
 	rtesting "knative.dev/pkg/reconciler/testing"
 )
 
@@ -131,4 +135,86 @@ type fakeDetailConsole struct {
 
 func (f *fakeDetailConsole) DetailURL(pr *tektonv1.PipelineRun) string {
 	return "https://mycorp.console/" + pr.GetNamespace() + "/" + pr.GetName() + "/{{ foo }}"
+}
+
+func TestGetFailureSnippetShowsEveryFailedTask(t *testing.T) {
+	const (
+		proseBlock = "task <b>prose</b> has the status <b>\"Failed\"</b>:\n<pre>error: prose is not wrapped</pre>"
+		linuxBlock = "task <b>linux-verify</b> has the status <b>\"Failed\"</b>:\n<pre>--- FAIL: TestBuild (2.01s)</pre>"
+	)
+	tests := []struct {
+		name     string
+		maxBytes int
+		want     string
+	}{
+		{
+			name:     "both failed tasks in completion order",
+			maxBytes: maxCheckRunOutputTextBytes,
+			want:     proseBlock + "\n" + linuxBlock,
+		},
+		{
+			name:     "both fit exactly",
+			maxBytes: len(proseBlock) + 1 + len(linuxBlock),
+			want:     proseBlock + "\n" + linuxBlock,
+		},
+		{
+			name:     "second task over the limit is counted",
+			maxBytes: len(proseBlock) + len(linuxBlock),
+			want:     proseBlock + "\nand 1 more failed task",
+		},
+		{
+			name:     "first task is shown even over the limit",
+			maxBytes: 10,
+			want:     proseBlock + "\nand 1 more failed task",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := clockwork.NewFakeClock()
+			ns := "namespace"
+			pr := tektontest.MakePRCompletion(clock, "pipeline-run", ns, tektonv1.PipelineRunReasonFailed.String(), nil, map[string]string{}, 10)
+			pr.Status.ChildReferences = []tektonv1.ChildStatusReference{
+				{TypeMeta: runtime.TypeMeta{Kind: "TaskRun"}, Name: "tr-linux-verify", PipelineTaskName: "linux-verify"},
+				{TypeMeta: runtime.TypeMeta{Kind: "TaskRun"}, Name: "tr-prose", PipelineTaskName: "prose"},
+			}
+			failedTaskRun := func(name string, timeshift int) *tektonv1.TaskRun {
+				return tektontest.MakeTaskRunCompletion(clock, name, ns, "pipeline-run", map[string]string{},
+					tektonv1.TaskRunStatusFields{
+						PodName: name + "-pod",
+						Steps: []tektonv1.StepState{{
+							Name:           "step1",
+							ContainerState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 1}},
+						}},
+					},
+					knativeduckv1.Conditions{{
+						Type:   apis.ConditionSucceeded,
+						Status: corev1.ConditionFalse,
+						Reason: tektonv1.TaskRunReasonFailed.String(),
+					}},
+					timeshift)
+			}
+			ctx, _ := rtesting.SetupFakeContext(t)
+			stdata, _ := testclient.SeedTestData(t, ctx, testclient.Data{
+				PipelineRuns: []*tektonv1.PipelineRun{pr},
+				// prose finishes 9 minutes before linux-verify.
+				TaskRuns: []*tektonv1.TaskRun{failedTaskRun("tr-linux-verify", 1), failedTaskRun("tr-prose", 10)},
+			})
+			run := params.New()
+			run.Clients = clients.Clients{
+				Kube:   stdata.Kube,
+				Tekton: stdata.Pipeline,
+				Log:    zap.NewNop().Sugar(),
+			}
+			r := &Reconciler{
+				run: run,
+				kinteract: &kubernetestint.KinterfaceTest{GetPodLogsOutput: map[string]string{
+					"tr-prose-pod":        "error: prose is not wrapped\n",
+					"tr-linux-verify-pod": "--- FAIL: TestBuild (2.01s)",
+				}},
+			}
+
+			got := r.getFailureSnippet(ctx, pr, tt.maxBytes)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

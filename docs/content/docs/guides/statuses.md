@@ -115,10 +115,11 @@ alternate methods described below.
 
 ## Log Snippet when reporting errors
 
-When Pipelines-as-Code detects an error in one of the pipeline tasks, it displays a brief excerpt of
-the last three lines from the task breakdown. The API has
-a character limit that restricts the output to only the first
-failed task.
+When Pipelines-as-Code detects an error in the pipeline tasks, it displays a brief excerpt of
+the last three lines of each failed task, in the order the tasks finished. The
+GitHub check run output is limited to 65,535 characters, so when the snippets
+do not all fit, Pipelines-as-Code shows as many as fit and ends with a line
+saying how many failed tasks it left out.
 
 To prevent exposing secrets, Pipelines-as-Code analyzes the PipelineRun and
 replaces secret values with hidden characters. It retrieves

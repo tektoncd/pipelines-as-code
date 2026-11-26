@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apipac "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/keys"
+	pacv1alpha1 "github.com/openshift-pipelines/pipelines-as-code/pkg/apis/pipelinesascode/v1alpha1"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/consoleui"
 	"github.com/openshift-pipelines/pipelines-as-code/pkg/formatting"
 	kstatus "github.com/openshift-pipelines/pipelines-as-code/pkg/kubeinteraction/status"
@@ -29,7 +30,16 @@ var backoffSchedule = []time.Duration{
 	5 * time.Second,
 }
 
-func (r *Reconciler) getFailureSnippet(ctx context.Context, pr *tektonv1.PipelineRun) string {
+// maxCheckRunOutputTextBytes is GitHub's limit on a check run's output text.
+// GitHub counts it in bytes, not characters.
+const maxCheckRunOutputTextBytes = 65535
+
+// getFailureSnippet renders one block per failed task, in completion order,
+// with secrets attached to the PipelineRun masked. It stops adding blocks
+// before the snippet passes maxBytes and ends with a line counting the failed
+// tasks it left out. The first failed task is always shown, even when its
+// block alone is longer than maxBytes, as it was before more were shown.
+func (r *Reconciler) getFailureSnippet(ctx context.Context, pr *tektonv1.PipelineRun, maxBytes int) string {
 	lines := int64(settings.DefaultSettings().ErrorLogSnippetNumberOfLines)
 	if r.run.Info.Pac != nil {
 		lines = int64(r.run.Info.Pac.ErrorLogSnippetNumberOfLines)
@@ -39,15 +49,50 @@ func (r *Reconciler) getFailureSnippet(ctx context.Context, pr *tektonv1.Pipelin
 		return ""
 	}
 	sortedTaskInfos := sort.TaskInfos(taskinfos)
-	text := strings.TrimSpace(sortedTaskInfos[0].LogSnippet)
+	secretValues := secrets.GetSecretsAttachedToPipelineRun(ctx, r.kinteract, pr)
+
+	blocks := make([]string, 0, len(sortedTaskInfos))
+	size := 0
+	for i, ti := range sortedTaskInfos {
+		block := secrets.ReplaceSecretsInText(failedTaskBlock(ti), secretValues)
+		needed := size + len(block)
+		if i > 0 {
+			needed++ // newline before the block
+		}
+		// Keep room for the line about the tasks after this one.
+		if left := len(sortedTaskInfos) - i - 1; left > 0 {
+			needed += 1 + len(moreFailedTasksLine(left))
+		}
+		if i > 0 && needed > maxBytes {
+			blocks = append(blocks, moreFailedTasksLine(len(sortedTaskInfos)-i))
+			break
+		}
+		blocks = append(blocks, block)
+		size += len(block)
+		if i > 0 {
+			size++
+		}
+	}
+	return strings.Join(blocks, "\n")
+}
+
+func failedTaskBlock(ti pacv1alpha1.TaskInfos) string {
+	text := strings.TrimSpace(ti.LogSnippet)
 	if text == "" {
-		text = sortedTaskInfos[0].Message
+		text = ti.Message
 	}
-	name := sortedTaskInfos[0].Name
-	if sortedTaskInfos[0].DisplayName != "" {
-		name = strings.ToLower(sortedTaskInfos[0].DisplayName)
+	name := ti.Name
+	if ti.DisplayName != "" {
+		name = strings.ToLower(ti.DisplayName)
 	}
-	return fmt.Sprintf("task <b>%s</b> has the status <b>\"%s\"</b>:\n<pre>%s</pre>", name, sortedTaskInfos[0].Reason, text)
+	return fmt.Sprintf("task <b>%s</b> has the status <b>\"%s\"</b>:\n<pre>%s</pre>", name, ti.Reason, text)
+}
+
+func moreFailedTasksLine(n int) string {
+	if n == 1 {
+		return "and 1 more failed task"
+	}
+	return fmt.Sprintf("and %d more failed tasks", n)
 }
 
 // detailURL returns the console URL for a PipelineRun on the paths that do not
@@ -94,12 +139,14 @@ func (r *Reconciler) postFinalStatus(ctx context.Context, logger *zap.SugaredLog
 		TaskStatus:      taskStatusText,
 	}
 	if pacInfo.ErrorLogSnippet {
-		failures := r.getFailureSnippet(ctx, pr)
-		if failures != "" {
-			secretValues := secrets.GetSecretsAttachedToPipelineRun(ctx, r.kinteract, pr)
-			failures = secrets.ReplaceSecretsInText(failures, secretValues)
-			mt.FailureSnippet = failures
+		// Measure the rest of the status text, with the snippet's heading,
+		// so the snippet can take what is left of the check run limit.
+		maxSnippetBytes := maxCheckRunOutputTextBytes
+		mt.FailureSnippet = "-"
+		if withoutSnippet, err := mt.MakeTemplate(vcx.GetTemplate(provider.PipelineRunStatusType)); err == nil {
+			maxSnippetBytes -= len(withoutSnippet) - len(mt.FailureSnippet)
 		}
+		mt.FailureSnippet = r.getFailureSnippet(ctx, pr, maxSnippetBytes)
 	}
 	var tmplStatusText string
 	if tmplStatusText, err = mt.MakeTemplate(vcx.GetTemplate(provider.PipelineRunStatusType)); err != nil {
