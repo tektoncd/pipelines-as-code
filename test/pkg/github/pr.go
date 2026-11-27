@@ -124,6 +124,7 @@ type PRTest struct {
 	Logger          *zap.SugaredLogger
 	CommitTitle     string
 	DynamicRepoName string
+	NoRepoCRD       bool
 }
 
 func (g *PRTest) RunPullRequest(ctx context.Context, t *testing.T) {
@@ -277,15 +278,17 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 	g.Options = opts
 	g.Options.Settings = preSettings
 	g.Provider = ghcnx
-	g.TargetNamespace = targetNS
+	if g.TargetNamespace == "" {
+		g.TargetNamespace = targetNS
+	}
 	g.PRNumber = -1
 
 	var logmsg string
 	if g.Webhook {
-		logmsg = fmt.Sprintf("Testing %s with Direct Webhook integration on %s", g.Label, targetNS)
+		logmsg = fmt.Sprintf("Testing %s with Direct Webhook integration on %s", g.Label, g.TargetNamespace)
 		g.Logger.Info(logmsg)
 	} else {
-		logmsg = fmt.Sprintf("Testing %s with Github APPS integration on %s", g.Label, targetNS)
+		logmsg = fmt.Sprintf("Testing %s with Github APPS integration on %s", g.Label, g.TargetNamespace)
 		g.Logger.Info(logmsg)
 	}
 
@@ -317,8 +320,11 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 	if g.Options.Settings != nil && g.Options.Settings.Github != nil {
 		opts.Settings = g.Options.Settings
 	}
-	err = CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, targetNS)
-	assert.NilError(t, err)
+
+	if !g.NoRepoCRD {
+		err = CreateCRD(ctx, t, repoinfo, runcnx, opts, ghcnx, g.TargetNamespace)
+		assert.NilError(t, err)
+	}
 
 	yamlEntries := map[string]string{}
 	for _, v := range g.YamlFiles {
@@ -326,7 +332,7 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 	}
 
 	entries, err := payload.GetEntries(yamlEntries,
-		targetNS, targetBranch, targetEvent, map[string]string{})
+		g.TargetNamespace, targetBranch, targetEvent, map[string]string{})
 	assert.NilError(t, err)
 
 	targetRefName := targetBranch
@@ -353,7 +359,7 @@ func (g *PRTest) RunPushRequest(ctx context.Context, t *testing.T) {
 		sopt := wait.SuccessOpt{
 			Title:           logmsg,
 			OnEvent:         triggertype.Push.String(),
-			TargetNS:        targetNS,
+			TargetNS:        g.TargetNamespace,
 			NumberofPRMatch: len(g.YamlFiles),
 			SHA:             sha,
 		}

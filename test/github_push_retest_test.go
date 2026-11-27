@@ -319,3 +319,79 @@ func TestGithubGHEPullRequestRetestPullRequestNumberSubstitution(t *testing.T) {
 		"step-task", *regex, "", 2, nil)
 	assert.NilError(t, err)
 }
+
+func TestGithubGHEGitOpsCommentOnNonHEADCommit(t *testing.T) {
+	ctx := context.Background()
+	g := &tgithub.PRTest{
+		Label:     "Github GitOps comment on non HEAD commit",
+		YamlFiles: []string{"testdata/pipelinerun.yaml"},
+		GHE:       true,
+	}
+	g.RunPushRequest(ctx, t)
+	defer g.TearDown(ctx, t)
+
+	waitOpts := twait.Opts{
+		Namespace:       g.TargetNamespace,
+		MinNumberStatus: len(g.YamlFiles),
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{g.SHA},
+	}
+	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
+	_, err := twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	assert.NilError(t, err)
+
+	previousSHA := g.SHA
+
+	g.Label = "Github GitOps comment on non HEAD commit (second push)"
+	// we're just pushing a new file but it won't trigger we will put a comment on previous commit and it will trigger the previous pipeline run.
+	g.YamlFiles = []string{"testdata/always-good-pipelinerun.yaml"}
+	g.NoRepoCRD = true
+	g.RunPushRequest(ctx, t)
+
+	waitOpts = twait.Opts{
+		Namespace:       g.TargetNamespace,
+		MinNumberStatus: 2,
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{previousSHA, g.SHA},
+	}
+	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	assert.NilError(t, err)
+
+	g.Cnx.Clients.Log.Infof("Running ops comment '/test' as Push comment")
+	_, _, err = g.Provider.Client().Repositories.CreateComment(ctx,
+		g.Options.Organization,
+		g.Options.Repo, previousSHA,
+		github.CreateCommitCommentRequest{Body: "/test"})
+	assert.NilError(t, err)
+
+	waitOpts = twait.Opts{
+		Namespace:       g.TargetNamespace,
+		MinNumberStatus: len(g.YamlFiles),
+		PollTimeout:     twait.DefaultTimeout,
+		TargetSHA:       []string{previousSHA},
+	}
+	g.Cnx.Clients.Log.Info("Waiting for PipelineRuns to succeed")
+	_, err = twait.UntilPipelineRunHasReason(ctx, g.Cnx.Clients, tektonv1.PipelineRunReasonSuccessful, waitOpts)
+	assert.NilError(t, err)
+
+	pruns, err := g.Cnx.Clients.Tekton.TektonV1().PipelineRuns(g.TargetNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", keys.SHA, previousSHA),
+	})
+	assert.NilError(t, err)
+	assert.Equal(t, len(pruns.Items), len(g.YamlFiles))
+	lastPrName := pruns.Items[0].GetName()
+	err = twait.RegexpMatchingInPodLog(
+		context.Background(),
+		g.Cnx,
+		g.TargetNamespace,
+		fmt.Sprintf("tekton.dev/pipelineRun=%s", lastPrName),
+		"step-task",
+		*regexp.MustCompile("HELLOMOTO"),
+		"",
+		2,
+		nil,
+	)
+
+	assert.NilError(t, err)
+}
