@@ -64,6 +64,14 @@ func CreateCRD(ctx context.Context, t *testing.T, repoinfo *github.Repository, r
 	return err
 }
 
+func DeleteCRD(ctx context.Context, run *params.Run, repoName, targetNS string) error {
+	err := run.Clients.PipelineAsCode.PipelinesascodeV1alpha1().Repositories(targetNS).Delete(ctx, repoName, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 var intPtr = func(val int) *int { return &val }
 
 func CreateCRDIncoming(ctx context.Context, t *testing.T, repoinfo *github.Repository, run *params.Run, incomings *[]v1alpha1.Incoming, opts options.E2E, provider *ghprovider.Provider, targetNS string) error {

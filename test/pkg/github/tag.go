@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -41,10 +42,41 @@ func CreateTag(ctx context.Context, t *testing.T, runcnx *params.Run, ghcnx *pac
 	assert.NilError(t, err)
 	runcnx.Clients.Log.Infof("Tag %s has been created successfully", tagName)
 
+	if opts.Cleanup {
+		t.Cleanup(func() {
+			if os.Getenv("TEST_NOCLEANUP") != "true" {
+				runcnx.Clients.Log.Infof("Cleaning up tag %s", tagName)
+				assert.NilError(t, DeleteTag(ctx, ghcnx, opts, tagName))
+			}
+		})
+	}
+
 	return tag, err
 }
 
 func DeleteTag(ctx context.Context, ghcnx *pacgithub.Provider, opts options.E2E, tagName string) error {
 	_, err := ghcnx.Client().Git.DeleteRef(ctx, opts.Organization, opts.Repo, "refs/tags/"+tagName)
+	return err
+}
+
+func CreateRelease(ctx context.Context, t *testing.T, ghcnx *pacgithub.Provider, runcnx *params.Run, opts options.E2E, tagName string) (*github.RepositoryRelease, error) {
+	release, _, err := ghcnx.Client().Repositories.CreateRelease(ctx, opts.Organization, opts.Repo, github.CreateReleaseRequest{
+		TagName:    tagName,
+		Name:       new("Release " + tagName),
+		MakeLatest: new("false"),
+	})
+	if opts.Cleanup {
+		t.Cleanup(func() {
+			if os.Getenv("TEST_NOCLEANUP") != "true" {
+				runcnx.Clients.Log.Infof("Cleaning up release %s and tag %s", release.GetName(), tagName)
+				assert.NilError(t, DeleteRelease(ctx, ghcnx, opts, release.GetID()))
+			}
+		})
+	}
+	return release, err
+}
+
+func DeleteRelease(ctx context.Context, ghcnx *pacgithub.Provider, opts options.E2E, releaseID int64) error {
+	_, err := ghcnx.Client().Repositories.DeleteRelease(ctx, opts.Organization, opts.Repo, releaseID)
 	return err
 }

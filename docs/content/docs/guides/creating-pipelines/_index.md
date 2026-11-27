@@ -79,6 +79,7 @@ The following table lists all available dynamic variables. The most commonly use
 | target_namespace | The target namespace where the Repository CR matched and where Pipelines-as-Code creates the PipelineRun. | `{{target_namespace}}` | my-namespace |
 | trigger_comment | The comment that triggered the PipelineRun when you use a [GitOps command]({{< relref "/docs/guides/gitops-commands" >}}) (such as `/test` or `/retest`). | `{{trigger_comment}}` | /merge-pr branch |
 | pull_request_labels | The labels on the pull request, separated by a newline character. | `{{pull_request_labels}}` | bugs\nenhancement |
+| release_body | The body/description of the release. Only available for `release` events (GitHub only); otherwise an empty string `""`. See the [release body example](#using-the-release-body). | `{{release_body}}` | ## Changelog\n- Fixed bug #123 |
 
 {{< callout type="info" >}}
 When you use the `{{ pull_request_number }}` variable in a push-triggered PipelineRun after a pull request merge, the Git provider API may return more than one pull request if the commit is associated with multiple pull requests. In that case, `{{ pull_request_number }}` contains the number of the first pull request the API returns.
@@ -118,6 +119,49 @@ spec:
 ```
 
 Using block format avoids validation errors and keeps your YAML properly structured.
+
+### Using the release body
+
+For GitHub `release` events, use `{{ release_body }}` to pass the release description to a PipelineRun parameter.
+
+```yaml
+spec:
+  params:
+    - name: release_body
+      value: |-
+        {{ release_body }}
+```
+
+**Note::** Expanding `{{ release_body }}` directly in YAML can break parsing if the body contains newlines. For example:
+
+```console
+This is awesome release
+
+fix: something is fixed.
+```
+
+Expands to:
+
+```yaml
+params:
+  - name: release_body
+    value: "This is awesome release
+
+fix: something is fixed."
+```
+
+The empty line makes the YAML invalid. To prevent this, Pipelines-as-Code replaces `\r\n` with `\n` to ensure proper formatting. You can restore the newlines in your task as needed.
+
+For example, in a shell script, use `echo -e` to expand `\n` back into actual newlines:
+
+```shell
+echo -e "{{ release_body }}" > /tmp/release_body
+grep "/help" /tmp/release_body # will output only /help
+```
+
+This ensures the body is correctly formatted when processed.
+
+**Important:** Never interpolate `{{ release_body }}` directly inside a shell script, as untrusted release notes can trigger shell injection and arbitrary command execution. pass it through an environment variable instead.
 
 ## Matching an event to a PipelineRun
 

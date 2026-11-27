@@ -11,6 +11,7 @@ type E2E struct {
 	UserName           string
 	Password           string
 	LightweightTag     bool
+	Cleanup            bool
 	Settings           *v1alpha1.Settings
 }
 

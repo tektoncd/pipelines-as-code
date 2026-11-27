@@ -145,7 +145,8 @@ func evaluateCEL(ctx context.Context, expr string, event *info.Event, vcx provid
 	followUp bool, runs map[string]any,
 ) (ref.Val, error) {
 	eventTitle := event.PullRequestTitle
-	if event.TriggerTarget == triggertype.Push {
+
+	if event.TriggerTarget == triggertype.Push || event.TriggerTarget == triggertype.Release {
 		eventTitle = event.SHATitle
 	}
 
