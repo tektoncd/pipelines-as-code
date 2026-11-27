@@ -779,7 +779,7 @@ func (v *Provider) handleReRequestEvent(ctx context.Context, event *github.Check
 	runevent.HeadURL = checkSuite.GetRepository().GetHTMLURL()
 	v.setReRequestSender(runevent, event.GetSender())
 
-	pr, err := selectSinglePullRequestFromPayload(checkSuite.PullRequests, "check_run")
+	pr, err := selectSinglePullRequestFromPayload(checkSuite.PullRequests, "check_suite")
 	if err != nil {
 		return nil, err
 	}

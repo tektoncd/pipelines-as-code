@@ -842,7 +842,7 @@ func TestParsePayLoad(t *testing.T) {
 			name:          "bad/rerequest check_run with multiple check suite pull requests in payload",
 			eventType:     "check_run",
 			githubClient:  true,
-			wantErrString: "cannot determine pull request for check_run rerequest: found 2 associated pull requests in webhook payload",
+			wantErrString: "cannot determine pull request for check_suite rerequest: found 2 associated pull requests in webhook payload",
 			payloadEventStruct: github.CheckRunEvent{
 				Action: new("rerequested"),
 				Repo:   sampleRepo,
