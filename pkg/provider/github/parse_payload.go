@@ -38,8 +38,8 @@ const (
 	githubNoreplyEmail       = "noreply@github.com"
 	githubWebFlowUser        = "web-flow"
 
-	githubAppTokenMintBlockedLog         = "[SECURITY] Blocked GitHub App token minting before webhook signature validation completed"
-	githubAppTokenExfiltrationBlockedLog = "[SECURITY][CRITICAL] Averted GitHub App credential exfiltration attempt before token minting"
+	githubAppTokenMintBlockedLog      = "[SECURITY] Blocked GitHub App token minting before webhook signature validation completed"
+	githubEndpointValidationFailedLog = "GitHub App token minting blocked: endpoint validation failed"
 )
 
 // GetAppIDAndPrivateKey retrieves the GitHub application ID and private key from a secret in the specified namespace.
@@ -270,9 +270,9 @@ func trustedGitHubEndpointFromPayload(ctx context.Context, run *params.Run, ente
 
 func (v *Provider) logBlockedGitHubAppTokenMint(request *http.Request, event *info.Event, installationID int64, reason string, err error) {
 	v.Logger.Errorw(
-		githubAppTokenExfiltrationBlockedLog,
-		"severity", "critical",
-		"security-impact", "github-app-jwt-exfiltration-blocked",
+		githubEndpointValidationFailedLog,
+		"severity", "warning",
+		"security-impact", "github-untrusted-endpoint-blocked",
 		"reason", reason,
 		"error", err,
 		"event-type", event.EventType,
