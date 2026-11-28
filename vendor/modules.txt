@@ -310,8 +310,8 @@ github.com/kballard/go-shellquote
 # github.com/kelseyhightower/envconfig v1.4.0
 ## explicit
 github.com/kelseyhightower/envconfig
-# github.com/ktrysmt/go-bitbucket v0.10.0
-## explicit; go 1.25.0
+# github.com/ktrysmt/go-bitbucket v0.12.0
+## explicit; go 1.26.0
 github.com/ktrysmt/go-bitbucket
 # github.com/lunixbochs/vtclean v1.0.0
 ## explicit

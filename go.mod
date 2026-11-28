@@ -21,7 +21,7 @@ require (
 	github.com/jenkins-x/go-scm v1.17.2
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/juju/ansiterm v1.0.0
-	github.com/ktrysmt/go-bitbucket v0.10.0
+	github.com/ktrysmt/go-bitbucket v0.12.0
 	github.com/mattn/go-colorable v0.1.16
 	github.com/mattn/go-isatty v0.0.24
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d

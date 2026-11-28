@@ -134,8 +134,8 @@ func main() {
                 RepoSlug:          "awesome-project",
                 SourceBranch:      "develop",
                 DestinationBranch: "master",
-                Title:             "fix bug. #9999",
-                CloseSourceBranch: true,
+                Title:             new("fix bug. #9999"),
+                CloseSourceBranch: new(true),
         }
 
         res, err := c.Repositories.PullRequests.Create(opt)
